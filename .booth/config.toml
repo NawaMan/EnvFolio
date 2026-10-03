@@ -1,5 +1,12 @@
-# Configured by: booth config --no-tui --overwrite --variant terminal --set silence-build --select apt-pkg:bats,pass,shellcheck,tmux/shell-history/homebrew/brew-pkg:gum
+# Configured by: booth config --no-tui --overwrite --variant terminal --set silence-build --set writable-booth --select apt-pkg:bats,pass,shellcheck,tmux/git-credential/shell-history/homebrew/brew-pkg:gum/claude-code+auto-accept+credential+settings-cache/tty-owner
 
 variant = "terminal"
 
+run-args = [
+    "-v", "~/.gitconfig:/etc/cb-home-seed/.gitconfig:ro",
+    "-v", "~/.claude.json:/etc/cb-home-seed/.claude.json:ro",
+    "-v", "~/.claude/.credentials.json:/etc/cb-home/.claude/.credentials.json:ro"
+]
+
 silence-build = true
+writable-booth = true

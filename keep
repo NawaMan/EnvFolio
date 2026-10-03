@@ -1,52 +1,45 @@
 #!/usr/bin/env bash
 
-#= Common =====================================================================
+#== Main ======================================================================
 
-# Ensure that all the dependency are there. Show when at lease one is missing.
-function ensure-requirements() {
-    local failed=0
-
-    has-dependency() { command -v "${1// /}" >/dev/null 2>&1 ; }
-    lines() {
-        local cmd="$1" reason="$2" install="$3"
-        local icon=$'\e[32m✓\e[0m'
-        if ! has-dependency "$cmd"; then icon=$'\e[31m✗\e[0m' ; failed=1 ; fi
-        echo "| $icon $cmd  | $reason | $install |"
-        echo "+------------+--------------------+---------------------------+"
-    }
-    
-    echo "Required dependencies"
-    echo "+------------+--------------------+---------------------------+"
-    echo "| Dependency | Description        | Brew install command      |"
-    echo "+------------+--------------------+---------------------------+"
-    lines     "pass   " "Password manager  " "brew install pass        "
-    lines     "gpg    " "Encrypts the store" "brew install gnupg       "
-    lines     "git    " "Syncs the store   " "brew install git         "
-    lines     "gum    " "Draws the UI      " "brew install gum         "
-
-    if [[ "$1 $2" =~ store\ (backup|restore|import|export) ]]; then
-        lines     "tar    " "Packs backups     " "brew install gnu-tar     "
-        lines     "gzip   " "Compresses backups" "brew install gzip        "
-    fi
-
-    # Clipboard: only the tool `secret show -c` uses on this platform; none without a display.
-    if [[ "$1 $2 $3" =~ (secret|text)\ show\ (-c|--clip) ]]; then
-        if   [[ "$(uname -s)" == "Darwin" ]]; then : # pbcopy - should be built-in in Mac.
-        elif [[ -n "${WAYLAND_DISPLAY:-}" ]]; then lines "wl-copy" "Clipboard copy    " "brew install wl-clipboard"
-        elif [[ -n "${DISPLAY:-}"         ]]; then lines "xclip  " "Clipboard copy    " "brew install xclip       "
-        fi
-    fi
-
-    echo ""
-    echo "Use other package manager if brew is not present."
-
-    return "$failed"
+function version() {
+    echo "Keep 0.1"
 }
 
-#== Store =====================================================================
+function main() {
+    ensure-requirements "$@" >/dev/null ; if [[ $? -ne 0 ]]; then ensure-requirements "$@" ; fi
+
+    local category="${1:-}" ; (( $# > 0 )) && shift
+    case "$category" in
+        store)   store  "$@" ;;
+        text)    text   "$@" ;;
+        pass)    secret "$@" ;;
+        ls)      list   "$@" ;;
+        version) version "$@" ;;
+        help)    help   "$@" ;;
+        "")      echo   "Usage: keep <version|help|store|text|pass|ls> [args...]" >&2 ; return 1 ;;
+        *)       echo   "keep: unknown command: $category"                        >&2 ; return 1 ;;
+    esac
+}
+
+#== Setting ===================================================================
+
+BUDDLE_SUFFIX=.keep
+STORE_PATH=${PASSWORD_STORE_DIR:-$HOME/.password-store}
+EXTRA_LINE="""
+"""
+
+#==  Command:Help + Version ===================================================
+
+function help() {
+    local category="${1:-}" ; (( $# > 0 )) && shift
+    echo "Do help"
+}
+
+#== Command:Store =============================================================
 
 function store-path() {
-    echo "${PASSWORD_STORE_DIR:-$HOME/.password-store}"
+    echo "${STORE_PATH}"
 }
 
 function store-init() {
@@ -75,8 +68,6 @@ function store-import() {
 }
 
 function store() {
-    echo "Do store"
-
     local category="${1:-}" ; (( $# > 0 )) && shift
     case "$category" in
         path)    store-path    "$@" ;;
@@ -90,7 +81,7 @@ function store() {
     esac
 }
 
-#== Text ======================================================================
+#==  Command:Text =============================================================
 
 function text-ls() {
     echo "Do text ls - not implement yet"
@@ -160,7 +151,7 @@ function text() {
     esac
 }
 
-#== Secret ====================================================================
+#==  Command:Secret ===========================================================
 
 function secret-ls() {
     echo "Do secret ls - not implement yet"
@@ -230,27 +221,201 @@ function secret() {
     esac
 }
 
-#== List ======================================================================
+#==  Command:List =============================================================
 
 function list() {
     local category="${1:-}" ; (( $# > 0 )) && shift
-    echo "Do ls"
+    echo "Do list"
+}
+
+#= Common =====================================================================
+
+# Ensure that all the dependency are there. Show when at lease one is missing.
+function ensure-requirements() {
+    local failed=0
+
+    has-dependency() { command -v "${1// /}" >/dev/null 2>&1 ; }
+    lines() {
+        local cmd="$1" reason="$2" install="$3"
+        local icon=$'\e[32m✓\e[0m'
+        if ! has-dependency "$cmd"; then icon=$'\e[31m✗\e[0m' ; failed=1 ; fi
+        echo "| $icon $cmd  | $reason | $install |"
+        echo "+------------+--------------------+---------------------------+"
+    }
+    
+    echo "Required dependencies"
+    echo "+------------+--------------------+---------------------------+"
+    echo "| Dependency | Description        | Brew install command      |"
+    echo "+------------+--------------------+---------------------------+"
+    lines     "pass   " "Password manager  " "brew install pass        "
+    lines     "gpg    " "Encrypts the store" "brew install gnupg       "
+    lines     "git    " "Syncs the store   " "brew install git         "
+    lines     "gum    " "Draws the UI      " "brew install gum         "
+
+    if [[ "$1 $2" =~ store\ (backup|restore|import|export) ]]; then
+        lines     "tar    " "Packs backups     " "brew install gnu-tar     "
+        lines     "gzip   " "Compresses backups" "brew install gzip        "
+    fi
+
+    # Clipboard: only the tool `secret show -c` uses on this platform; none without a display.
+    if [[ "$1 $2 $3" =~ (secret|text)\ show\ (-c|--clip) ]]; then
+        if   [[ "$(uname -s)" == "Darwin" ]]; then : # pbcopy - should be built-in in Mac.
+        elif [[ -n "${WAYLAND_DISPLAY:-}" ]]; then lines "wl-copy" "Clipboard copy    " "brew install wl-clipboard"
+        elif [[ -n "${DISPLAY:-}"         ]]; then lines "xclip  " "Clipboard copy    " "brew install xclip       "
+        fi
+    fi
+
+    echo ""
+    echo "Use other package manager if brew is not present."
+
+    return "$failed"
+}
+
+# --- Output ------------------------------------------------------------------
+
+function info() { printf '%s\n' "$*"; }
+function warn() { printf 'keep: %s\n' "$*" >&2; }
+function die()  { printf 'keep: %s\n' "$*" >&2; exit 1; }
+
+# section lines up: ==| Title |=====…
+function section() {
+    local title="==| $* |" width=72 fill
+    fill=$(( width - ${#title} ))
+    (( fill >= 3 )) || fill=3
+    printf '\n%s%s\n' "$title" "$(printf '%*s' "$fill" '' | tr ' ' '=')" >&2;
+}
+# section end: ======…  (same width as section)
+function section-end() {
+    printf '%s\n\n' "$(printf '%*s' 72 '' | tr ' ' '=')" >&2;
+}
+
+function show-answer() {
+    local spaces="${3:-}"
+    printf '✓ %s:%s %s\n' "$1" "$spaces" "$2" >&2;
+}
+
+function ask-text() {
+    local header="$1"
+    local placeholder="${2:-}"
+    local guess_value="${3:-}"
+    local value=$(
+        gum input \
+            --header      "${EXTRA_LINE}${header}" \
+            --placeholder "${placeholder}"         \
+            --value       "${guess_value}"         \
+    ) || die "Cancelled."
+    printf '%s\n' "$value"
+}
+
+#== User + Key ================================================================
+
+# Best guess at the user's name
+function guess-name() {
+    # Git
+    local line name=${GIT_AUTHOR_NAME:-$(git config --global user.name 2>/dev/null)}
+
+    # /etc/passwd (Linux, WSL, and some macOS accounts)
+    if [[ -z $name ]]; then
+        line=$(grep "^$(id -un):" /etc/passwd 2>/dev/null)
+        line=${line#*:*:*:*:}  # drop user:pass:uid:gid:
+        line=${line%%:*}       # drop :home:shell
+        name=${line%%,*}       # drop ,office,phone
+    fi
+
+    # macOS Directory Services
+    if [[ -z $name && $(uname -s) == Darwin ]]; then
+        name=$(id -F 2>/dev/null)
+    fi
+
+    printf '%s\n' "$name"
+}
+
+# Best guess at the user's email
+function guess-email() {
+    local email=${GIT_AUTHOR_EMAIL:-}
+    [[ -n $email ]] || email=$(git config --global user.email 2>/dev/null || true)
+    [[ -n $email ]] || email=${EMAIL:-}
+    printf '%s\n' "$email"
+}
+
+# One line per secret key: "<fingerprint><TAB><first user id>".
+function list-secret-keys() {
+    gpg --list-secret-keys --with-colons 2>/dev/null | awk -F: '
+        $1 == "sec"                 { want_fpr = 1; want_uid = 1; fpr = ""; next }
+        $1 == "fpr" && want_fpr     { fpr = $10; want_fpr = 0; next }
+        $1 == "uid" && want_uid     { print fpr "\t" $10; want_uid = 0 }
+    '
+}
+
+# Generate a new key with gpg's defaults, asking only for name and email (pre-filled with our best
+# guess) — or labelled <uid> when given, without asking. gpg itself asks for the passphrase.
+# Prints the new key's fingerprint.
+function generate-key() {
+    local uid=${1:-} name email status fpr
+    local message=""
+
+    [[ -z $uid ]] && message="You will be asked for the name and email needed to generate a key.${EXTRA_LINE}Then, "
+    info "${message}GPG will ask you to enter a passphrase used to protected the key." >&2
+
+    # Prompt for name and email
+    if [[ -z $uid ]]; then
+        local name=$( ask-text "Your name"  "e.g. Jane Doe"         "$(guess-name)")  ; show-answer "Name"  "${name}"  "      "
+        local email=$(ask-text "Your email" "e.g. jane@example.com" "$(guess-email)") ; show-answer "Email" "${email}" "     "
+        [[ -n $name && -n $email ]] || die "A name and an email are needed to create a key."
+        uid="$name <$email>"
+    fi
+    show-answer "Passphrase" "************"
+
+    info "Generating key ..." >&2
+    # gpg's normal output goes to the terminal (stderr); its machine-readable status lines (fd 3)
+    # are captured so we get the fingerprint without guessing which key is new.
+    status=$(gpg --batch --status-fd 3 --quick-generate-key --yes "$uid" 3>&1 1>&2) \
+        || die "Creating the key failed."
+    finger_print=$(printf '%s\n' "$status" | awk '$2 == "KEY_CREATED" { print $4 }')
+    # gpg exits 0 when the user answers No to its own "Continue?", and simply makes no key.
+    [[ -n $finger_print ]] || die "Cancelled — no key was created."
+
+    printf '%s\n' "$finger_print"
+}
+
+# Pick the key for the store: reuse an existing one if the user wants, otherwise create one.
+# Prints the fingerprint. Always a list, even for one key: gum confirm reports Esc the same as No,
+# which would turn a cancel into "create a new key".
+function select-key() {
+    local create_new_key="Create a new key"
+    # Shown as "<user id>  [<fingerprint>]"; the fingerprint is read back from the brackets.
+    local choices=$(
+        while IFS= read -r line; do
+            printf '%s  [%s]\n' "${line#*$'\t'}" "${line%%$'\t'*}"
+        done < <(list-secret-keys)
+        printf '%s\n' "${create_new_key}"
+    ) || die "Cancelled."
+
+    # No existing keys, go straight to generating a new key
+    if [[ "${choices}" == "Create a new key" ]]; then
+        section "Generating the key."
+        generate-key
+        section-end
+        return
+    fi
+    
+    local choice=$(printf '%s\n' "$choices" \
+        | gum choose --header "Which GPG key should encrypt the store?") || die "Cancelled."
+
+    if [[ $choice == "${create_new_key}" ]]; then
+        section "Generating the key."
+        local new_key=$(generate-key)
+        section-end
+
+        show-answer "Key" "$new_key"
+    else
+        choice=${choice##*[}
+        show-answer "Key" "$choice"
+    fi
 }
 
 #== Main ======================================================================
 
-function main() {
-    ensure-requirements "$@" >/dev/null ; if [[ $? -ne 0 ]]; then ensure-requirements "$@" ; fi
+# main "$@"
 
-    local category="${1:-}" ; (( $# > 0 )) && shift
-    case "$category" in
-        store) store  "$@" ;;
-        text)  text   "$@" ;;
-        pass)  secret "$@" ;;
-        ls)    list   "$@" ;;
-        "")    echo "Usage: keep <store|text|pass|ls> [args...]" >&2 ; return 1 ;;
-        *)     echo "keep: unknown command: $category"            >&2 ; return 1 ;;
-    esac
-}
-
-main "$@"
+select-key
