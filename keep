@@ -1,7 +1,38 @@
 #!/usr/bin/env bash
 
+#= Common =====================================================================
+
+# Ensure that all the dependency are there. Show when at lease one is missing.
+function ensure-requirements() {
+    local failed=0
+
+    has-dependency() { command -v "${1// /}" >/dev/null 2>&1 ; }
+    lines() {
+        local cmd="$1" reason="$2" install="$3"
+        local icon=$'\e[32m✓\e[0m'
+        if ! has-dependency "$cmd"; then icon=$'\e[31m✗\e[0m' ; failed=1 ; fi
+        echo "| $icon $cmd     | $reason | $install    |"
+        echo "+------------+---------------------+-------------------------+"
+    }
+    
+    echo "Required dependencies"
+    echo "+------------+---------------------+-------------------------+"
+    echo "| Dependency | Description         | Brew install command    |"
+    echo "+------------+---------------------+-------------------------+"
+    lines "pass" "Password manager   " "brew install pass   "
+    lines "gpg " "Encrypts the store " "brew install gnupg  "
+    lines "git " "Syncs the store    " "brew install git    "
+    lines "gum " "Draws the UI       " "brew install gum    "
+    lines "tars" "Packs backups      " "brew install gnu-tar"
+    lines "gzip" "Compresses backups " "brew install gzip   "
+    echo ""
+    echo "Use other package manager if brew is not present."
+
+    return "$failed"
+}
+
 function main() {
-    echo "Hello world. From Keep."
+    ensure-requirements >/dev/null ; if [[ $? -ne 0 ]]; then ensure-requirements ; fi
 }
 
 main "$@"
