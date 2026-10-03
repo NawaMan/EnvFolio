@@ -1,0 +1,9 @@
+display-name = "TTY owner"
+display-disc = "Chown each login shell's pty to the booth user, so gpg's pinentry can open it"
+tags = ["gpg", "pinentry", "tty", "pass"]
+
+# Late, so it lands after the package installs; it doesn't depend on them.
+[segments]
+"Boothfile--90" = """
+setup tty-owner
+"""

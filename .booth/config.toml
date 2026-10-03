@@ -1,0 +1,5 @@
+# Configured by: booth config --no-tui --overwrite --variant terminal --set silence-build --select apt-pkg:bats,pass,shellcheck,tmux/shell-history/homebrew/brew-pkg:gum
+
+variant = "terminal"
+
+silence-build = true

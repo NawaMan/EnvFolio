@@ -1,0 +1,11 @@
+# syntax=codingbooth/boothfile:1
+# Configured by: booth config --no-tui --overwrite --variant terminal --set silence-build --select apt-pkg:bats,pass,shellcheck,tmux/shell-history/homebrew/brew-pkg:gum
+
+env APT_SNAPSHOT=20261003T000000Z
+
+arg APT_PKGS=bats,pass,shellcheck,tmux
+arg BREW_PKGS=gum
+
+install apt ${APT_PKGS}
+setup homebrew
+install brew ${BREW_PKGS}
