@@ -23,13 +23,18 @@ function ensure-requirements() {
     lines     "gpg    " "Encrypts the store" "brew install gnupg       "
     lines     "git    " "Syncs the store   " "brew install git         "
     lines     "gum    " "Draws the UI      " "brew install gum         "
-    lines     "tar    " "Packs backups     " "brew install gnu-tar     "
-    lines     "gzip   " "Compresses backups" "brew install gzip        "
 
-    # Clipboard: only the tool `pass show -c` uses on this platform; none without a display.
-    # pbcopy - should be built-in in Mac.
-    if   [[ -n "${WAYLAND_DISPLAY:-}" ]]; then lines "wl-copy" "Clipboard copy    " "brew install wl-clipboard"
-    elif [[ -n "${DISPLAY:-}"         ]]; then lines "xclip  " "Clipboard copy    " "brew install xclip       "
+    if [[ "$1 $2" =~ store\ (backup|restore|import|export) ]]; then
+        lines     "tar    " "Packs backups     " "brew install gnu-tar     "
+        lines     "gzip   " "Compresses backups" "brew install gzip        "
+    fi
+
+    # Clipboard: only the tool `secret show -c` uses on this platform; none without a display.
+    if [[ "$1 $2 $3" =~ (secret|text)\ show\ (-c|--clip) ]]; then
+        if   [[ "$(uname -s)" == "Darwin" ]]; then : # pbcopy - should be built-in in Mac.
+        elif [[ -n "${WAYLAND_DISPLAY:-}" ]]; then lines "wl-copy" "Clipboard copy    " "brew install wl-clipboard"
+        elif [[ -n "${DISPLAY:-}"         ]]; then lines "xclip  " "Clipboard copy    " "brew install xclip       "
+        fi
     fi
 
     echo ""
@@ -38,8 +43,214 @@ function ensure-requirements() {
     return "$failed"
 }
 
+#== Store =====================================================================
+
+function store-path() {
+    echo "${PASSWORD_STORE_DIR:-$HOME/.password-store}"
+}
+
+function store-init() {
+    echo "Do store init - not implement yet"
+    exit 1
+}
+
+function store-backup() {
+    echo "Do store backup - not implement yet"
+    exit 1
+}
+
+function store-restore() {
+    echo "Do store restore - not implement yet"
+    exit 1
+}
+
+function store-export() {
+    echo "Do store export - not implement yet"
+    exit 1
+}
+
+function store-import() {
+    echo "Do store import - not implement yet"
+    exit 1
+}
+
+function store() {
+    echo "Do store"
+
+    local category="${1:-}" ; (( $# > 0 )) && shift
+    case "$category" in
+        path)    store-path    "$@" ;;
+        init)    store-init    "$@" ;;
+        backup)  store-backup  "$@" ;;
+        restore) store-restore "$@" ;;
+        export)  store-export  "$@" ;;
+        import)  store-import  "$@" ;;
+        "")      echo "Usage: keep store <init|backup|restore|export|import> [args...]" >&2 ; return 1 ;;
+        *)       echo "keep store: unknown command: $category"                          >&2 ; return 1 ;;
+    esac
+}
+
+#== Text ======================================================================
+
+function text-ls() {
+    echo "Do text ls - not implement yet"
+    exit 1
+}
+
+function text-find() {
+    echo "Do text find - not implement yet"
+    exit 1
+}
+
+function text-grep() {
+    echo "Do text grep - not implement yet"
+    exit 1
+}
+
+function text-show() {
+    echo "Do text show - not implement yet"
+    exit 1
+}
+
+function text-insert() {
+    echo "Do text insert - not implement yet"
+    exit 1
+}
+
+function text-edit() {
+    echo "Do text edit - not implement yet"
+    exit 1
+}
+
+function text-generate() {
+    echo "Do text generate - not implement yet"
+    exit 1
+}
+
+function text-rm() {
+    echo "Do text rm - not implement yet"
+    exit 1
+}
+
+function text-mv() {
+    echo "Do text mv - not implement yet"
+    exit 1
+}
+
+function text-cp() {
+    echo "Do text cp - not implement yet"
+    exit 1
+}
+
+function text() {
+    local category="${1:-}" ; (( $# > 0 )) && shift
+    case "$category" in
+        ls)       text-ls       "$@" ;;
+        find)     text-find     "$@" ;;
+        grep)     text-grep     "$@" ;;
+        show)     text-show     "$@" ;;
+        insert)   text-insert   "$@" ;;
+        edit)     text-edit     "$@" ;;
+        generate) text-generate "$@" ;;
+        rm)       text-rm       "$@" ;;
+        mv)       text-mv       "$@" ;;
+        cp)       text-cp       "$@" ;;
+        "")       echo "Usage: keep text <ls|find|grep|show|insert|edit|generate|rm|mv|cp> [args...]" >&2 ; return 1 ;;
+        *)        echo "keep text: unknown command: $category"                                        >&2 ; return 1 ;;
+    esac
+}
+
+#== Secret ====================================================================
+
+function secret-ls() {
+    echo "Do secret ls - not implement yet"
+    exit 1
+}
+
+function secret-find() {
+    echo "Do secret find - not implement yet"
+    exit 1
+}
+
+function secret-grep() {
+    echo "Do secret grep - not implement yet"
+    exit 1
+}
+
+function secret-show() {
+    echo "Do secret show - not implement yet"
+    exit 1
+}
+
+function secret-insert() {
+    echo "Do secret insert - not implement yet"
+    exit 1
+}
+
+function secret-edit() {
+    echo "Do secret edit - not implement yet"
+    exit 1
+}
+
+function secret-generate() {
+    echo "Do secret generate - not implement yet"
+    exit 1
+}
+
+function secret-rm() {
+    echo "Do secret rm - not implement yet"
+    exit 1
+}
+
+function secret-mv() {
+    echo "Do secret mv - not implement yet"
+    exit 1
+}
+
+function secret-cp() {
+    echo "Do secret cp - not implement yet"
+    exit 1
+}
+
+function secret() {
+    local category="${1:-}" ; (( $# > 0 )) && shift
+    case "$category" in
+        ls)       secret-ls       "$@" ;;
+        find)     secret-find     "$@" ;;
+        grep)     secret-grep     "$@" ;;
+        show)     secret-show     "$@" ;;
+        insert)   secret-insert   "$@" ;;
+        edit)     secret-edit     "$@" ;;
+        generate) secret-generate "$@" ;;
+        rm)       secret-rm       "$@" ;;
+        mv)       secret-mv       "$@" ;;
+        cp)       secret-cp       "$@" ;;
+        "")       echo "Usage: keep secret <ls|find|grep|show|insert|edit|generate|rm|mv|cp> [args...]" >&2 ; return 1 ;;
+        *)        echo "keep secret: unknown command: $category"                                        >&2 ; return 1 ;;
+    esac
+}
+
+#== List ======================================================================
+
+function list() {
+    local category="${1:-}" ; (( $# > 0 )) && shift
+    echo "Do ls"
+}
+
+#== Main ======================================================================
+
 function main() {
-    ensure-requirements >/dev/null ; if [[ $? -ne 0 ]]; then ensure-requirements ; fi
+    ensure-requirements "$@" >/dev/null ; if [[ $? -ne 0 ]]; then ensure-requirements "$@" ; fi
+
+    local category="${1:-}" ; (( $# > 0 )) && shift
+    case "$category" in
+        store) store  "$@" ;;
+        text)  text   "$@" ;;
+        pass)  secret "$@" ;;
+        ls)    list   "$@" ;;
+        "")    echo "Usage: keep <store|text|pass|ls> [args...]" >&2 ; return 1 ;;
+        *)     echo "keep: unknown command: $category"            >&2 ; return 1 ;;
+    esac
 }
 
 main "$@"
