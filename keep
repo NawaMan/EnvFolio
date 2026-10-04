@@ -13,6 +13,7 @@
 # Environment:
 #   KEEP_STORE_DIR  The Keep store (default ~/.keep). Laid out like a pass store, but kept apart
 #                   from your own ~/.password-store.
+#   KEEP_NO_GUM     Set to use plain prompts even when `gum` (optional) is installed.
 #
 # Every command, with examples: MANUAL.md
 
@@ -152,7 +153,7 @@ EOF
 # keep store init [--key <id>] | [--new-key] [--name <name>] [--email <email>] [--passphrase-stdin]
 # Anything not given is asked for. An existing key needs no passphrase: the store only encrypts to it.
 function store-init() {
-    # Processs input
+    # Processs inputs
     local key_id="" new_key=0 name="" email="" passphrase_stdin=0 arg
     while (( $# > 0 )); do
         arg=$1 ; shift
@@ -185,27 +186,8 @@ function store-init() {
     local status=0 key="" uid expiry
     store-exists || status=$?
     if (( status == 3 )); then
-        key=$(init-progress-key)
-        [[ -n $key ]] && uid=$(key-uid "$key")
-        if (( new_key )) || { [[ -n $key_id ]] && [[ $(find-key "$key_id") != "$key" ]]; }; then
-            die "An unfinished init at $STORE_PATH uses the key $key." \
-                "Run \`keep store init\` without key options to continue or start over."
-        fi
-        can-ask || die "An earlier \`keep store init\` did not finish at $STORE_PATH." \
-                       "Run it again in a terminal to continue or start over, or remove that folder."
-        case $(ask-unfinished-init "$key" "$uid") in
-            continue)
-                [[ -n $key && -n $uid ]] || die "The key for this store is no longer in your keyring." \
-                                                "Run again and choose Start over."
-                ;;
-            start-over)
-                confirm "Delete $(tilde-path "$STORE_PATH") and everything in it, then start over?" \
-                    || die "Cancelled."
-                rm -rf -- "$STORE_PATH"
-                key="" ; status=1
-                ;;
-            *) die "Cancelled." ;;
-        esac
+        key=$(store-init-resume "$key_id" "$new_key") || exit 1
+        if [[ -n $key ]]; then uid=$(key-uid "$key"); else status=1; fi
     fi
     if (( status == 0 )); then
         die "A Keep store already exists at $STORE_PATH." \
@@ -270,6 +252,35 @@ function init-progress-mark() { printf '%s\n' "$*" >> "$(init-progress-file)"; }
 function init-progress-done() { grep -qx -- "$1" "$(init-progress-file)" 2>/dev/null; }
 function init-progress-key()  { awk '$1 == "key" { print $2; exit }' "$(init-progress-file)" 2>/dev/null; }
 
+# store-init-resume <key_id> <new_key>
+# The store holds an unfinished init: ask whether to continue or start over. Prints the key to
+# continue with, or nothing after starting over (the store folder is then gone). Cancel and any
+# failure exit.
+function store-init-resume() {
+    local key_id=$1 new_key=$2 key uid
+    key=$(init-progress-key)
+    [[ -n $key ]] && uid=$(key-uid "$key")
+    if (( new_key )) || { [[ -n $key_id ]] && [[ $(find-key "$key_id") != "$key" ]]; }; then
+        die "An unfinished init at $STORE_PATH uses the key $key." \
+            "Run \`keep store init\` without key options to continue or start over."
+    fi
+    can-ask || die "An earlier \`keep store init\` did not finish at $STORE_PATH." \
+                   "Run it again in a terminal to continue or start over, or remove that folder."
+    case $(ask-unfinished-init "$key" "$uid") in
+        continue)
+            [[ -n $key && -n $uid ]] || die "The key for this store is no longer in your keyring." \
+                                            "Run again and choose Start over."
+            printf '%s\n' "$key"
+            ;;
+        start-over)
+            confirm "Delete $(tilde-path "$STORE_PATH") and everything in it, then start over?" \
+                || die "Cancelled."
+            rm -rf -- "$STORE_PATH"
+            ;;
+        *) die "Cancelled." ;;
+    esac
+}
+
 # Show what an unfinished init got done, then ask what to do. Prints: continue | start-over | cancel
 function ask-unfinished-init() {
     local key=$1 uid=$2
@@ -278,7 +289,7 @@ function ask-unfinished-init() {
     init-progress-done pass-init   && show-answer "Store"   "created" "  "
     init-progress-done git-history && show-answer "History" "started"
     local choice
-    choice=$(gum choose --header "${EXTRA_LINE}What should happen?" \
+    choice=$(ask-choice "${EXTRA_LINE}What should happen?" \
         "Continue where it stopped" "Start over" "Cancel") || choice=Cancel
     case $choice in
         Continue*) echo continue   ;;
@@ -332,7 +343,7 @@ function store-summary() {
             "  gpg --quick-set-expire $key 2y"
         )
     fi
-    gum style --border rounded --padding "0 1" "${lines[@]}"
+    show-box "${lines[@]}"
 }
 
 # --- Not yet ------------------------------------------------------------------
@@ -513,22 +524,25 @@ function ensure-requirements() {
     local failed=0
 
     has-dependency() { command -v "${1// /}" >/dev/null 2>&1 ; }
+    # lines <cmd> <reason> <install> [optional]: a missing optional one is marked, but doesn't fail.
     lines() {
-        local cmd="$1" reason="$2" install="$3"
+        local cmd="$1" reason="$2" install="$3" optional="${4:-}"
         local icon=$'\e[32m✓\e[0m'
-        if ! has-dependency "$cmd"; then icon=$'\e[31m✗\e[0m' ; failed=1 ; fi
+        if ! has-dependency "$cmd"; then
+            if [[ -n $optional ]]; then icon=$'\e[33m-\e[0m'; else icon=$'\e[31m✗\e[0m' ; failed=1 ; fi
+        fi
         echo "| $icon $cmd  | $reason | $install |"
         echo "+------------+--------------------+---------------------------+"
     }
-    
-    echo "Required dependencies"
+
+    echo "Dependencies"
     echo "+------------+--------------------+---------------------------+"
     echo "| Dependency | Description        | Brew install command      |"
     echo "+------------+--------------------+---------------------------+"
     lines     "pass   " "Password manager  " "brew install pass        "
     lines     "gpg    " "Encrypts the store" "brew install gnupg       "
     lines     "git    " "Syncs the store   " "brew install git         "
-    lines     "gum    " "Draws the UI      " "brew install gum         "
+    lines     "gum    " "Nicer UI, optional" "brew install gum         " optional
 
     if [[ "$1 $2" =~ store\ (backup|restore|import|export) ]]; then
         lines     "tar    " "Packs backups     " "brew install gnu-tar     "
@@ -583,24 +597,74 @@ function tilde-path() {
 
 # --- Input --------------------------------------------------------------------
 
+# Every prompt goes through the functions below. Each uses `gum` when it is there and falls back to
+# plain bash prompts when not (or when KEEP_NO_GUM is set). Prompts go to stderr; only the answer
+# goes to stdout, so `$(ask-...)` captures just the answer.
+
+# Whether to draw prompts with gum.
+function has-gum() { [[ -z ${KEEP_NO_GUM:-} ]] && command -v gum >/dev/null 2>&1; }
+
+# ask-text <header> [placeholder] [guess]: prints the answer; an empty answer keeps the guess.
 function ask-text() {
     local header="$1"
     local placeholder="${2:-}"
     local guess_value="${3:-}"
-    local value
-    value=$(
-        gum input \
-            --header      "${EXTRA_LINE}${header}" \
-            --placeholder "${placeholder}"         \
-            --value       "${guess_value}"         \
-    ) || die "Cancelled."
+    local value hint
+    if has-gum; then
+        value=$(
+            gum input \
+                --header      "${EXTRA_LINE}${header}" \
+                --placeholder "${placeholder}"         \
+                --value       "${guess_value}"         \
+        ) || die "Cancelled."
+    else
+        hint=${guess_value:-$placeholder}
+        printf '\n%s%s: ' "$header" "${hint:+ [$hint]}" >&2
+        IFS= read -r value || die "Cancelled."
+        [[ -n $value ]] || value=$guess_value
+    fi
     printf '%s\n' "$value"
+}
+
+# ask-choice <header> <option>...: prints the chosen option; fails on cancel (Esc, or Ctrl-D).
+function ask-choice() {
+    local header=$1 choice ; shift
+    if has-gum; then
+        gum choose --header "$header" "$@"
+        return
+    fi
+    printf '%s\n' "$header" >&2
+    local PS3="Pick a number (Ctrl-D cancels): "
+    select choice in "$@"; do
+        [[ -n $choice ]] && { printf '%s\n' "$choice"; return 0; }
+    done
+    echo >&2
+    return 1
 }
 
 # Whether we can ask the user anything (stdin is a terminal).
 function can-ask() { [[ -t 0 ]]; }
 
-function confirm() { gum confirm "$1"; }
+# confirm <question>: succeeds on yes. Anything else — and the plain prompt's default — is no.
+function confirm() {
+    local answer
+    if has-gum; then gum confirm "$1"; return; fi
+    printf '%s [y/N] ' "$1" >&2
+    IFS= read -r answer || { echo >&2; return 1; }
+    [[ $answer == [yY]* ]]
+}
+
+# show-box <line>...: the lines in a rounded box.
+function show-box() {
+    if has-gum; then gum style --border rounded --padding "0 1" "$@"; return; fi
+    local line width=0 border
+    for line in "$@"; do (( ${#line} > width )) && width=${#line}; done
+    border=$(printf '%*s' $(( width + 2 )) '')
+    border=${border// /─}
+    printf '╭%s╮\n' "$border"
+    for line in "$@"; do printf '│ %s%*s │\n' "$line" $(( width - ${#line} )) ''; done
+    printf '╰%s╯\n' "$border"
+}
 
 # --- User + Key ---------------------------------------------------------------
 
@@ -703,24 +767,22 @@ function generate-key() {
 }
 
 # Pick the key for the store: reuse an existing one if the user wants, otherwise create one.
-# Prints the fingerprint. Always a list, even for one key: gum confirm reports Esc the same as No,
+# Prints the fingerprint. Always a list, even for one key: confirm reports cancel the same as No,
 # which would turn a cancel into "create a new key".
 function select-key() {
-    local create_new_key="Create a new key" line choices choice key
+    local create_new_key="Create a new key" line choices=() choice key
     # Shown as "<user id>  [<fingerprint>]"; the fingerprint is read back from the brackets.
-    choices=$(
-        while IFS= read -r line; do
-            printf '%s  [%s]\n' "${line#*$'\t'}" "${line%%$'\t'*}"
-        done < <(list-secret-keys)
-        printf '%s\n' "${create_new_key}"
-    )
+    while IFS= read -r line; do
+        choices+=("${line#*$'\t'}  [${line%%$'\t'*}]")
+    done < <(list-secret-keys)
+    choices+=("${create_new_key}")
 
     # No existing keys: nothing to choose, go straight to generating a new key.
-    if [[ $choices == "${create_new_key}" ]]; then
+    if (( ${#choices[@]} == 1 )); then
         choice=${create_new_key}
     else
-        choice=$(printf '%s\n' "$choices" \
-            | gum choose --header "Which GPG key should encrypt the store?") || die "Cancelled."
+        choice=$(ask-choice "Which GPG key should encrypt the store?" "${choices[@]}") \
+            || die "Cancelled."
     fi
 
     if [[ $choice == "${create_new_key}" ]]; then

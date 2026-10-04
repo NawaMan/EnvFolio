@@ -233,7 +233,10 @@ Starting style, not law — deviate explicitly (say so and why) rather than sile
 - **Runtime dependencies: `bash`, `pass`, `gpg`, `git`, `gum`, `tar`, `gzip` — and that's the
   list.** `gpg` is a direct dependency because first-run setup has to find or create a key before
   `pass init`; `git` because the store is synced as a git repo; `tar` + `gzip` because
-  `keep store backup` packs everything into one file. Plus one clipboard tool — `pbcopy` /
+  `keep store backup` packs everything into one file. `gum` is **optional**: every prompt goes
+  through the Input helpers (`ask-text`, `ask-choice`, `confirm`, `show-box`), which use `gum`
+  when present and plain bash otherwise (`KEEP_NO_GUM=1` forces that). Never call `gum` directly,
+  and give every new helper a plain fallback. Plus one clipboard tool — `pbcopy` /
   `wl-copy` / `xclip`, whichever `pass` itself uses on the machine — for `keep text show -c`.
   The script's approved-dependency block is the authoritative list. Anything
   beyond bash builtins and POSIX coreutils needs a stated reason and the user's OK — flag it with

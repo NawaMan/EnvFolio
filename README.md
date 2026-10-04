@@ -32,8 +32,9 @@ Every command, with examples: [MANUAL.md](MANUAL.md).
 
 - `pass`
 - `gpg`
-- `gum`
 - `git`
+- `gum` — optional. With it, prompts are menus you move through with the arrow keys; without it,
+  Keep asks with plain prompts (numbered choices, `[y/N]`).
 - `tar`
 - `gzip`
 - `pbcopy`
@@ -42,3 +43,4 @@ Every command, with examples: [MANUAL.md](MANUAL.md).
 
 - `KEEP_STORE_DIR` - the path to the Keep store. Defaults to `$HOME/.keep`. The store has the same
   layout as a `pass` store, but is kept apart from your own `~/.password-store`.
+- `KEEP_NO_GUM` - set (to anything) to use the plain prompts even when `gum` is installed.
