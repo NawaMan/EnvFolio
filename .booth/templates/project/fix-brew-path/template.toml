@@ -1,0 +1,16 @@
+display-name = "Fix brew PATH"
+display-disc = "Put Homebrew's bin dirs on the image PATH, so `booth exec` finds brew-installed tools"
+tags = ["homebrew", "brew", "path"]
+
+requires = ["homebrew"]
+
+# Workaround: CodingBooth's homebrew setup only adds brew to PATH through shell startup files
+# (/etc/profile.d, ~/.bashrc, ~/.zshrc). `booth exec` runs a command without a shell, so it never
+# reads them and `gum` etc. are "not found". Setting the image ENV fixes every entry point.
+# Remove once the upstream homebrew setup sets PATH itself.
+#
+# 55: after `setup homebrew` (50), before `install brew` (60).
+[segments]
+"Boothfile--55" = """
+env PATH=/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:$PATH
+"""

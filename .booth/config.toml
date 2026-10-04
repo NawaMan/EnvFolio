@@ -1,4 +1,4 @@
-# Configured by: booth config --no-tui --overwrite --variant terminal --set silence-build --set writable-booth --select apt-pkg:bats,pass,shellcheck,tmux/git-credential/shell-history/homebrew/brew-pkg:gum/claude-code+auto-accept+credential+settings-cache/tty-owner
+# Configured by: booth config --no-tui --overwrite --variant terminal --set silence-build --set writable-booth --select apt-pkg:bats,pass,shellcheck,tmux/git-credential/shell-history/homebrew/brew-pkg:gum/claude-code+auto-accept+credential+settings-cache/tty-owner/fix-brew-path
 
 variant = "terminal"
 

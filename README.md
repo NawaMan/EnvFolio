@@ -38,4 +38,5 @@ A terminal UI for password management. It is built heavily on top of [`pass`](ht
 
 # Common Environment Variables
 
-- `PASSWORD_STORE_DIR` - the path to the Keep store. Defaults to `$HOME/.password-store`.
+- `KEEP_STORE_DIR` - the path to the Keep store. Defaults to `$HOME/.keep`. The store has the same
+  layout as a `pass` store, but is kept apart from your own `~/.password-store`.

@@ -1,7 +1,7 @@
 # syntax=codingbooth/boothfile:1
-# Configured by: booth config --no-tui --overwrite --variant terminal --set silence-build --set writable-booth --select apt-pkg:bats,pass,shellcheck,tmux/git-credential/shell-history/homebrew/brew-pkg:gum/claude-code+auto-accept+credential+settings-cache/tty-owner
+# Configured by: booth config --no-tui --overwrite --variant terminal --set silence-build --set writable-booth --select apt-pkg:bats,pass,shellcheck,tmux/git-credential/shell-history/homebrew/brew-pkg:gum/claude-code+auto-accept+credential+settings-cache/tty-owner/fix-brew-path
 
-env APT_SNAPSHOT=20261003T000000Z
+env APT_SNAPSHOT=20261004T000000Z
 
 arg APT_PKGS=bats,pass,shellcheck,tmux
 arg BREW_PKGS=gum
@@ -10,5 +10,6 @@ arg CLAUDE_CODE_VERSION=latest
 install apt ${APT_PKGS}
 setup claude-code ${CLAUDE_CODE_VERSION}
 setup homebrew
+env PATH=/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:$PATH
 install brew ${BREW_PKGS}
 setup tty-owner

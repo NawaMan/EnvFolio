@@ -1,5 +1,16 @@
 #!/usr/bin/env bash
 
+#== Setting ===================================================================
+
+STORE_PATH=${KEEP_STORE_DIR:-$HOME/.keep}
+# Always absolute: `pass` loops forever on a relative PASSWORD_STORE_DIR whose folder doesn't exist
+# yet (its set_git keeps stripping "/…" off a path that has none left).
+[[ $STORE_PATH == /* ]] || STORE_PATH=$PWD/$STORE_PATH
+
+# The Keep store is laid out like a pass store, but lives in its own place so it never touches the
+# user's own ~/.password-store. Every `pass` call goes there.
+export PASSWORD_STORE_DIR="$STORE_PATH"
+
 #== Main ======================================================================
 
 function version() {
@@ -7,7 +18,8 @@ function version() {
 }
 
 function main() {
-    ensure-requirements "$@" >/dev/null ; if [[ $? -ne 0 ]]; then ensure-requirements "$@" ; fi
+    # Quiet when all is there; otherwise show the table and stop.
+    if ! ensure-requirements "$@" >/dev/null; then ensure-requirements "$@" ; return 1 ; fi
 
     local category="${1:-}" ; (( $# > 0 )) && shift
     case "$category" in
@@ -22,12 +34,19 @@ function main() {
     esac
 }
 
-#== Setting ===================================================================
+#== Common Constants ==========================================================
 
-BUDDLE_SUFFIX=.keep
-STORE_PATH=${PASSWORD_STORE_DIR:-$HOME/.password-store}
 EXTRA_LINE="""
 """
+
+# <path> with $HOME shown as ~, for display.
+function tilde-path() {
+    # shellcheck disable=SC2088  # a literal ~ is the point: this path is for display only
+    case $1 in
+        "$HOME"/*) printf '~/%s\n' "${1#"$HOME"/}" ;;
+        *)         printf '%s\n' "$1" ;;
+    esac
+}
 
 #==  Command:Help + Version ===================================================
 
@@ -42,9 +61,46 @@ function store-path() {
     echo "${STORE_PATH}"
 }
 
+# Whether the store is ready to use. Prints nothing; the caller acts on the return code:
+#   0 - ready: the folder exists and has a non-empty .gpg-id (written by `pass init`)
+#   1 - missing: no folder at all
+#   2 - not a store: the folder exists but has no (or an empty) .gpg-id
+function store-exists() {
+    [[ -d $STORE_PATH          ]] || return 1
+    [[ -s $STORE_PATH/.gpg-id  ]] || return 2
+    return 0
+}
+
 function store-init() {
-    echo "Do store init - not implement yet"
-    exit 1
+    local status=0
+    store-exists || status=$?
+    if (( status == 0 )); then
+        die "A Keep store already exists at $STORE_PATH." \
+            "To create another one, run with ${EXTRA_LINE}" \
+            "    KEEP_STORE_DIR=<other-folder> $0 store init."
+    fi
+    if (( status == 2 )) && [[ -n $(ls -A "$STORE_PATH" 2>/dev/null) ]]; then
+        die "$STORE_PATH is not empty and is not a Keep store." \
+            "Empty it, or run with ${EXTRA_LINE}" \
+            "    KEEP_STORE_DIR=<other-folder> $0 store init."
+    fi
+
+    section "Select key to protect the keep store."
+    local key uid expiry
+    key=$(select-key) || exit 1
+    uid=$(key-uid "$key")
+    [[ -n $uid ]] || die "Cannot find the key $key."
+    expiry=$(key-expiry "$key")
+
+    section "Create the password store"
+    pass init "$key"
+
+    section "Start the store's git history"
+    start-store-history "$uid"
+
+    section "Summary"
+    store-summary "$key" "$uid" "$expiry"
+    echo ""
 }
 
 function store-backup() {
@@ -298,7 +354,8 @@ function ask-text() {
     local header="$1"
     local placeholder="${2:-}"
     local guess_value="${3:-}"
-    local value=$(
+    local value
+    value=$(
         gum input \
             --header      "${EXTRA_LINE}${header}" \
             --placeholder "${placeholder}"         \
@@ -348,22 +405,18 @@ function list-secret-keys() {
 }
 
 # Generate a new key with gpg's defaults, asking only for name and email (pre-filled with our best
-# guess) — or labelled <uid> when given, without asking. gpg itself asks for the passphrase.
-# Prints the new key's fingerprint.
+# guess). gpg itself asks for the passphrase. Prints the new key's fingerprint.
 function generate-key() {
-    local uid=${1:-} name email status fpr
-    local message=""
+    local uid name email status finger_print
 
-    [[ -z $uid ]] && message="You will be asked for the name and email needed to generate a key.${EXTRA_LINE}Then, "
-    info "${message}GPG will ask you to enter a passphrase used to protected the key." >&2
+    info "You will be asked for the name and email needed to generate a key.${EXTRA_LINE}" \
+         "Then, GPG will ask you to enter a passphrase used to protected the key." >&2
 
     # Prompt for name and email
-    if [[ -z $uid ]]; then
-        local name=$( ask-text "Your name"  "e.g. Jane Doe"         "$(guess-name)")  ; show-answer "Name"  "${name}"  "      "
-        local email=$(ask-text "Your email" "e.g. jane@example.com" "$(guess-email)") ; show-answer "Email" "${email}" "     "
-        [[ -n $name && -n $email ]] || die "A name and an email are needed to create a key."
-        uid="$name <$email>"
-    fi
+    name=$( ask-text "Your name"  "e.g. Jane Doe"         "$(guess-name)")  || exit 1 ; show-answer "Name"  "${name}"  "      "
+    email=$(ask-text "Your email" "e.g. jane@example.com" "$(guess-email)") || exit 1 ; show-answer "Email" "${email}" "     "
+    [[ -n $name && -n $email ]] || die "A name and an email are needed to create a key."
+    uid="$name <$email>"
     show-answer "Passphrase" "************"
 
     info "Generating key ..." >&2
@@ -382,40 +435,96 @@ function generate-key() {
 # Prints the fingerprint. Always a list, even for one key: gum confirm reports Esc the same as No,
 # which would turn a cancel into "create a new key".
 function select-key() {
-    local create_new_key="Create a new key"
+    local create_new_key="Create a new key" line choices choice key
     # Shown as "<user id>  [<fingerprint>]"; the fingerprint is read back from the brackets.
-    local choices=$(
+    choices=$(
         while IFS= read -r line; do
             printf '%s  [%s]\n' "${line#*$'\t'}" "${line%%$'\t'*}"
         done < <(list-secret-keys)
         printf '%s\n' "${create_new_key}"
-    ) || die "Cancelled."
+    )
 
-    # No existing keys, go straight to generating a new key
-    if [[ "${choices}" == "Create a new key" ]]; then
-        section "Generating the key."
-        generate-key
-        section-end
-        return
+    # No existing keys: nothing to choose, go straight to generating a new key.
+    if [[ $choices == "${create_new_key}" ]]; then
+        choice=${create_new_key}
+    else
+        choice=$(printf '%s\n' "$choices" \
+            | gum choose --header "Which GPG key should encrypt the store?") || die "Cancelled."
     fi
-    
-    local choice=$(printf '%s\n' "$choices" \
-        | gum choose --header "Which GPG key should encrypt the store?") || die "Cancelled."
 
     if [[ $choice == "${create_new_key}" ]]; then
         section "Generating the key."
-        local new_key=$(generate-key)
+        key=$(generate-key) || exit 1
         section-end
-
-        show-answer "Key" "$new_key"
     else
-        choice=${choice##*[}
-        show-answer "Key" "$choice"
+        key=${choice##*[}
+        key=${key%]}
     fi
+    show-answer "Key" "$key"
+    printf '%s\n' "$key"
+}
+
+# The first user id ("Name <email>") of the key with fingerprint <fpr>.
+function key-uid() {
+    gpg --list-keys --with-colons "$1" 2>/dev/null | awk -F: '$1 == "uid" { print $10; exit }'
+}
+
+# The expiry date (YYYY-MM-DD, UTC) of the key with fingerprint <fpr>; nothing when it never expires.
+function key-expiry() {
+    local epoch
+    epoch=$(gpg --list-keys --with-colons "$1" 2>/dev/null | awk -F: '$1 == "pub" { print $7; exit }')
+    [[ -n $epoch ]] || return 0
+    # GNU date takes -d @<epoch>; BSD (macOS) date takes -r <epoch>.
+    date -u -d "@$epoch" +%F 2>/dev/null || date -u -r "$epoch" +%F
+}
+
+# Start the store's git history, so `pass` commits every change from here on. The repo gets its
+# own author (from the key's user id) first: without a global git identity, `pass git init`'s
+# first commit — and every later automatic one — would fail.
+function start-store-history() {
+    local uid=$1
+    local name=${uid% <*} email=${uid##*<}
+    email=${email%>}
+
+    git -C "$STORE_PATH" init --quiet                || die "Starting the store's git history failed."
+    git -C "$STORE_PATH" config user.name  "$name"
+    git -C "$STORE_PATH" config user.email "$email"
+    pass git init >/dev/null                         || die "Starting the store's git history failed."
+    show-answer "History" "$(git -C "$STORE_PATH" log --oneline | wc -l | tr -d ' ') commit(s)"
+}
+
+# The closing box: what was set up, and what the user must keep to ever get their passwords back.
+function store-summary() {
+    local key=$1 uid=$2 expiry=$3 lines
+    lines=(
+        "Your pass store is ready."
+        ""
+        "Store:   $(tilde-path "$(store-path)")"
+        "Key:     $key"
+        "         $uid"
+        "Expires: ${expiry:-never}"
+        ""
+        "To get your passwords back if this machine is lost, you need both:"
+        ""
+        "1. Your passphrase — it can't be reset. Memorise it, and keep a written copy offline."
+        ""
+        "2. A backup of your key and store — one file, made with:"
+        "     keep store backup"
+        "   Keep it somewhere safe and offline, and run it again after you change passwords."
+    )
+    if [[ -n $expiry ]]; then
+        lines+=(
+            ""
+            "When the key expires ($expiry), pass can't add or change entries until you extend it:"
+            "  gpg --quick-set-expire $key 2y"
+        )
+    fi
+    gum style --border rounded --padding "0 1" "${lines[@]}"
 }
 
 #== Main ======================================================================
 
-# main "$@"
-
-select-key
+# Run only when executed, so tests can `source` this file for its functions.
+if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
+    main "$@";
+fi
