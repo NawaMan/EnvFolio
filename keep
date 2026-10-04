@@ -111,10 +111,8 @@ function store-path() {
 #   0 - ready: the folder exists and has a non-empty .gpg-id (written by `pass init`)
 #   1 - missing: no folder at all
 #   2 - not a store: the folder exists but has no (or an empty) .gpg-id
-#   3 - unfinished: a `keep store init` started here and did not finish (see init-progress-file)
 function store-exists() {
     [[ -d $STORE_PATH          ]] || return 1
-    [[ -e $(init-progress-file) ]] && return 3
     [[ -s $STORE_PATH/.gpg-id  ]] || return 2
     return 0
 }
@@ -183,119 +181,41 @@ function store-init() {
         die "--passphrase-stdin needs --name and --email too."
     fi
 
-    local status=0 key="" uid expiry
-    store-exists || status=$?
-    if (( status == 3 )); then
-        key=$(store-init-resume "$key_id" "$new_key") || exit 1
-        if [[ -n $key ]]; then uid=$(key-uid "$key"); else status=1; fi
-    fi
-    if (( status == 0 )); then
-        die "A Keep store already exists at $STORE_PATH." \
-            "To create another one, run with ${EXTRA_LINE}" \
-            "    KEEP_STORE_DIR=<other-folder> $0 store init."
-    fi
-    if (( status == 2 )) && [[ -n $(ls -A "$STORE_PATH" 2>/dev/null) ]]; then
-        die "$STORE_PATH is not empty and is not a Keep store." \
-            "Empty it, or run with ${EXTRA_LINE}" \
+    if [[ -e $STORE_PATH ]]; then
+        die "A folder already exists at $STORE_PATH." \
+            "If an earlier \`keep store init\` did not finish, remove it and run again." \
+            "To create another store, run with ${EXTRA_LINE}" \
             "    KEEP_STORE_DIR=<other-folder> $0 store init."
     fi
 
-    # A resumed init already has its key.
-    if [[ -z $key ]]; then
-        section "Select key to protect the keep store."
-        if [[ -n $key_id ]]; then
-            key=$(find-key "$key_id") || exit 1
-            show-answer "Key" "$key"
-        elif (( new_key )); then
-            section "Generating the key."
-            key=$(generate-key "$name" "$email" "$passphrase_stdin") || exit 1
-            section-end
-            show-answer "Key" "$key"
-        else
-            key=$(select-key) || exit 1
-        fi
-        uid=$(key-uid "$key")
-        [[ -n $uid ]] || die "Cannot find the key $key."
-
-        # From here on the store is being written: record each step, so a cut-short init can resume.
-        mkdir -p "$STORE_PATH"     || die "Cannot create $STORE_PATH."
-        init-progress-mark key "$key"
+    local key uid expiry
+    section "Select key to protect the keep store."
+    if [[ -n $key_id ]]; then
+        key=$(find-key "$key_id") || exit 1
+        show-answer "Key" "$key"
+    elif (( new_key )); then
+        section "Generating the key."
+        key=$(generate-key "$name" "$email" "$passphrase_stdin") || exit 1
+        section-end
+        show-answer "Key" "$key"
+    else
+        key=$(select-key) || exit 1
     fi
+    uid=$(key-uid "$key")
+    [[ -n $uid ]] || die "Cannot find the key $key."
     expiry=$(key-expiry "$key")
 
-    if ! init-progress-done pass-init; then
-        section "Create the password store"
-        pass init "$key"           || die "pass init failed."
-        init-progress-mark pass-init
-    fi
+    mkdir -p "$STORE_PATH"     || die "Cannot create $STORE_PATH."
 
-    if ! init-progress-done git-history; then
-        section "Start the store's git history"
-        start-store-history "$uid"
-        init-progress-mark git-history
-    fi
+    section "Create the password store"
+    pass init "$key"           || die "pass init failed."
 
-    rm -f -- "$(init-progress-file)"
+    section "Start the store's git history"
+    start-store-history "$uid"
 
     section "Summary"
     store-summary "$key" "$uid" "$expiry"
     echo ""
-}
-
-# --- Init progress ------------------------------------------------------------
-# While `keep store init` runs, the store holds .keep-init: "key <fingerprint>" first, then one line
-# per finished step. It is removed when init is done, so a leftover one means init was cut short.
-# Every step can safely run again, so resuming just redoes the steps not listed.
-
-function init-progress-file() { printf '%s/.keep-init\n' "$STORE_PATH"; }
-function init-progress-mark() { printf '%s\n' "$*" >> "$(init-progress-file)"; }
-function init-progress-done() { grep -qx -- "$1" "$(init-progress-file)" 2>/dev/null; }
-function init-progress-key()  { awk '$1 == "key" { print $2; exit }' "$(init-progress-file)" 2>/dev/null; }
-
-# store-init-resume <key_id> <new_key>
-# The store holds an unfinished init: ask whether to continue or start over. Prints the key to
-# continue with, or nothing after starting over (the store folder is then gone). Cancel and any
-# failure exit.
-function store-init-resume() {
-    local key_id=$1 new_key=$2 key uid
-    key=$(init-progress-key)
-    [[ -n $key ]] && uid=$(key-uid "$key")
-    if (( new_key )) || { [[ -n $key_id ]] && [[ $(find-key "$key_id") != "$key" ]]; }; then
-        die "An unfinished init at $STORE_PATH uses the key $key." \
-            "Run \`keep store init\` without key options to continue or start over."
-    fi
-    can-ask || die "An earlier \`keep store init\` did not finish at $STORE_PATH." \
-                   "Run it again in a terminal to continue or start over, or remove that folder."
-    case $(ask-unfinished-init "$key" "$uid") in
-        continue)
-            [[ -n $key && -n $uid ]] || die "The key for this store is no longer in your keyring." \
-                                            "Run again and choose Start over."
-            printf '%s\n' "$key"
-            ;;
-        start-over)
-            confirm "Delete $(tilde-path "$STORE_PATH") and everything in it, then start over?" \
-                || die "Cancelled."
-            rm -rf -- "$STORE_PATH"
-            ;;
-        *) die "Cancelled." ;;
-    esac
-}
-
-# Show what an unfinished init got done, then ask what to do. Prints: continue | start-over | cancel
-function ask-unfinished-init() {
-    local key=$1 uid=$2
-    info "An earlier \`keep store init\` did not finish at $(tilde-path "$STORE_PATH")." >&2
-    show-answer "Key" "$key ${uid:-(no longer in your keyring)}" "    "
-    init-progress-done pass-init   && show-answer "Store"   "created" "  "
-    init-progress-done git-history && show-answer "History" "started"
-    local choice
-    choice=$(ask-choice "${EXTRA_LINE}What should happen?" \
-        "Continue where it stopped" "Start over" "Cancel") || choice=Cancel
-    case $choice in
-        Continue*) echo continue   ;;
-        Start*)    echo start-over ;;
-        *)         echo cancel     ;;
-    esac
 }
 
 # Start the store's git history, so `pass` commits every change from here on. The repo gets its
@@ -307,10 +227,6 @@ function start-store-history() {
     email=${email%>}
 
     git -C "$STORE_PATH" init --quiet                || die "Starting the store's git history failed."
-    # `pass git init` commits the whole folder; init's progress file must stay out of it.
-    mkdir -p "$STORE_PATH/.git/info"
-    grep -qx '/.keep-init' "$STORE_PATH/.git/info/exclude" 2>/dev/null \
-        || echo '/.keep-init' >> "$STORE_PATH/.git/info/exclude"
     git -C "$STORE_PATH" config user.name  "$name"
     git -C "$STORE_PATH" config user.email "$email"
     pass git init >/dev/null                         || die "Starting the store's git history failed."

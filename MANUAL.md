@@ -91,22 +91,9 @@ KEEP_STORE_DIR=~/work-keep keep store init --key jane@example.com
 Creates the store in `~/work-keep` instead of `~/.keep`. Every later `keep` command needs the
 same `KEEP_STORE_DIR` to use it.
 
-### Resume an interrupted init
+### When the store folder already exists
 
-```bash
-keep store init
-```
-
-If an earlier `keep store init` stopped partway (an error, Ctrl-C, a closed terminal), the store
-folder still holds `.keep-init`, a list of the steps already done. Running `keep store init`
-again shows those steps and asks:
-
-- **Continue where it stopped** — uses the same key and runs only the steps not done yet.
-  Fails if that key is no longer in your keyring.
-- **Start over** — after a confirm, deletes the store folder and starts from the key choice.
-  A key created by the earlier run is kept, and shows up in the key menu.
-- **Cancel** — changes nothing.
-
-This needs a terminal: without one (e.g. `< /dev/null`) it stops, and says so. `--key` with a
-different key than the earlier run, or `--new-key`, is refused. Other `keep` commands treat an
-unfinished store as not ready.
+`keep store init` refuses to run if the store folder already exists, even an empty one, and
+changes nothing. If an earlier `keep store init` stopped partway (an error, Ctrl-C, a closed
+terminal), remove the folder it left and run `keep store init` again. A key created by the earlier
+run is kept, and shows up in the key menu.

@@ -62,5 +62,13 @@ teardown() {
     echo "someone else's file" > "$KEEP_STORE_DIR/notes.txt"
     run store-init
     [ "$status" -eq 1 ]
-    [[ $output == *"not a Keep store"* ]]
+    [[ $output == *"already exists"* ]]
+}
+
+@test "store-init: refuses an empty folder" {
+    mkdir -p "$KEEP_STORE_DIR"
+    run store-init
+    [ "$status" -eq 1 ]
+    [[ $output == *"already exists"* ]]
+    [ -z "$(ls -A "$KEEP_STORE_DIR")" ]
 }
