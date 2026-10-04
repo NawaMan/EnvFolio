@@ -13,7 +13,6 @@
 # Environment:
 #   KEEP_STORE_DIR  The Keep store (default ~/.keep). Laid out like a pass store, but kept apart
 #                   from your own ~/.password-store.
-#   KEEP_NO_GUM     Set to use plain prompts even when `gum` (optional) is installed.
 #
 # Every command, with examples: MANUAL.md
 
@@ -458,7 +457,6 @@ function ensure-requirements() {
     lines     "pass   " "Password manager  " "brew install pass        "
     lines     "gpg    " "Encrypts the store" "brew install gnupg       "
     lines     "git    " "Syncs the store   " "brew install git         "
-    lines     "gum    " "Nicer UI, optional" "brew install gum         " optional
 
     if [[ "$1 $2" =~ store\ (backup|restore|import|export) ]]; then
         lines     "tar    " "Packs backups     " "brew install gnu-tar     "
@@ -513,12 +511,8 @@ function tilde-path() {
 
 # --- Input --------------------------------------------------------------------
 
-# Every prompt goes through the functions below. Each uses `gum` when it is there and falls back to
-# plain bash prompts when not (or when KEEP_NO_GUM is set). Prompts go to stderr; only the answer
+# Every prompt goes through the functions below (plain bash). Prompts go to stderr; only the answer
 # goes to stdout, so `$(ask-...)` captures just the answer.
-
-# Whether to draw prompts with gum.
-function has-gum() { [[ -z ${KEEP_NO_GUM:-} ]] && command -v gum >/dev/null 2>&1; }
 
 # ask-text <header> [placeholder] [guess]: prints the answer; an empty answer keeps the guess.
 function ask-text() {
@@ -526,29 +520,16 @@ function ask-text() {
     local placeholder="${2:-}"
     local guess_value="${3:-}"
     local value hint
-    if has-gum; then
-        value=$(
-            gum input \
-                --header      "${EXTRA_LINE}${header}" \
-                --placeholder "${placeholder}"         \
-                --value       "${guess_value}"         \
-        ) || die "Cancelled."
-    else
-        hint=${guess_value:-$placeholder}
-        printf '\n%s%s: ' "$header" "${hint:+ [$hint]}" >&2
-        IFS= read -r value || die "Cancelled."
-        [[ -n $value ]] || value=$guess_value
-    fi
+    hint=${guess_value:-$placeholder}
+    printf '\n%s%s: ' "$header" "${hint:+ [$hint]}" >&2
+    IFS= read -r value || die "Cancelled."
+    [[ -n $value ]] || value=$guess_value
     printf '%s\n' "$value"
 }
 
-# ask-choice <header> <option>...: prints the chosen option; fails on cancel (Esc, or Ctrl-D).
+# ask-choice <header> <option>...: prints the chosen option; fails on cancel (Ctrl-D).
 function ask-choice() {
     local header=$1 choice ; shift
-    if has-gum; then
-        gum choose --header "$header" "$@"
-        return
-    fi
     printf '%s\n' "$header" >&2
     local PS3="Pick a number (Ctrl-D cancels): "
     select choice in "$@"; do
@@ -561,10 +542,9 @@ function ask-choice() {
 # Whether we can ask the user anything (stdin is a terminal).
 function can-ask() { [[ -t 0 ]]; }
 
-# confirm <question>: succeeds on yes. Anything else — and the plain prompt's default — is no.
+# confirm <question>: succeeds on yes. Anything else — and the default — is no.
 function confirm() {
     local answer
-    if has-gum; then gum confirm "$1"; return; fi
     printf '%s [y/N] ' "$1" >&2
     IFS= read -r answer || { echo >&2; return 1; }
     [[ $answer == [yY]* ]]
@@ -572,7 +552,6 @@ function confirm() {
 
 # show-box <line>...: the lines in a rounded box.
 function show-box() {
-    if has-gum; then gum style --border rounded --padding "0 1" "$@"; return; fi
     local line width=0 border
     for line in "$@"; do (( ${#line} > width )) && width=${#line}; done
     border=$(printf '%*s' $(( width + 2 )) '')

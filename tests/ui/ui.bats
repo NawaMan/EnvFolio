@@ -1,7 +1,6 @@
 #!/usr/bin/env bats
 
-# The plain-bash prompts used when gum is missing (forced here with KEEP_NO_GUM). No store or key is
-# touched; answers come from stdin.
+# The prompts (Input helpers). No store or key is touched; answers come from stdin.
 
 bats_require_minimum_version 1.5.0    # run --separate-stderr
 
@@ -11,7 +10,6 @@ setup() {
     export KEEP_STORE_DIR="$SANDBOX/store"
     export XDG_STATE_HOME="$SANDBOX/state"
     export USER=sb-test-nobody
-    export KEEP_NO_GUM=1
     mkdir -p "$HOME"
 
     # shellcheck source=SCRIPTDIR/../../keep
@@ -21,11 +19,6 @@ setup() {
 
 teardown() {
     rm -rf "$SANDBOX"
-}
-
-@test "has-gum: KEEP_NO_GUM turns gum off" {
-    run has-gum
-    [ "$status" -eq 1 ]
 }
 
 @test "ask-choice: prints the option picked by number" {

@@ -62,7 +62,7 @@ Post **three headings, a few sentences each**, then **stop and wait**:
      the change is a pure docs/typo one-liner they want on main.
 
    **New dependencies must be called out explicitly.** If the change needs anything beyond
-   `bash`, `pass`, `gpg`, `git`, `gum`, `tar`, `gzip` and POSIX coreutils — a new runtime tool,
+   `bash`, `pass`, `gpg`, `git`, `tar`, `gzip` and POSIX coreutils — a new runtime tool,
    a newer minimum version of an existing one, or a new dev tool — Approach carries its own
    clearly marked line:
 
@@ -116,7 +116,7 @@ green light** — it is a separate pre-edit check.
   kill something you did not start.**
 - Tear down your own short-lived verification sessions (`tmux kill-session -t <yours>`) when the
   check is done.
-- Do not invent fallbacks when a required tool (`bash` of the right version, `pass`, `gum`,
+- Do not invent fallbacks when a required tool (`bash` of the right version, `pass`,
   `shellcheck`, `bats`, `tmux`) is missing — stop and tell the user.
 - Tests use a throwaway `pass` store and GPG home — **never** the user's real ones (see
   *Tests never touch the real password store*).
@@ -230,13 +230,11 @@ Starting style, not law — deviate explicitly (say so and why) rather than sile
   (package manager, clipboard tool, GNU vs BSD flags) is handled explicitly, not assumed.
 - `#!/usr/bin/env bash`. **Decide the minimum bash version up front** and write it here — macOS
   still ships bash 3.2 (no associative arrays, no `mapfile`, no `${var,,}`). *Open question.*
-- **Runtime dependencies: `bash`, `pass`, `gpg`, `git`, `gum`, `tar`, `gzip` — and that's the
+- **Runtime dependencies: `bash`, `pass`, `gpg`, `git`, `tar`, `gzip` — and that's the
   list.** `gpg` is a direct dependency because first-run setup has to find or create a key before
   `pass init`; `git` because the store is synced as a git repo; `tar` + `gzip` because
-  `keep store backup` packs everything into one file. `gum` is **optional**: every prompt goes
-  through the Input helpers (`ask-text`, `ask-choice`, `confirm`, `show-box`), which use `gum`
-  when present and plain bash otherwise (`KEEP_NO_GUM=1` forces that). Never call `gum` directly,
-  and give every new helper a plain fallback. Plus one clipboard tool — `pbcopy` /
+  `keep store backup` packs everything into one file. Every prompt goes through the Input helpers
+  (`ask-text`, `ask-choice`, `confirm`, `show-box`), in plain bash. Plus one clipboard tool — `pbcopy` /
   `wl-copy` / `xclip`, whichever `pass` itself uses on the machine — for `keep text show -c`.
   The script's approved-dependency block is the authoritative list. Anything
   beyond bash builtins and POSIX coreutils needs a stated reason and the user's OK — flag it with
@@ -282,7 +280,7 @@ Use a session name that is clearly yours, and never kill one you did not create.
 
 - Secrets never appear in **argv** (visible in `ps`), **environment variables** passed to children,
   **shell history**, **logs/debug output**, or **temp files**. Take input with
-  `gum input --password` (or `read -rs`), hand it to `pass insert` via stdin, keep it in a
+  `read -rs`, hand it to `pass insert` via stdin, keep it in a
   variable only as long as needed, and `unset` it after. Any unavoidable temp file goes under
   `umask 077` and is removed in the `EXIT` trap.
 - **One exception, by the user's decision: `keep exec` and `keep shell`.** Their whole purpose is

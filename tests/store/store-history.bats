@@ -22,7 +22,7 @@ setup() {
     TEST_FPR=$(list-secret-keys | cut -f1)
     [[ -n $TEST_FPR ]]
 
-    # The real select-key is interactive (gum); pick the throwaway key instead.
+    # The real select-key is interactive; pick the throwaway key instead.
     eval "select-key() { printf '%s\n' '$TEST_FPR'; }"
 }
 
