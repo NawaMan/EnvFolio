@@ -71,7 +71,37 @@ function store-exists() {
     return 0
 }
 
+# keep store init [--key <id>] | [--new-key] [--name <name>] [--email <email>] [--passphrase-stdin]
+# Anything not given is asked for. An existing key needs no passphrase: the store only encrypts to it.
 function store-init() {
+    local key_id="" new_key=0 name="" email="" passphrase_stdin=0 arg
+    while (( $# > 0 )); do
+        arg=$1 ; shift
+        # --opt=value is the same as --opt value
+        if [[ $arg == --*=* ]]; then set -- "${arg#*=}" "$@" ; arg=${arg%%=*} ; fi
+        case $arg in
+            --key|--name|--email)
+                [[ $# -gt 0 && -n $1 ]] || die "$arg needs a value."
+                case $arg in
+                    --key)   key_id=$1 ;;
+                    --name)  name=$1   ;;
+                    --email) email=$1  ;;
+                esac
+                shift ;;
+            --new-key)          new_key=1          ;;
+            --passphrase-stdin) passphrase_stdin=1 ;;
+            *) die "store init: unknown option: $arg" ;;
+        esac
+    done
+    [[ -n $name || -n $email ]] || (( passphrase_stdin )) && new_key=1
+    if [[ -n $key_id ]] && (( new_key )); then
+        die "--key cannot be used with --new-key, --name, --email or --passphrase-stdin."
+    fi
+    # stdin carries the passphrase, so nothing else can be asked for.
+    if (( passphrase_stdin )) && [[ -z $name || -z $email ]]; then
+        die "--passphrase-stdin needs --name and --email too."
+    fi
+
     local status=0
     store-exists || status=$?
     if (( status == 0 )); then
@@ -87,7 +117,17 @@ function store-init() {
 
     section "Select key to protect the keep store."
     local key uid expiry
-    key=$(select-key) || exit 1
+    if [[ -n $key_id ]]; then
+        key=$(find-key "$key_id") || exit 1
+        show-answer "Key" "$key"
+    elif (( new_key )); then
+        section "Generating the key."
+        key=$(generate-key "$name" "$email" "$passphrase_stdin") || exit 1
+        section-end
+        show-answer "Key" "$key"
+    else
+        key=$(select-key) || exit 1
+    fi
     uid=$(key-uid "$key")
     [[ -n $uid ]] || die "Cannot find the key $key."
     expiry=$(key-expiry "$key")
@@ -397,33 +437,66 @@ function guess-email() {
 
 # One line per secret key: "<fingerprint><TAB><first user id>".
 function list-secret-keys() {
-    gpg --list-secret-keys --with-colons 2>/dev/null | awk -F: '
+    # [<id>] limits the list to the keys gpg matches with it (fingerprint, key id, email, ...).
+    gpg --list-secret-keys --with-colons "$@" 2>/dev/null | awk -F: '
         $1 == "sec"                 { want_fpr = 1; want_uid = 1; fpr = ""; next }
         $1 == "fpr" && want_fpr     { fpr = $10; want_fpr = 0; next }
         $1 == "uid" && want_uid     { print fpr "\t" $10; want_uid = 0 }
     '
 }
 
-# Generate a new key with gpg's defaults, asking only for name and email (pre-filled with our best
-# guess). gpg itself asks for the passphrase. Prints the new key's fingerprint.
+# The fingerprint of the one secret key matching <id>; fails when none or several match.
+function find-key() {
+    local matches
+    matches=$(list-secret-keys "$1")
+    [[ -n $matches ]] || die "No secret key matches '$1'."
+    if (( $(printf '%s\n' "$matches" | wc -l) > 1 )); then
+        die "More than one secret key matches '$1'; use its fingerprint:${EXTRA_LINE}" \
+            "$(printf '%s\n' "$matches" | awk -F'\t' '{ print "    " $1 "  " $2 }')"
+    fi
+    printf '%s\n' "${matches%%$'\t'*}"
+}
+
+# generate-key [name] [email] [passphrase_stdin]
+# Generate a new key with gpg's defaults. A missing name or email is asked for (pre-filled with our
+# best guess). The passphrase comes from gpg's own prompt, or — when passphrase_stdin is 1 — from
+# the first line of stdin. Prints the new key's fingerprint.
 function generate-key() {
-    local uid name email status finger_print
+    local name=${1:-} email=${2:-} passphrase_stdin=${3:-0} uid status finger_print passphrase
 
-    info "You will be asked for the name and email needed to generate a key.${EXTRA_LINE}" \
-         "Then, GPG will ask you to enter a passphrase used to protected the key." >&2
+    [[ -n $name && -n $email ]] \
+        || info "You will be asked for the name and email needed to generate a key." >&2
+    (( passphrase_stdin )) \
+        || info "GPG will ask you to enter a passphrase used to protect the key." >&2
 
-    # Prompt for name and email
-    name=$( ask-text "Your name"  "e.g. Jane Doe"         "$(guess-name)")  || exit 1 ; show-answer "Name"  "${name}"  "      "
-    email=$(ask-text "Your email" "e.g. jane@example.com" "$(guess-email)") || exit 1 ; show-answer "Email" "${email}" "     "
+    [[ -n $name  ]] || name=$( ask-text "Your name"  "e.g. Jane Doe"         "$(guess-name)")  || exit 1
+    [[ -n $email ]] || email=$(ask-text "Your email" "e.g. jane@example.com" "$(guess-email)") || exit 1
+    show-answer "Name"  "${name}"  "      "
+    show-answer "Email" "${email}" "     "
     [[ -n $name && -n $email ]] || die "A name and an email are needed to create a key."
     uid="$name <$email>"
+
+    if (( passphrase_stdin )); then
+        IFS= read -rs passphrase || true
+        # gpg would take an empty one and leave the key unprotected.
+        [[ -n $passphrase ]] || die "No passphrase on stdin."
+    fi
     show-answer "Passphrase" "************"
 
     info "Generating key ..." >&2
     # gpg's normal output goes to the terminal (stderr); its machine-readable status lines (fd 3)
     # are captured so we get the fingerprint without guessing which key is new.
-    status=$(gpg --batch --status-fd 3 --quick-generate-key --yes "$uid" 3>&1 1>&2) \
-        || die "Creating the key failed."
+    if (( passphrase_stdin )); then
+        # printf is a builtin: the passphrase reaches gpg through a pipe, never through argv.
+        status=$(printf '%s\n' "$passphrase" \
+            | gpg --batch --pinentry-mode loopback --passphrase-fd 0 \
+                  --status-fd 3 --quick-generate-key --yes "$uid" 3>&1 1>&2) \
+            || die "Creating the key failed."
+        unset passphrase
+    else
+        status=$(gpg --batch --status-fd 3 --quick-generate-key --yes "$uid" 3>&1 1>&2) \
+            || die "Creating the key failed."
+    fi
     finger_print=$(printf '%s\n' "$status" | awk '$2 == "KEY_CREATED" { print $4 }')
     # gpg exits 0 when the user answers No to its own "Continue?", and simply makes no key.
     [[ -n $finger_print ]] || die "Cancelled — no key was created."

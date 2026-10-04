@@ -26,6 +26,8 @@ A terminal UI for password management. It is built heavily on top of [`pass`](ht
 - `keep secret ...` to deal with secret-related actions like: show, insert, generate, edit, find, ...
 - `keep ls`         to list both types of items (texts/secrets) together, as a tree or flat.
 
+Every command, with examples: [MANUAL.md](MANUAL.md).
+
 # Dependencies
 
 - `pass`

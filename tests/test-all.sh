@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 
-# Role:
-# - Don't put the actuall test here.
-# - Create a folder for each test suite and put test.sh in there.
-# - Each test.sh should set `PASSWORD_STORE_DIR=./store` so the store is local.
+# Runs every bats test under tests/. Meant for the booth (`just test-all`).
+# - Put the tests in a folder per area (tests/store/, ...) as *.bats files, not here.
+# - Each test sets up its own throwaway store and GPG home; see AGENTS.md.
 
-echo "Calling to sub tests will be in here"
+cd "$(dirname "$0")" && exec bats --recursive .
