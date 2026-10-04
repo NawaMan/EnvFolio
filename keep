@@ -1,6 +1,22 @@
 #!/usr/bin/env bash
 
-#== Setting ===================================================================
+#== Doc ========================================================================
+#
+# Keep — a terminal UI for keeping texts and secrets, built on `pass`.
+#
+# Usage: keep <command> [args...]        (`keep help` lists the commands)
+#   keep store  init | path | backup | restore | export | import
+#   keep text   ls | find | grep | show | insert | edit | generate | rm | mv | cp
+#   keep pass   ls | find | grep | show | insert | edit | generate | rm | mv | cp   (secrets)
+#   keep ls | version | help [command]
+#
+# Environment:
+#   KEEP_STORE_DIR  The Keep store (default ~/.keep). Laid out like a pass store, but kept apart
+#                   from your own ~/.password-store.
+#
+# Every command, with examples: MANUAL.md
+
+#== Settings ===================================================================
 
 STORE_PATH=${KEEP_STORE_DIR:-$HOME/.keep}
 # Always absolute: `pass` loops forever on a relative PASSWORD_STORE_DIR whose folder doesn't exist
@@ -11,11 +27,7 @@ STORE_PATH=${KEEP_STORE_DIR:-$HOME/.keep}
 # user's own ~/.password-store. Every `pass` call goes there.
 export PASSWORD_STORE_DIR="$STORE_PATH"
 
-#== Main ======================================================================
-
-function version() {
-    echo "Keep 0.1"
-}
+#== Main =======================================================================
 
 function main() {
     # Quiet when all is there; otherwise show the table and stop.
@@ -34,21 +46,9 @@ function main() {
     esac
 }
 
-#== Common Constants ==========================================================
-
-EXTRA_LINE="""
-"""
-
-# <path> with $HOME shown as ~, for display.
-function tilde-path() {
-    # shellcheck disable=SC2088  # a literal ~ is the point: this path is for display only
-    case $1 in
-        "$HOME"/*) printf '~/%s\n' "${1#"$HOME"/}" ;;
-        *)         printf '%s\n' "$1" ;;
-    esac
+function version() {
+    echo "Keep 0.1"
 }
-
-#==  Command:Help + Version ===================================================
 
 # keep help [command...]
 function help() {
@@ -81,7 +81,26 @@ Details and examples: MANUAL.md
 EOF
 }
 
-#== Command:Store =============================================================
+#== Common Constants ===========================================================
+
+EXTRA_LINE="""
+"""
+
+#== Command: Store =============================================================
+
+function store() {
+    local category="${1:-}" ; (( $# > 0 )) && shift
+    case "$category" in
+        path)    store-path    "$@" ;;
+        init)    store-init    "$@" ;;
+        backup)  store-backup  "$@" ;;
+        restore) store-restore "$@" ;;
+        export)  store-export  "$@" ;;
+        import)  store-import  "$@" ;;
+        "")      echo "Usage: keep store <init|backup|restore|export|import> [args...]" >&2 ; return 1 ;;
+        *)       echo "keep store: unknown command: $category"                          >&2 ; return 1 ;;
+    esac
+}
 
 function store-path() {
     echo "${STORE_PATH}"
@@ -99,37 +118,7 @@ function store-exists() {
     return 0
 }
 
-# --- Init progress ------------------------------------------------------------
-# While `keep store init` runs, the store holds .keep-init: "key <fingerprint>" first, then one line
-# per finished step. It is removed when init is done, so a leftover one means init was cut short.
-# Every step can safely run again, so resuming just redoes the steps not listed.
-
-function init-progress-file() { printf '%s/.keep-init\n' "$STORE_PATH"; }
-function init-progress-mark() { printf '%s\n' "$*" >> "$(init-progress-file)"; }
-function init-progress-done() { grep -qx -- "$1" "$(init-progress-file)" 2>/dev/null; }
-function init-progress-key()  { awk '$1 == "key" { print $2; exit }' "$(init-progress-file)" 2>/dev/null; }
-
-# Show what an unfinished init got done, then ask what to do. Prints: continue | start-over | cancel
-function ask-unfinished-init() {
-    local key=$1 uid=$2
-    info "An earlier \`keep store init\` did not finish at $(tilde-path "$STORE_PATH")." >&2
-    show-answer "Key" "$key ${uid:-(no longer in your keyring)}" "    "
-    init-progress-done pass-init   && show-answer "Store"   "created" "  "
-    init-progress-done git-history && show-answer "History" "started"
-    local choice
-    choice=$(gum choose --header "${EXTRA_LINE}What should happen?" \
-        "Continue where it stopped" "Start over" "Cancel") || choice=Cancel
-    case $choice in
-        Continue*) echo continue   ;;
-        Start*)    echo start-over ;;
-        *)         echo cancel     ;;
-    esac
-}
-
-# Whether we can ask the user anything (stdin is a terminal).
-function can-ask() { [[ -t 0 ]]; }
-
-function confirm() { gum confirm "$1"; }
+# --- store init ---------------------------------------------------------------
 
 function store-init-usage() {
     cat <<'EOF'
@@ -271,6 +260,83 @@ function store-init() {
     echo ""
 }
 
+# --- Init progress ------------------------------------------------------------
+# While `keep store init` runs, the store holds .keep-init: "key <fingerprint>" first, then one line
+# per finished step. It is removed when init is done, so a leftover one means init was cut short.
+# Every step can safely run again, so resuming just redoes the steps not listed.
+
+function init-progress-file() { printf '%s/.keep-init\n' "$STORE_PATH"; }
+function init-progress-mark() { printf '%s\n' "$*" >> "$(init-progress-file)"; }
+function init-progress-done() { grep -qx -- "$1" "$(init-progress-file)" 2>/dev/null; }
+function init-progress-key()  { awk '$1 == "key" { print $2; exit }' "$(init-progress-file)" 2>/dev/null; }
+
+# Show what an unfinished init got done, then ask what to do. Prints: continue | start-over | cancel
+function ask-unfinished-init() {
+    local key=$1 uid=$2
+    info "An earlier \`keep store init\` did not finish at $(tilde-path "$STORE_PATH")." >&2
+    show-answer "Key" "$key ${uid:-(no longer in your keyring)}" "    "
+    init-progress-done pass-init   && show-answer "Store"   "created" "  "
+    init-progress-done git-history && show-answer "History" "started"
+    local choice
+    choice=$(gum choose --header "${EXTRA_LINE}What should happen?" \
+        "Continue where it stopped" "Start over" "Cancel") || choice=Cancel
+    case $choice in
+        Continue*) echo continue   ;;
+        Start*)    echo start-over ;;
+        *)         echo cancel     ;;
+    esac
+}
+
+# Start the store's git history, so `pass` commits every change from here on. The repo gets its
+# own author (from the key's user id) first: without a global git identity, `pass git init`'s
+# first commit — and every later automatic one — would fail.
+function start-store-history() {
+    local uid=$1
+    local name=${uid% <*} email=${uid##*<}
+    email=${email%>}
+
+    git -C "$STORE_PATH" init --quiet                || die "Starting the store's git history failed."
+    # `pass git init` commits the whole folder; init's progress file must stay out of it.
+    mkdir -p "$STORE_PATH/.git/info"
+    grep -qx '/.keep-init' "$STORE_PATH/.git/info/exclude" 2>/dev/null \
+        || echo '/.keep-init' >> "$STORE_PATH/.git/info/exclude"
+    git -C "$STORE_PATH" config user.name  "$name"
+    git -C "$STORE_PATH" config user.email "$email"
+    pass git init >/dev/null                         || die "Starting the store's git history failed."
+    show-answer "History" "$(git -C "$STORE_PATH" log --oneline | wc -l | tr -d ' ') commit(s)"
+}
+
+# The closing box: what was set up, and what the user must keep to ever get their passwords back.
+function store-summary() {
+    local key=$1 uid=$2 expiry=$3 lines
+    lines=(
+        "Your pass store is ready."
+        ""
+        "Store:   $(tilde-path "$(store-path)")"
+        "Key:     $key"
+        "         $uid"
+        "Expires: ${expiry:-never}"
+        ""
+        "To get your passwords back if this machine is lost, you need both:"
+        ""
+        "1. Your passphrase — it can't be reset. Memorise it, and keep a written copy offline."
+        ""
+        "2. A backup of your key and store — one file, made with:"
+        "     keep store backup"
+        "   Keep it somewhere safe and offline, and run it again after you change passwords."
+    )
+    if [[ -n $expiry ]]; then
+        lines+=(
+            ""
+            "When the key expires ($expiry), pass can't add or change entries until you extend it:"
+            "  gpg --quick-set-expire $key 2y"
+        )
+    fi
+    gum style --border rounded --padding "0 1" "${lines[@]}"
+}
+
+# --- Not yet ------------------------------------------------------------------
+
 function store-backup() {
     echo "Do store backup - not implement yet"
     exit 1
@@ -291,21 +357,25 @@ function store-import() {
     exit 1
 }
 
-function store() {
+#== Command: Text ==============================================================
+
+function text() {
     local category="${1:-}" ; (( $# > 0 )) && shift
     case "$category" in
-        path)    store-path    "$@" ;;
-        init)    store-init    "$@" ;;
-        backup)  store-backup  "$@" ;;
-        restore) store-restore "$@" ;;
-        export)  store-export  "$@" ;;
-        import)  store-import  "$@" ;;
-        "")      echo "Usage: keep store <init|backup|restore|export|import> [args...]" >&2 ; return 1 ;;
-        *)       echo "keep store: unknown command: $category"                          >&2 ; return 1 ;;
+        ls)       text-ls       "$@" ;;
+        find)     text-find     "$@" ;;
+        grep)     text-grep     "$@" ;;
+        show)     text-show     "$@" ;;
+        insert)   text-insert   "$@" ;;
+        edit)     text-edit     "$@" ;;
+        generate) text-generate "$@" ;;
+        rm)       text-rm       "$@" ;;
+        mv)       text-mv       "$@" ;;
+        cp)       text-cp       "$@" ;;
+        "")       echo "Usage: keep text <ls|find|grep|show|insert|edit|generate|rm|mv|cp> [args...]" >&2 ; return 1 ;;
+        *)        echo "keep text: unknown command: $category"                                        >&2 ; return 1 ;;
     esac
 }
-
-#==  Command:Text =============================================================
 
 function text-ls() {
     echo "Do text ls - not implement yet"
@@ -357,25 +427,25 @@ function text-cp() {
     exit 1
 }
 
-function text() {
+#== Command: Secret ============================================================
+
+function secret() {
     local category="${1:-}" ; (( $# > 0 )) && shift
     case "$category" in
-        ls)       text-ls       "$@" ;;
-        find)     text-find     "$@" ;;
-        grep)     text-grep     "$@" ;;
-        show)     text-show     "$@" ;;
-        insert)   text-insert   "$@" ;;
-        edit)     text-edit     "$@" ;;
-        generate) text-generate "$@" ;;
-        rm)       text-rm       "$@" ;;
-        mv)       text-mv       "$@" ;;
-        cp)       text-cp       "$@" ;;
-        "")       echo "Usage: keep text <ls|find|grep|show|insert|edit|generate|rm|mv|cp> [args...]" >&2 ; return 1 ;;
-        *)        echo "keep text: unknown command: $category"                                        >&2 ; return 1 ;;
+        ls)       secret-ls       "$@" ;;
+        find)     secret-find     "$@" ;;
+        grep)     secret-grep     "$@" ;;
+        show)     secret-show     "$@" ;;
+        insert)   secret-insert   "$@" ;;
+        edit)     secret-edit     "$@" ;;
+        generate) secret-generate "$@" ;;
+        rm)       secret-rm       "$@" ;;
+        mv)       secret-mv       "$@" ;;
+        cp)       secret-cp       "$@" ;;
+        "")       echo "Usage: keep secret <ls|find|grep|show|insert|edit|generate|rm|mv|cp> [args...]" >&2 ; return 1 ;;
+        *)        echo "keep secret: unknown command: $category"                                        >&2 ; return 1 ;;
     esac
 }
-
-#==  Command:Secret ===========================================================
 
 function secret-ls() {
     echo "Do secret ls - not implement yet"
@@ -427,32 +497,16 @@ function secret-cp() {
     exit 1
 }
 
-function secret() {
-    local category="${1:-}" ; (( $# > 0 )) && shift
-    case "$category" in
-        ls)       secret-ls       "$@" ;;
-        find)     secret-find     "$@" ;;
-        grep)     secret-grep     "$@" ;;
-        show)     secret-show     "$@" ;;
-        insert)   secret-insert   "$@" ;;
-        edit)     secret-edit     "$@" ;;
-        generate) secret-generate "$@" ;;
-        rm)       secret-rm       "$@" ;;
-        mv)       secret-mv       "$@" ;;
-        cp)       secret-cp       "$@" ;;
-        "")       echo "Usage: keep secret <ls|find|grep|show|insert|edit|generate|rm|mv|cp> [args...]" >&2 ; return 1 ;;
-        *)        echo "keep secret: unknown command: $category"                                        >&2 ; return 1 ;;
-    esac
-}
-
-#==  Command:List =============================================================
+#== Command: List ==============================================================
 
 function list() {
     local category="${1:-}" ; (( $# > 0 )) && shift
     echo "Do list"
 }
 
-#= Common =====================================================================
+#== Common Functions ===========================================================
+
+# --- Requirements -------------------------------------------------------------
 
 # Ensure that all the dependency are there. Show when at lease one is missing.
 function ensure-requirements() {
@@ -495,7 +549,7 @@ function ensure-requirements() {
     return "$failed"
 }
 
-# --- Output ------------------------------------------------------------------
+# --- Output -------------------------------------------------------------------
 
 function info() { printf '%s\n' "$*"; }
 function warn() { printf 'keep: %s\n' "$*" >&2; }
@@ -518,6 +572,17 @@ function show-answer() {
     printf '✓ %s:%s %s\n' "$1" "$spaces" "$2" >&2;
 }
 
+# <path> with $HOME shown as ~, for display.
+function tilde-path() {
+    # shellcheck disable=SC2088  # a literal ~ is the point: this path is for display only
+    case $1 in
+        "$HOME"/*) printf '~/%s\n' "${1#"$HOME"/}" ;;
+        *)         printf '%s\n' "$1" ;;
+    esac
+}
+
+# --- Input --------------------------------------------------------------------
+
 function ask-text() {
     local header="$1"
     local placeholder="${2:-}"
@@ -532,7 +597,12 @@ function ask-text() {
     printf '%s\n' "$value"
 }
 
-#== User + Key ================================================================
+# Whether we can ask the user anything (stdin is a terminal).
+function can-ask() { [[ -t 0 ]]; }
+
+function confirm() { gum confirm "$1"; }
+
+# --- User + Key ---------------------------------------------------------------
 
 # Best guess at the user's name
 function guess-name() {
@@ -679,55 +749,7 @@ function key-expiry() {
     date -u -d "@$epoch" +%F 2>/dev/null || date -u -r "$epoch" +%F
 }
 
-# Start the store's git history, so `pass` commits every change from here on. The repo gets its
-# own author (from the key's user id) first: without a global git identity, `pass git init`'s
-# first commit — and every later automatic one — would fail.
-function start-store-history() {
-    local uid=$1
-    local name=${uid% <*} email=${uid##*<}
-    email=${email%>}
-
-    git -C "$STORE_PATH" init --quiet                || die "Starting the store's git history failed."
-    # `pass git init` commits the whole folder; init's progress file must stay out of it.
-    mkdir -p "$STORE_PATH/.git/info"
-    grep -qx '/.keep-init' "$STORE_PATH/.git/info/exclude" 2>/dev/null \
-        || echo '/.keep-init' >> "$STORE_PATH/.git/info/exclude"
-    git -C "$STORE_PATH" config user.name  "$name"
-    git -C "$STORE_PATH" config user.email "$email"
-    pass git init >/dev/null                         || die "Starting the store's git history failed."
-    show-answer "History" "$(git -C "$STORE_PATH" log --oneline | wc -l | tr -d ' ') commit(s)"
-}
-
-# The closing box: what was set up, and what the user must keep to ever get their passwords back.
-function store-summary() {
-    local key=$1 uid=$2 expiry=$3 lines
-    lines=(
-        "Your pass store is ready."
-        ""
-        "Store:   $(tilde-path "$(store-path)")"
-        "Key:     $key"
-        "         $uid"
-        "Expires: ${expiry:-never}"
-        ""
-        "To get your passwords back if this machine is lost, you need both:"
-        ""
-        "1. Your passphrase — it can't be reset. Memorise it, and keep a written copy offline."
-        ""
-        "2. A backup of your key and store — one file, made with:"
-        "     keep store backup"
-        "   Keep it somewhere safe and offline, and run it again after you change passwords."
-    )
-    if [[ -n $expiry ]]; then
-        lines+=(
-            ""
-            "When the key expires ($expiry), pass can't add or change entries until you extend it:"
-            "  gpg --quick-set-expire $key 2y"
-        )
-    fi
-    gum style --border rounded --padding "0 1" "${lines[@]}"
-}
-
-#== Main ======================================================================
+#== Run ========================================================================
 
 # Run only when executed, so tests can `source` this file for its functions.
 if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
