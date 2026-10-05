@@ -99,3 +99,52 @@ same `KEEP_STORE_DIR` to use it.
   earlier `keep store init` leaves if it stopped partway (an error, Ctrl-C, a closed terminal):
   remove the folder and run `keep store init` again. A key created by the earlier
 run is kept, and shows up in the key menu.
+
+---
+
+## `keep secret insert`
+
+Adds a secret to the Keep store, encrypted with the store's key, and commits it to the store's git
+history. It is a plain `pass` entry, so `PASSWORD_STORE_DIR=~/.keep pass show <name>` reads it too.
+
+```
+keep secret insert [-m|--multiline] [-f|--force] <name>
+```
+
+| Option | Meaning |
+| --- | --- |
+| `-m`, `--multiline` | The secret is several lines; end it with Ctrl-D. |
+| `-f`, `--force` | Overwrite an existing secret without asking. |
+| `-h`, `--help` | Show the options and stop. Works without a store. |
+
+Everything except `--help` goes straight to `pass insert`, so it behaves exactly like `pass`.
+`pass`'s `-e`/`--echo` is refused: it would show the secret on screen. The secret is never taken
+as an argument. It needs a ready store (`keep store init`).
+
+### Type a secret
+
+```bash
+keep secret insert web/github
+```
+
+Asks for the secret twice, without echo. If `web/github` already exists, asks before overwriting it.
+
+*Interactive — checked by hand, no automated test.*
+
+### Pipe a secret in
+
+```bash
+printf '%s\n%s\n' "$value" "$value" | keep secret insert web/github
+```
+
+As at the prompt, the secret is given twice — one per line — and must match. Nothing is asked:
+**an existing secret is overwritten**, as `pass insert` does (the old one stays in the store's git
+history). For a single copy, use `-m` below.
+
+### Several lines
+
+```bash
+keep secret insert -m note < note.txt
+```
+
+All of stdin is the secret.

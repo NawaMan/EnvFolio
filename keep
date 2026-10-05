@@ -7,7 +7,7 @@
 # Usage: keep <command> [args...]        (`keep help` lists the commands)
 #   keep store  init | path | backup | restore | export | import
 #   keep text   ls | find | grep | show | insert | edit | generate | rm | mv | cp
-#   keep pass   ls | find | grep | show | insert | edit | generate | rm | mv | cp   (secrets)
+#   keep secret ls | find | grep | show | insert | edit | generate | rm | mv | cp
 #   keep ls | version | help [command]
 #
 # Environment:
@@ -37,11 +37,11 @@ function main() {
     case "$category" in
         store)   store  "$@" ;;
         text)    text   "$@" ;;
-        pass)    secret "$@" ;;
+        secret)  secret "$@" ;;
         ls)      list   "$@" ;;
         version) version "$@" ;;
         help)    help   "$@" ;;
-        "")      echo   "Usage: keep <version|help|store|text|pass|ls> [args...]" >&2 ; return 1 ;;
+        "")      echo   "Usage: keep <version|help|store|text|secret|ls> [args...]" >&2 ; return 1 ;;
         *)       echo   "keep: unknown command: $category"                        >&2 ; return 1 ;;
     esac
 }
@@ -53,9 +53,10 @@ function version() {
 # keep help [command...]
 function help() {
     case "$*" in
-        "")           keep-help       ;;
-        "store init") store-init-help ;;
-        *)            echo "keep help: no help for '$*' yet." >&2 ; return 1 ;;
+        "")              keep-help          ;;
+        "store init")    store-init-help    ;;
+        "secret insert") secret-insert-help ;;
+        *)               echo "keep help: no help for '$*' yet." >&2 ; return 1 ;;
     esac
 }
 
@@ -71,7 +72,8 @@ Commands:
   store export      (not yet)
   store import      (not yet)
   text ...          Plain-text items (not yet)
-  pass ...          Secrets (not yet)
+  secret insert     Add a secret
+  secret ...        Other secret commands (not yet)
   ls                List texts and secrets (not yet)
   version           Print Keep's version
   help [command]    Show help, e.g. `keep help store init`
@@ -269,6 +271,11 @@ function store-summary() {
     show-box "${lines[@]}"
 }
 
+# Die unless the store is ready; commands that read or write items call this first.
+function require-store() {
+    store-exists || die "No ready Keep store at $STORE_PATH. Create one with: keep store init"
+}
+
 # --- Not yet ------------------------------------------------------------------
 
 function store-backup() {
@@ -365,6 +372,11 @@ function text-cp() {
 
 function secret() {
     local category="${1:-}" ; (( $# > 0 )) && shift
+    # Every secret command needs a ready store — except asking for its help.
+    case " $* " in
+        *" -h "*|*" --help "*) ;;
+        *) [[ -z $category ]] || require-store ;;
+    esac
     case "$category" in
         ls)       secret-ls       "$@" ;;
         find)     secret-find     "$@" ;;
@@ -401,9 +413,34 @@ function secret-show() {
     exit 1
 }
 
+# --- secret insert ------------------------------------------------------------
+
+function secret-insert-help() {
+    cat <<'EOF'
+Usage: keep secret insert [-m|--multiline] [-f|--force] <name>
+
+Add a secret to the Keep store, encrypted with the store's key. The secret is asked for twice,
+without echo. Piped in, give it twice (one per line), or use --multiline to take all of stdin.
+
+Options:
+  -m, --multiline     The secret is several lines; end it with Ctrl-D.
+  -f, --force         Overwrite an existing secret without asking.
+  -h, --help          Show this help and stop.
+EOF
+}
+
+# keep secret insert [-m|--multiline] [-f|--force] <name>
+# Everything goes to `pass insert` — except --help, and --echo, which would show the secret.
 function secret-insert() {
-    echo "Do secret insert - not implement yet"
-    exit 1
+    local arg
+    for arg in "$@"; do
+        case $arg in
+            --)                  break ;;
+            -h|--help)           secret-insert-help ; return 0 ;;
+            --echo|-e*|-[!-]*e*) die "secret insert: --echo is not offered; it would show the secret." ;;
+        esac
+    done
+    pass insert "$@"
 }
 
 function secret-edit() {

@@ -61,3 +61,10 @@ teardown() {
     [[ $output == *"unknown option: --nope"* ]]
     [[ $output == *"Usage: keep store init"* ]]
 }
+
+@test "keep help secret insert: shows help without a store" {
+    run "$KEEP" help secret insert < /dev/null
+    [ "$status" -eq 0 ]
+    [[ $output == *"Usage: keep secret insert"* ]]
+    [ ! -e "$KEEP_STORE_DIR" ]
+}
