@@ -107,12 +107,13 @@ function store-path() {
 }
 
 # Whether the store is ready to use. Prints nothing; the caller acts on the return code:
-#   0 - ready: the folder exists and has a non-empty .gpg-id (written by `pass init`)
+#   0 - ready: the folder has a non-empty .gpg-id (written by `pass init`) and a git history
 #   1 - missing: no folder at all
-#   2 - not a store: the folder exists but has no (or an empty) .gpg-id
+#   2 - not ready: the folder exists but lacks one of those (another folder, or an unfinished init)
 function store-exists() {
     [[ -d $STORE_PATH          ]] || return 1
     [[ -s $STORE_PATH/.gpg-id  ]] || return 2
+    [[ -e $STORE_PATH/.git     ]] || return 2
     return 0
 }
 
@@ -180,10 +181,17 @@ function store-init() {
         die "--passphrase-stdin needs --name and --email too."
     fi
 
-    if [[ -e $STORE_PATH ]]; then
-        die "A folder already exists at $STORE_PATH." \
-            "If an earlier \`keep store init\` did not finish, remove it and run again." \
-            "To create another store, run with ${EXTRA_LINE}" \
+    local status=0
+    store-exists || status=$?
+    if (( status == 0 )); then
+        die "A Keep store already exists at $STORE_PATH." \
+            "To create another one, run with ${EXTRA_LINE}" \
+            "    KEEP_STORE_DIR=<other-folder> $0 store init."
+    fi
+    if (( status == 2 )); then
+        die "$STORE_PATH exists but is not a ready Keep store" \
+            "(maybe an earlier \`keep store init\` did not finish)." \
+            "Remove it and run again, or run with ${EXTRA_LINE}" \
             "    KEEP_STORE_DIR=<other-folder> $0 store init."
     fi
 
@@ -480,7 +488,6 @@ function ensure-requirements() {
 # --- Output -------------------------------------------------------------------
 
 function info() { printf '%s\n' "$*"; }
-function warn() { printf 'keep: %s\n' "$*" >&2; }
 function die()  { printf 'keep: %s\n' "$*" >&2; exit 1; }
 
 # section lines up: ==| Title |=====…
@@ -538,9 +545,6 @@ function ask-choice() {
     echo >&2
     return 1
 }
-
-# Whether we can ask the user anything (stdin is a terminal).
-function can-ask() { [[ -t 0 ]]; }
 
 # confirm <question>: succeeds on yes. Anything else — and the default — is no.
 function confirm() {

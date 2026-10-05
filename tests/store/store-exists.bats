@@ -42,15 +42,22 @@ teardown() {
     [ "$status" -eq 2 ]
 }
 
-@test "store-exists: folder with .gpg-id returns 0" {
+@test "store-exists: .gpg-id without a git history returns 2" {
     mkdir -p "$KEEP_STORE_DIR"
+    echo "0123456789ABCDEF" > "$KEEP_STORE_DIR/.gpg-id"
+    run store-exists
+    [ "$status" -eq 2 ]
+}
+
+@test "store-exists: folder with .gpg-id and a git history returns 0" {
+    mkdir -p "$KEEP_STORE_DIR/.git"
     echo "0123456789ABCDEF" > "$KEEP_STORE_DIR/.gpg-id"
     run store-exists
     [ "$status" -eq 0 ]
 }
 
 @test "store-init: refuses when the store already exists" {
-    mkdir -p "$KEEP_STORE_DIR"
+    mkdir -p "$KEEP_STORE_DIR/.git"
     echo "0123456789ABCDEF" > "$KEEP_STORE_DIR/.gpg-id"
     run store-init
     [ "$status" -eq 1 ]
@@ -62,13 +69,21 @@ teardown() {
     echo "someone else's file" > "$KEEP_STORE_DIR/notes.txt"
     run store-init
     [ "$status" -eq 1 ]
-    [[ $output == *"already exists"* ]]
+    [[ $output == *"not a ready Keep store"* ]]
+}
+
+@test "store-init: refuses an unfinished store (no git history)" {
+    mkdir -p "$KEEP_STORE_DIR"
+    echo "0123456789ABCDEF" > "$KEEP_STORE_DIR/.gpg-id"
+    run store-init
+    [ "$status" -eq 1 ]
+    [[ $output == *"not a ready Keep store"* ]]
 }
 
 @test "store-init: refuses an empty folder" {
     mkdir -p "$KEEP_STORE_DIR"
     run store-init
     [ "$status" -eq 1 ]
-    [[ $output == *"already exists"* ]]
+    [[ $output == *"not a ready Keep store"* ]]
     [ -z "$(ls -A "$KEEP_STORE_DIR")" ]
 }

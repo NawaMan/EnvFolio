@@ -49,8 +49,7 @@ keep store init [--new-key] [--name <name>] [--email <email>] [--passphrase-stdi
 | `-h`, `--help` | Show the options and stop. Nothing is created. |
 
 `--opt=value` works as well as `--opt value`. Anything not given is asked for. `--key` cannot be
-combined with the new-key options. It fails if a store already exists at `$KEEP_STORE_DIR`, or if
-that folder is not empty.
+combined with the new-key options. It fails if anything already exists at `$KEEP_STORE_DIR`.
 
 ### Ask for everything
 
@@ -93,7 +92,10 @@ same `KEEP_STORE_DIR` to use it.
 
 ### When the store folder already exists
 
-`keep store init` refuses to run if the store folder already exists, even an empty one, and
-changes nothing. If an earlier `keep store init` stopped partway (an error, Ctrl-C, a closed
-terminal), remove the folder it left and run `keep store init` again. A key created by the earlier
+`keep store init` refuses to run if the store folder already exists, and changes nothing:
+
+- **A ready Keep store** (it has `.gpg-id` and a git history) — says the store already exists.
+- **Anything else**, even an empty folder — says it is not a ready Keep store. This is what an
+  earlier `keep store init` leaves if it stopped partway (an error, Ctrl-C, a closed terminal):
+  remove the folder and run `keep store init` again. A key created by the earlier
 run is kept, and shows up in the key menu.
