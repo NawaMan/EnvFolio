@@ -102,10 +102,108 @@ run is kept, and shows up in the key menu.
 
 ---
 
+## `keep text ls`
+
+Lists the texts in the Keep store as a tree: names only. It mirrors `keep secret ls`: the same
+tree as `pass ls`, but with the texts instead of the secrets. Signatures (`.txt.sig`) and folders
+holding no texts are left out.
+
+```
+keep text ls [<subfolder>]
+```
+
+| Option | Meaning |
+| --- | --- |
+| `-h`, `--help` | Show the options and stop. Works without a store. |
+
+Only a folder can be listed; a text's own name is refused (use `keep text show` once it exists).
+It needs a ready store (`keep store init`).
+
+### List every text
+
+```bash
+keep text ls
+```
+
+```
+Text Store
+├── note
+└── web
+    ├── home
+    └── user
+```
+
+### List one folder
+
+```bash
+keep text ls web
+```
+
+Lists only what is under `web`.
+
+---
+
+## `keep text insert`
+
+Adds a text to the Keep store. A text is **not a secret**: it is kept plain, not encrypted, as
+`<name>.txt` in the same folders as the secrets, and signed with the store's key as
+`<name>.txt.sig`, so a changed text can be told. Both are committed to the store's git history.
+Signing uses the key's secret half, so gpg may ask for its passphrase.
+
+```
+keep text insert [-m|--multiline] [-f|--force] [-t|--text <text>] <name>
+```
+
+| Option | Meaning |
+| --- | --- |
+| `-t`, `--text <text>` | The text itself, instead of asking. |
+| `-m`, `--multiline` | The text is several lines; end it with Ctrl-D. Piped in, all of stdin is the text. |
+| `-f`, `--force` | Overwrite an existing text without asking. |
+| `-h`, `--help` | Show the options and stop. Works without a store. |
+
+A text and a secret can share a name: `web/github` can be both. At a terminal, it asks before
+overwriting a text. **From a script or pipe, it overwrites** (the old one stays in the git
+history). If signing fails, nothing is saved and the old text stays. It needs a ready store
+(`keep store init`).
+
+### Give the text
+
+```bash
+keep text insert -t "https://example.com" web/home
+```
+
+### Type a text
+
+```bash
+keep text insert web/user
+```
+
+Asks for the text once, and shows it as you type.
+
+*Interactive — checked by hand, no automated test.*
+
+### Pipe a text in
+
+```bash
+whoami | keep text insert web/user
+```
+
+Only the first line is the text. For more, use `-m` below.
+
+### Several lines
+
+```bash
+keep text insert -m notes/todo < todo.txt
+```
+
+All of stdin is the text, kept exactly.
+
+---
+
 ## `keep secret ls`
 
-Lists the secrets in the Keep store as a tree: names only, never their values. It is `pass ls`, so
-the output is the same.
+Lists the secrets in the Keep store as a tree: names only, never their values. It is `pass ls`
+without the texts: the same tree, minus `*.txt`/`*.txt.sig` files and folders holding only texts.
 
 ```
 keep secret ls [<subfolder>]
@@ -145,7 +243,7 @@ Lists only what is under `web`.
 ## `keep secret find`
 
 Lists the secrets whose names contain any of the given parts, ignoring case, as a tree. It shows
-names only, never values. It is `pass find`.
+names only, never values. It is `pass find` without the texts.
 
 ```
 keep secret find <part>...

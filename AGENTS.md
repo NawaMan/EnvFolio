@@ -62,7 +62,7 @@ Post **three headings, a few sentences each**, then **stop and wait**:
      the change is a pure docs/typo one-liner they want on main.
 
    **New dependencies must be called out explicitly.** If the change needs anything beyond
-   `bash`, `pass`, `gpg`, `git`, `tar`, `gzip` and POSIX coreutils — a new runtime tool,
+   `bash`, `pass`, `gpg`, `git`, `tree`, `tar`, `gzip` and POSIX coreutils — a new runtime tool,
    a newer minimum version of an existing one, or a new dev tool — Approach carries its own
    clearly marked line:
 
@@ -230,9 +230,11 @@ Starting style, not law — deviate explicitly (say so and why) rather than sile
   (package manager, clipboard tool, GNU vs BSD flags) is handled explicitly, not assumed.
 - `#!/usr/bin/env bash`. **Decide the minimum bash version up front** and write it here — macOS
   still ships bash 3.2 (no associative arrays, no `mapfile`, no `${var,,}`). *Open question.*
-- **Runtime dependencies: `bash`, `pass`, `gpg`, `git`, `tar`, `gzip` — and that's the
+- **Runtime dependencies: `bash`, `pass`, `gpg`, `git`, `tree`, `tar`, `gzip` — and that's the
   list.** `gpg` is a direct dependency because first-run setup has to find or create a key before
-  `pass init`; `git` because the store is synced as a git repo; `tar` + `gzip` because
+  `pass init`, and texts are signed with it; `git` because the store is synced as a git repo;
+  `tree` (already a dependency of `pass`) because `secret ls`/`find` run pass's own `tree` line
+  with the texts left out; `tar` + `gzip` because
   `keep store backup` packs everything into one file. Every prompt goes through the Input helpers
   (`ask-text`, `ask-choice`, `confirm`, `show-box`), in plain bash. Plus one clipboard tool — `pbcopy` /
   `wl-copy` / `xclip`, whichever `pass` itself uses on the machine — for `keep text show -c`.

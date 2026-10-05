@@ -55,6 +55,8 @@ function help() {
     case "$*" in
         "")                keep-help            ;;
         "store init")      store-init-help      ;;
+        "text ls")         text-ls-help         ;;
+        "text insert")     text-insert-help     ;;
         "secret ls")       secret-ls-help       ;;
         "secret find")     secret-find-help     ;;
         "secret grep")     secret-grep-help     ;;
@@ -80,7 +82,9 @@ Commands:
   store restore     (not yet)
   store export      (not yet)
   store import      (not yet)
-  text ...          Plain-text items (not yet)
+  text ls           List texts
+  text insert       Add a text (plain, signed)
+  text ...          Other text commands (not yet)
   secret ls         List secrets
   secret find       Find secrets by name
   secret grep       Find secrets by value
@@ -317,13 +321,114 @@ function text() {
     esac
 }
 
+# A text is a plain file in the store, laid out like the secrets: <name>.txt next to <name>.gpg,
+# with <name>.txt.sig — a detached signature by the store's key, so a changed text can be told.
+
+# --- text ls ------------------------------------------------------------------
+
+function text-ls-help() {
+    cat <<'EOF'
+Usage: keep text ls [<subfolder>]
+
+List the texts in the Keep store as a tree — names only. Give a subfolder to list only what is
+under it.
+
+Options:
+  -h, --help          Show this help and stop.
+EOF
+}
+
+# keep text ls [<subfolder>]
+# As `secret ls`: `pass ls`, for the texts. Only a folder; a text is shown by `text show`.
+function text-ls() {
+    case ${1:-} in -h|--help) text-ls-help ; return 0 ;; esac
+    (( $# <= 1 )) || die "Usage: keep text ls [<subfolder>]"
+    require-store
+    [[ $# -eq 0 || ( $1 != -* && /$1/ != */../* && -d $STORE_PATH/$1 ) ]] \
+        || die "text ls: '$1' is not a folder in the store."
+    echo "Text Store"
+    [[ $# -eq 0 ]] || echo "${1%/}"
+    store-tree txt "$STORE_PATH/${1:-}"
+}
+
+# --- text insert --------------------------------------------------------------
+
+function text-insert-help() {
+    cat <<'EOF'
+Usage: keep text insert [-m|--multiline] [-f|--force] [-t|--text <text>] <name>
+
+Add a text to the Keep store — kept plain, not encrypted — and sign it with the store's key
+(gpg may ask for the key's passphrase). The text is asked for once, with echo; piped in, it is
+the first line. Texts are not secrets: never put a secret here.
+
+Options:
+  -t, --text <text>   The text itself, instead of asking.
+  -m, --multiline     The text is several lines; end it with Ctrl-D. Piped in, all of stdin.
+  -f, --force         Overwrite an existing text without asking (only asked at a terminal).
+  -h, --help          Show this help and stop.
+EOF
+}
+
+# keep text insert [-m|--multiline] [-f|--force] [-t|--text <text>] <name>
+# Like `pass insert`, but the text is written plain and signed, not encrypted.
+function text-insert() {
+    local multiline=0 force=0 given=0 text="" names=() arg
+    while (( $# > 0 )); do
+        arg=$1 ; shift
+        case $arg in
+            -h|--help)      text-insert-help ; return 0 ;;
+            -m|--multiline) multiline=1 ;;
+            -f|--force)     force=1 ;;
+            -t|--text)      (( $# > 0 )) || die "$arg needs a value." ; text=$1 ; given=1 ; shift ;;
+            --text=*)       text=${arg#*=} ; given=1 ;;
+            --)             names+=("$@") ; break ;;
+            -*)             die "text insert: unknown option: $arg" ;;
+            *)              names+=("$arg") ;;
+        esac
+    done
+    (( ${#names[@]} == 1 )) || die "Usage: keep text insert [-m|--multiline] [-f|--force] [-t|--text <text>] <name>"
+    local name=${names[0]} file key content
+    # As pass's check_sneaky_paths: no way out of the store.
+    [[ -n $name && $name != */ && /$name/ != */../* ]] || die "text insert: '$name' is not a valid name."
+    require-store
+    file=$STORE_PATH/$name.txt
+
+    if [[ -e $file ]] && (( ! force )) && [[ -t 0 ]]; then
+        confirm "An entry already exists for $name. Overwrite it?" || exit 1
+    fi
+
+    if (( given )); then
+        content=$text$'\n'
+    elif (( multiline )); then
+        [[ -t 0 ]] && printf 'Enter contents of %s and press Ctrl+D when finished:\n\n' "$name" >&2
+        content=$(cat ; printf .) ; content=${content%.}   # the dot keeps trailing newlines
+    else
+        [[ -t 0 ]] && printf 'Enter text for %s: ' "$name" >&2
+        IFS= read -r text || [[ -n $text ]] || die "text insert: no text given."
+        content=$text$'\n'
+    fi
+
+    # Write and sign side files first, so a failed signature leaves the old text as it was.
+    umask "${PASSWORD_STORE_UMASK:-077}"
+    key=$(head -n 1 "$STORE_PATH/.gpg-id")
+    mkdir -p "$(dirname "$file")"
+    printf '%s' "$content" > "$file.new"
+    if ! gpg --quiet --yes --local-user "$key" --detach-sign --output "$file.sig.new" "$file.new"; then
+        rm -f "$file.new" "$file.sig.new"
+        die "text insert: signing failed; nothing was saved."
+    fi
+    mv "$file.new" "$file" && mv "$file.sig.new" "$file.sig"
+
+    git -C "$STORE_PATH" add -- "$name.txt" "$name.txt.sig"
+    git -C "$STORE_PATH" diff --cached --quiet \
+        || git -C "$STORE_PATH" commit --quiet -m "Add given text for $name to store."
+}
+
 # --- Not yet ------------------------------------------------------------------
 
-function text-ls()       { not-yet "text ls" ; }
 function text-find()     { not-yet "text find" ; }
 function text-grep()     { not-yet "text grep" ; }
 function text-show()     { not-yet "text show" ; }
-function text-insert()   { not-yet "text insert" ; }
 function text-edit()     { not-yet "text edit" ; }
 function text-generate() { not-yet "text generate" ; }
 function text-rm()       { not-yet "text rm" ; }
@@ -370,14 +475,15 @@ EOF
 }
 
 # keep secret ls [<subfolder>]
-# `pass ls` is `pass show`: given an entry, it would print the secret — so only a folder goes through.
+# `pass ls`, minus the texts. Only a folder: given an entry, `pass ls` would print the secret.
 function secret-ls() {
     case ${1:-} in -h|--help) secret-ls-help ; return 0 ;; esac
-    (( $# <= 1 ))                                       || die "Usage: keep secret ls [<subfolder>]"
-    [[ $# -eq 0 || ( $1 != -* && -d $STORE_PATH/$1 ) ]] || die "secret ls: '$1' is not a folder in the store."
+    (( $# <= 1 )) || die "Usage: keep secret ls [<subfolder>]"
+    [[ $# -eq 0 || ( $1 != -* && /$1/ != */../* && -d $STORE_PATH/$1 ) ]] \
+        || die "secret ls: '$1' is not a folder in the store."
     echo "Secret Store"
-    # pass heads the whole store with its own "Password Store"; for a subfolder, its name stays.
-    pass ls "$@" | sed '1{/^Password Store$/d;}'
+    [[ $# -eq 0 ]] || echo "${1%/}"
+    store-tree gpg "$STORE_PATH/${1:-}"
 }
 
 # --- secret find --------------------------------------------------------------
@@ -395,7 +501,15 @@ EOF
 }
 
 # keep secret find <part>...
-function secret-find() { call-pass secret-find-help find "$@" ; }
+# `pass find`, minus the texts.
+function secret-find() {
+    local arg terms
+    for arg in "$@"; do case $arg in -h|--help) secret-find-help ; return 0 ;; esac ; done
+    (( $# > 0 )) || die "Usage: keep secret find <part>..."
+    terms="*$(printf '%s*|*' "$@")"
+    printf 'Search Terms: %s\n' "$*"
+    store-tree gpg "$STORE_PATH" -P "${terms%|*}" --matchdirs --ignore-case
+}
 
 # --- secret grep --------------------------------------------------------------
 
@@ -607,6 +721,16 @@ function call-pass() {
     pass "$command" "$@"
 }
 
+# store-tree <gpg|txt> <folder> [tree-option...]: the secrets (gpg) or texts (txt) under <folder>
+# as a tree, names only. pass's own `tree` line (ls, find), plus leaving out the other kind and
+# folders holding none of this kind.
+function store-tree() {
+    local ext=$1 folder=$2 others='*.txt|*.txt.sig' ; shift 2
+    [[ $ext == txt ]] && others='*.gpg|*.txt.sig'
+    tree -N -C -l --noreport -I "$others" --prune "$@" "$folder" | tail -n +2 \
+        | sed -E "s/\\.$ext(\x1B\\[[0-9]+m)?( ->|\$)/\\1\\2/g"
+}
+
 # --- Requirements -------------------------------------------------------------
 
 # Ensure that all the dependency are there. Show when at lease one is missing.
@@ -632,6 +756,7 @@ function ensure-requirements() {
     lines     "pass   " "Password manager  " "brew install pass        "
     lines     "gpg    " "Encrypts the store" "brew install gnupg       "
     lines     "git    " "Syncs the store   " "brew install git         "
+    lines     "tree   " "Lists the store   " "brew install tree        "
 
     if [[ "$1 $2" =~ store\ (backup|restore|import|export) ]]; then
         lines     "tar    " "Packs backups     " "brew install gnu-tar     "

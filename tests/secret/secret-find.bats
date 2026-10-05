@@ -45,7 +45,7 @@ make-store() {
     [[ $output == *"github"* && $output == *"work"* ]]
 }
 
-@test "secret find: no part gets pass's usage" {
+@test "secret find: no part gets the usage" {
     make-store
     run "$KEEP" secret find
     [ "$status" -ne 0 ]

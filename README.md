@@ -35,6 +35,7 @@ Every command, with examples: [MANUAL.md](MANUAL.md).
 - `git`
 - `tar`
 - `gzip`
+- `tree` (already needed by `pass`)
 - one clipboard tool, only for `-c`: `pbcopy` (macOS), `wl-copy` (Wayland) or `xclip` (X11)
 
 # Common Environment Variables
