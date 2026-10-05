@@ -292,25 +292,10 @@ function require-store() {
 
 # --- Not yet ------------------------------------------------------------------
 
-function store-backup() {
-    echo "Do store backup - not implement yet"
-    exit 1
-}
-
-function store-restore() {
-    echo "Do store restore - not implement yet"
-    exit 1
-}
-
-function store-export() {
-    echo "Do store export - not implement yet"
-    exit 1
-}
-
-function store-import() {
-    echo "Do store import - not implement yet"
-    exit 1
-}
+function store-backup()  { not-yet "store backup" ; }
+function store-restore() { not-yet "store restore" ; }
+function store-export()  { not-yet "store export" ; }
+function store-import()  { not-yet "store import" ; }
 
 #== Command: Text ==============================================================
 
@@ -332,55 +317,18 @@ function text() {
     esac
 }
 
-function text-ls() {
-    echo "Do text ls - not implement yet"
-    exit 1
-}
+# --- Not yet ------------------------------------------------------------------
 
-function text-find() {
-    echo "Do text find - not implement yet"
-    exit 1
-}
-
-function text-grep() {
-    echo "Do text grep - not implement yet"
-    exit 1
-}
-
-function text-show() {
-    echo "Do text show - not implement yet"
-    exit 1
-}
-
-function text-insert() {
-    echo "Do text insert - not implement yet"
-    exit 1
-}
-
-function text-edit() {
-    echo "Do text edit - not implement yet"
-    exit 1
-}
-
-function text-generate() {
-    echo "Do text generate - not implement yet"
-    exit 1
-}
-
-function text-rm() {
-    echo "Do text rm - not implement yet"
-    exit 1
-}
-
-function text-mv() {
-    echo "Do text mv - not implement yet"
-    exit 1
-}
-
-function text-cp() {
-    echo "Do text cp - not implement yet"
-    exit 1
-}
+function text-ls()       { not-yet "text ls" ; }
+function text-find()     { not-yet "text find" ; }
+function text-grep()     { not-yet "text grep" ; }
+function text-show()     { not-yet "text show" ; }
+function text-insert()   { not-yet "text insert" ; }
+function text-edit()     { not-yet "text edit" ; }
+function text-generate() { not-yet "text generate" ; }
+function text-rm()       { not-yet "text rm" ; }
+function text-mv()       { not-yet "text mv" ; }
+function text-cp()       { not-yet "text cp" ; }
 
 #== Command: Secret ============================================================
 
@@ -640,10 +588,7 @@ function secret-cp() { call-pass secret-cp-help cp "$@" ; }
 
 #== Command: List ==============================================================
 
-function list() {
-    local category="${1:-}" ; (( $# > 0 )) && shift
-    echo "Do list"
-}
+function list() { not-yet "ls" ; }
 
 #== Common Functions ===========================================================
 
@@ -711,6 +656,8 @@ function ensure-requirements() {
 
 function info() { printf '%s\n' "$*"; }
 function die()  { printf 'keep: %s\n' "$*" >&2; exit 1; }
+# not-yet <command>: fail for a command that isn't built yet.
+function not-yet() { die "$1 is not built yet." ; }
 
 # section lines up: ==| Title |=====…
 function section() {
