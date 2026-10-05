@@ -53,10 +53,19 @@ function version() {
 # keep help [command...]
 function help() {
     case "$*" in
-        "")              keep-help          ;;
-        "store init")    store-init-help    ;;
-        "secret insert") secret-insert-help ;;
-        *)               echo "keep help: no help for '$*' yet." >&2 ; return 1 ;;
+        "")                keep-help            ;;
+        "store init")      store-init-help      ;;
+        "secret ls")       secret-ls-help       ;;
+        "secret find")     secret-find-help     ;;
+        "secret grep")     secret-grep-help     ;;
+        "secret show")     secret-show-help     ;;
+        "secret insert")   secret-insert-help   ;;
+        "secret edit")     secret-edit-help     ;;
+        "secret generate") secret-generate-help ;;
+        "secret rm")       secret-rm-help       ;;
+        "secret mv")       secret-mv-help       ;;
+        "secret cp")       secret-cp-help       ;;
+        *)                 echo "keep help: no help for '$*' yet." >&2 ; return 1 ;;
     esac
 }
 
@@ -72,8 +81,16 @@ Commands:
   store export      (not yet)
   store import      (not yet)
   text ...          Plain-text items (not yet)
+  secret ls         List secrets
+  secret find       Find secrets by name
+  secret grep       Find secrets by value
+  secret show       Show a secret, or copy it to the clipboard
   secret insert     Add a secret
-  secret ...        Other secret commands (not yet)
+  secret edit       Edit a secret in $EDITOR
+  secret generate   Generate a random secret
+  secret rm         Remove a secret
+  secret mv         Rename or move a secret
+  secret cp         Copy a secret
   ls                List texts and secrets (not yet)
   version           Print Keep's version
   help [command]    Show help, e.g. `keep help store init`
@@ -393,24 +410,99 @@ function secret() {
     esac
 }
 
+# --- secret ls ----------------------------------------------------------------
+
+function secret-ls-help() {
+    cat <<'EOF'
+Usage: keep secret ls [<subfolder>]
+
+List the secrets in the Keep store as a tree — names only, never their values.
+Give a subfolder to list only what is under it.
+
+Options:
+  -h, --help          Show this help and stop.
+EOF
+}
+
+# keep secret ls [<subfolder>]
+# `pass ls` is `pass show`: given an entry, it would print the secret — so only a folder goes through.
 function secret-ls() {
-    echo "Do secret ls - not implement yet"
-    exit 1
+    case ${1:-} in -h|--help) secret-ls-help ; return 0 ;; esac
+    (( $# <= 1 ))                                       || die "Usage: keep secret ls [<subfolder>]"
+    [[ $# -eq 0 || ( $1 != -* && -d $STORE_PATH/$1 ) ]] || die "secret ls: '$1' is not a folder in the store."
+    echo "Secret Store"
+    # pass heads the whole store with its own "Password Store"; for a subfolder, its name stays.
+    pass ls "$@" | sed '1{/^Password Store$/d;}'
 }
 
-function secret-find() {
-    echo "Do secret find - not implement yet"
-    exit 1
+# --- secret find --------------------------------------------------------------
+
+function secret-find-help() {
+    cat <<'EOF'
+Usage: keep secret find <part>...
+
+List the secrets whose names contain any of the parts (ignoring case), as a tree — names only,
+never their values.
+
+Options:
+  -h, --help          Show this help and stop.
+EOF
 }
 
-function secret-grep() {
-    echo "Do secret grep - not implement yet"
-    exit 1
+# keep secret find <part>...
+function secret-find() { call-pass secret-find-help find "$@" ; }
+
+# --- secret grep --------------------------------------------------------------
+
+function secret-grep-help() {
+    cat <<'EOF'
+Usage: keep secret grep [<grep-option>...] <pattern>
+
+Decrypt every secret and print the lines that match <pattern>, under each secret's name.
+The matching lines are secret values: they are shown on screen.
+
+Options:
+  <grep-option>       Any option of grep, e.g. -i to ignore case, -v to invert the match.
+  -h, --help          Show this help and stop (not grep's -h).
+EOF
 }
 
+# keep secret grep [<grep-option>...] <pattern>
+function secret-grep() { call-pass secret-grep-help grep "$@" ; }
+
+# --- secret show --------------------------------------------------------------
+
+function secret-show-help() {
+    cat <<'EOF'
+Usage: keep secret show [-c|--clip[=<line>]] <name>
+
+Show a secret: decrypt it and print it. With --clip, copy it to the clipboard instead; the
+clipboard is cleared after 45 seconds (PASSWORD_STORE_CLIP_TIME).
+
+Options:
+  -c, --clip[=<line>] Copy the secret — or only its line <line> — to the clipboard; print nothing.
+  -h, --help          Show this help and stop.
+EOF
+}
+
+# keep secret show [-c|--clip[=<line>]] <name>
+# Only an entry goes through: given a folder, `pass show` would list it.
 function secret-show() {
-    echo "Do secret show - not implement yet"
-    exit 1
+    local clip=() names=() arg
+    while (( $# > 0 )); do
+        arg=$1 ; shift
+        case $arg in
+            -h|--help)                   secret-show-help ; return 0 ;;
+            -c|-c[0-9]*|--clip|--clip=*) clip=("$arg") ;;
+            -q*|--qrcode*)               die "secret show: --qrcode is not offered." ;;
+            --)                          names+=("$@") ; break ;;
+            -*)                          die "secret show: unknown option: $arg" ;;
+            *)                           names+=("$arg") ;;
+        esac
+    done
+    (( ${#names[@]} == 1 ))              || die "Usage: keep secret show [-c|--clip[=<line>]] <name>"
+    [[ -f $STORE_PATH/${names[0]}.gpg ]] || die "secret show: '${names[0]}' is not a secret in the store."
+    pass show "${clip[@]}" -- "${names[0]}"
 }
 
 # --- secret insert ------------------------------------------------------------
@@ -424,7 +516,7 @@ without echo. Piped in, give it twice (one per line), or use --multiline to take
 
 Options:
   -m, --multiline     The secret is several lines; end it with Ctrl-D.
-  -f, --force         Overwrite an existing secret without asking.
+  -f, --force         Overwrite an existing secret without asking (only asked at a terminal).
   -h, --help          Show this help and stop.
 EOF
 }
@@ -436,37 +528,118 @@ function secret-insert() {
     for arg in "$@"; do
         case $arg in
             --)                  break ;;
-            -h|--help)           secret-insert-help ; return 0 ;;
+            -h|--help)           break ;;
             --echo|-e*|-[!-]*e*) die "secret insert: --echo is not offered; it would show the secret." ;;
         esac
     done
-    pass insert "$@"
+    call-pass secret-insert-help insert "$@"
 }
 
-function secret-edit() {
-    echo "Do secret edit - not implement yet"
-    exit 1
+# --- secret edit --------------------------------------------------------------
+
+function secret-edit-help() {
+    cat <<'EOF'
+Usage: keep secret edit <name>
+
+Edit a secret in $EDITOR, or add it if it is new. The secret is decrypted to a temporary file
+for the editor (in /dev/shm, a RAM disk, where there is one) and removed afterwards.
+
+Options:
+  -h, --help          Show this help and stop.
+EOF
 }
 
+# keep secret edit <name>
+function secret-edit() { call-pass secret-edit-help edit "$@" ; }
+
+# --- secret generate ----------------------------------------------------------
+
+function secret-generate-help() {
+    cat <<'EOF'
+Usage: keep secret generate [-n|--no-symbols] [-c|--clip] [-i|--in-place|-f|--force] <name> [<length>]
+
+Generate a random secret (25 characters unless <length> is given), save it, and print it.
+With --clip, copy it to the clipboard instead of printing it; the clipboard is cleared after
+45 seconds (PASSWORD_STORE_CLIP_TIME).
+
+Options:
+  -n, --no-symbols    Letters and digits only.
+  -c, --clip          Copy the secret to the clipboard; do not print it.
+  -i, --in-place      Replace only the first line of an existing secret; keep the rest.
+  -f, --force         Overwrite an existing secret without asking (only asked at a terminal).
+  -h, --help          Show this help and stop.
+EOF
+}
+
+# keep secret generate [-n|--no-symbols] [-c|--clip] [-i|--in-place|-f|--force] <name> [<length>]
+# Everything goes to `pass generate` — except --help, and --qrcode (it needs qrencode).
 function secret-generate() {
-    echo "Do secret generate - not implement yet"
-    exit 1
+    local arg
+    for arg in "$@"; do
+        case $arg in
+            --)                     break ;;
+            -h|--help)              break ;;
+            --qrcode|-q*|-[!-]*q*)  die "secret generate: --qrcode is not offered." ;;
+        esac
+    done
+    call-pass secret-generate-help generate "$@"
 }
 
-function secret-rm() {
-    echo "Do secret rm - not implement yet"
-    exit 1
+# --- secret rm ----------------------------------------------------------------
+
+function secret-rm-help() {
+    cat <<'EOF'
+Usage: keep secret rm [-r|--recursive] [-f|--force] <name>
+
+Remove a secret, or a whole folder with --recursive. At a terminal, asks first unless --force;
+from a script or pipe, it does not ask.
+The removed secret stays in the store's git history.
+
+Options:
+  -r, --recursive     Remove a folder and everything in it.
+  -f, --force         Do not ask.
+  -h, --help          Show this help and stop.
+EOF
 }
 
-function secret-mv() {
-    echo "Do secret mv - not implement yet"
-    exit 1
+# keep secret rm [-r|--recursive] [-f|--force] <name>
+function secret-rm() { call-pass secret-rm-help rm "$@" ; }
+
+# --- secret mv ----------------------------------------------------------------
+
+function secret-mv-help() {
+    cat <<'EOF'
+Usage: keep secret mv [-f|--force] <old-name> <new-name>
+
+Rename or move a secret or a folder. At a terminal, asks before overwriting unless --force;
+from a script or pipe, it overwrites.
+
+Options:
+  -f, --force         Overwrite without asking.
+  -h, --help          Show this help and stop.
+EOF
 }
 
-function secret-cp() {
-    echo "Do secret cp - not implement yet"
-    exit 1
+# keep secret mv [-f|--force] <old-name> <new-name>
+function secret-mv() { call-pass secret-mv-help mv "$@" ; }
+
+# --- secret cp ----------------------------------------------------------------
+
+function secret-cp-help() {
+    cat <<'EOF'
+Usage: keep secret cp [-f|--force] <old-name> <new-name>
+
+Copy a secret or a folder. At a terminal, asks before overwriting unless --force;
+from a script or pipe, it overwrites.
+
+Options:
+  -f, --force         Overwrite without asking.
+  -h, --help          Show this help and stop.
+EOF
 }
+
+# keep secret cp [-f|--force] <old-name> <new-name>
+function secret-cp() { call-pass secret-cp-help cp "$@" ; }
 
 #== Command: List ==============================================================
 
@@ -476,6 +649,21 @@ function list() {
 }
 
 #== Common Functions ===========================================================
+
+# --- Pass ---------------------------------------------------------------------
+
+# call-pass <help-function> <pass-command> [args...]
+# Show Keep's help on -h/--help (before any --); otherwise hand everything to `pass <command>`.
+function call-pass() {
+    local help=$1 command=$2 arg ; shift 2
+    for arg in "$@"; do
+        case $arg in
+            --)        break ;;
+            -h|--help) "$help" ; return 0 ;;
+        esac
+    done
+    pass "$command" "$@"
+}
 
 # --- Requirements -------------------------------------------------------------
 
@@ -508,8 +696,8 @@ function ensure-requirements() {
         lines     "gzip   " "Compresses backups" "brew install gzip        "
     fi
 
-    # Clipboard: only the tool `secret show -c` uses on this platform; none without a display.
-    if [[ "$1 $2 $3" =~ (secret|text)\ show\ (-c|--clip) ]]; then
+    # Clipboard: only the tool `show -c` and `generate -c` use on this platform; none without a display.
+    if [[ "$*" =~ ^(secret|text)\ (show|generate)\ (.*\ )?(--clip|-[a-z]*c) ]]; then
         if   [[ "$(uname -s)" == "Darwin" ]]; then : # pbcopy - should be built-in in Mac.
         elif [[ -n "${WAYLAND_DISPLAY:-}" ]]; then lines "wl-copy" "Clipboard copy    " "brew install wl-clipboard"
         elif [[ -n "${DISPLAY:-}"         ]]; then lines "xclip  " "Clipboard copy    " "brew install xclip       "

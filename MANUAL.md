@@ -102,6 +102,145 @@ run is kept, and shows up in the key menu.
 
 ---
 
+## `keep secret ls`
+
+Lists the secrets in the Keep store as a tree: names only, never their values. It is `pass ls`, so
+the output is the same.
+
+```
+keep secret ls [<subfolder>]
+```
+
+| Option | Meaning |
+| --- | --- |
+| `-h`, `--help` | Show the options and stop. Works without a store. |
+
+Only a folder can be listed. A secret's own name is refused, because `pass ls <name>` would
+print the secret (use `keep secret show` once it exists). The same goes for `pass`'s other
+options, such as `-c`. It needs a ready store (`keep store init`).
+
+### List every secret
+
+```bash
+keep secret ls
+```
+
+```
+Secret Store
+├── note
+└── web
+    └── github
+```
+
+### List one folder
+
+```bash
+keep secret ls web
+```
+
+Lists only what is under `web`.
+
+---
+
+## `keep secret find`
+
+Lists the secrets whose names contain any of the given parts, ignoring case, as a tree. It shows
+names only, never values. It is `pass find`.
+
+```
+keep secret find <part>...
+```
+
+| Option | Meaning |
+| --- | --- |
+| `-h`, `--help` | Show the options and stop. Works without a store. |
+
+### Find by name
+
+```bash
+keep secret find git
+```
+
+```
+Search Terms: git
+└── web
+    └── github
+```
+
+---
+
+## `keep secret grep`
+
+Decrypts every secret and prints the lines that match, each under its secret's name. **The
+matching lines are secret values, and they are shown on screen.** It is `pass grep`, so gpg may
+ask for the key's passphrase.
+
+```
+keep secret grep [<grep-option>...] <pattern>
+```
+
+| Option | Meaning |
+| --- | --- |
+| `<grep-option>` | Any option of `grep`, e.g. `-i` to ignore case. |
+| `-h`, `--help` | Show the options and stop. Works without a store. In Keep, `-h` is always help, never grep's `-h`. |
+
+### Find by value
+
+```bash
+keep secret grep jane
+```
+
+```
+web/github:
+user: jane
+```
+
+---
+
+## `keep secret show`
+
+Decrypts a secret and prints it, or copies it to the clipboard. It is `pass show`, so gpg may
+ask for the key's passphrase.
+
+```
+keep secret show [-c|--clip[=<line>]] <name>
+```
+
+| Option | Meaning |
+| --- | --- |
+| `-c`, `--clip[=<line>]` | Copy the secret, or only line `<line>` of it, to the clipboard and print nothing. The clipboard is cleared after 45 seconds (`PASSWORD_STORE_CLIP_TIME`). Needs `pbcopy`, `wl-copy` or `xclip`. |
+| `-h`, `--help` | Show the options and stop. Works without a store. |
+
+Only a secret can be shown. A folder is refused, because `pass show <folder>` would list it
+(use `keep secret ls`). `pass`'s `-q`/`--qrcode` is not offered. It needs a ready store
+(`keep store init`).
+
+### Print a secret
+
+```bash
+keep secret show web/github
+```
+
+Prints the whole secret, every line of it.
+
+### Copy to the clipboard
+
+```bash
+keep secret show -c web/github
+```
+
+Copies the secret without showing it, and says when the clipboard will clear.
+
+### Copy one line
+
+```bash
+keep secret show --clip=2 note
+```
+
+Copies only line 2 of `note`, e.g. the user name kept under a password.
+
+---
+
 ## `keep secret insert`
 
 Adds a secret to the Keep store, encrypted with the store's key, and commits it to the store's git
@@ -148,3 +287,139 @@ keep secret insert -m note < note.txt
 ```
 
 All of stdin is the secret.
+
+---
+
+## `keep secret edit`
+
+Opens a secret in `$EDITOR` (vi if unset), or adds it if it is new, and commits the change. It
+is `pass edit`: the secret is decrypted to a temporary file for the editor, in `/dev/shm` (a RAM
+disk) where there is one, and removed afterwards. Without `/dev/shm` (macOS), `pass` warns and
+asks first. If you save it unchanged, nothing is committed.
+
+```
+keep secret edit <name>
+```
+
+| Option | Meaning |
+| --- | --- |
+| `-h`, `--help` | Show the options and stop. Works without a store. |
+
+### Edit a secret
+
+```bash
+keep secret edit web/github
+```
+
+*Interactive — checked by hand, and tested with a stand-in editor.*
+
+---
+
+## `keep secret generate`
+
+Generates a random secret, saves and commits it, then prints it, or copies it with `-c`. It is
+`pass generate`.
+
+```
+keep secret generate [-n|--no-symbols] [-c|--clip] [-i|--in-place|-f|--force] <name> [<length>]
+```
+
+| Option | Meaning |
+| --- | --- |
+| `<length>` | How many characters. Default 25 (`PASSWORD_STORE_GENERATED_LENGTH`). |
+| `-n`, `--no-symbols` | Letters and digits only. |
+| `-c`, `--clip` | Copy the secret to the clipboard instead of printing it. It is cleared after 45 seconds. Needs `pbcopy`, `wl-copy` or `xclip`. |
+| `-i`, `--in-place` | Replace only the first line of an existing secret and keep the rest. |
+| `-f`, `--force` | Overwrite an existing secret without asking. |
+| `-h`, `--help` | Show the options and stop. Works without a store. |
+
+`pass`'s `-q`/`--qrcode` is not offered. **An existing secret is only asked about at a
+terminal.** From a script or pipe, it is overwritten (the old one stays in the git history).
+
+### Generate a secret
+
+```bash
+keep secret generate -n api 12
+```
+
+Saves a 12-character secret of letters and digits as `api`, and prints it.
+
+### Copy to the clipboard
+
+```bash
+keep secret generate -c api
+```
+
+Saves the new secret and copies it without showing it.
+
+---
+
+## `keep secret rm`
+
+Removes a secret, or a folder with `-r`, and commits the removal. The secret stays in the store's
+git history. It is `pass rm`.
+
+```
+keep secret rm [-r|--recursive] [-f|--force] <name>
+```
+
+| Option | Meaning |
+| --- | --- |
+| `-r`, `--recursive` | Remove a folder and everything in it. |
+| `-f`, `--force` | Do not ask. |
+| `-h`, `--help` | Show the options and stop. Works without a store. |
+
+At a terminal it asks first. **From a script or pipe, it does not ask.**
+
+### Remove a secret
+
+```bash
+keep secret rm -f mail/work
+```
+
+---
+
+## `keep secret mv`
+
+Renames or moves a secret or a folder, and commits the change. It is `pass mv`.
+
+```
+keep secret mv [-f|--force] <old-name> <new-name>
+```
+
+| Option | Meaning |
+| --- | --- |
+| `-f`, `--force` | Overwrite without asking. |
+| `-h`, `--help` | Show the options and stop. Works without a store. |
+
+A `<new-name>` ending in `/` is a folder: the secret keeps its name inside it. At a terminal, it
+asks before overwriting. **From a script or pipe, it overwrites.**
+
+### Rename a secret
+
+```bash
+keep secret mv web/github web/gh
+```
+
+---
+
+## `keep secret cp`
+
+Copies a secret or a folder, and commits the copy. It is `pass cp`.
+
+```
+keep secret cp [-f|--force] <old-name> <new-name>
+```
+
+| Option | Meaning |
+| --- | --- |
+| `-f`, `--force` | Overwrite without asking. |
+| `-h`, `--help` | Show the options and stop. Works without a store. |
+
+At a terminal, it asks before overwriting. **From a script or pipe, it overwrites.**
+
+### Copy a secret
+
+```bash
+keep secret cp web/github web/github-copy
+```
