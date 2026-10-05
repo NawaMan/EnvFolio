@@ -16,14 +16,3 @@
 
 # Backups and exports hold a secret key — never commit one by accident.
 *--keep.tar.gz*
-*--mypass.tar.gz*
-mypass-backup-*
-mypass-export-*
-passme-backup-*
-
-# test-all.sh keeps each check's output here.
-/test-booth/.test-all/
-
-# A test run in progress holds this lock (see test-booth/test-all.sh).
-/test-booth/.running/
-/test-booth/test*/.running/

@@ -1,7 +1,7 @@
 # AGENTS.md — Working on this repository
 
-Guidance for an AI agent (Claude Code, or similar) helping develop **Keep**, a terminal UI (TUI)
-app written in **bash** for keeping texts and secrets.
+Guidance for an AI agent (Claude Code, or similar) helping develop **Keep**, a command-line app with
+interactive prompts, written in **bash**, for keeping texts and secrets.
 
 ---
 
@@ -220,7 +220,7 @@ exception.
 
 ---
 
-## Bash TUI conventions
+## Bash CLI conventions
 
 Starting style, not law — deviate explicitly (say so and why) rather than silently.
 
@@ -236,12 +236,11 @@ Starting style, not law — deviate explicitly (say so and why) rather than sile
   `keep store backup` packs everything into one file. Every prompt goes through the Input helpers
   (`ask-text`, `ask-choice`, `confirm`, `show-box`), in plain bash. Plus one clipboard tool — `pbcopy` /
   `wl-copy` / `xclip`, whichever `pass` itself uses on the machine — for `keep text show -c`.
-  The script's approved-dependency block is the authoritative list. Anything
+  The script's `ensure-requirements` is the authoritative list. Anything
   beyond bash builtins and POSIX coreutils needs a stated reason and the user's OK — flag it with
   the **⚠ New dependency** line in the proposal (Rule 0), never slip it in. Dev-only tools (`shellcheck`, `bats`, `tmux`) are fine.
-- **The approved-dependency list lives in the script itself**, at the top of the entry-point
-  script, right after its opening project comment block — one place that is both the record and
-  the check.
+- **The approved-dependency list lives in the script itself**, in `ensure-requirements` — one
+  place that is both the record and the check.
 
 ### Structure for testability
 
@@ -251,7 +250,7 @@ Starting style, not law — deviate explicitly (say so and why) rather than sile
 - A script that can be `source`d without running `main` (guard with
   `[[ ${BASH_SOURCE[0]} == "$0" ]] && main "$@"`) lets tests call its functions.
 
-### Verifying a TUI (you have no real keyboard)
+### Verifying interactive prompts (you have no real keyboard)
 
 An agent cannot use the app interactively. Drive it headlessly in **tmux**:
 

@@ -2,7 +2,7 @@
 
 #== Doc ========================================================================
 #
-# Keep — a terminal UI for keeping texts and secrets, built on `pass`.
+# Keep — a command-line tool for keeping texts and secrets, built on `pass`.
 #
 # Usage: keep <command> [args...]        (`keep help` lists the commands)
 #   keep store  init | path | backup | restore | export | import
@@ -102,8 +102,7 @@ EOF
 
 #== Common Constants ===========================================================
 
-EXTRA_LINE="""
-"""
+EXTRA_LINE=$'\n'
 
 #== Command: Store =============================================================
 
@@ -204,14 +203,12 @@ function store-init() {
     store-exists || status=$?
     if (( status == 0 )); then
         die "A Keep store already exists at $STORE_PATH." \
-            "To create another one, run with ${EXTRA_LINE}" \
-            "    KEEP_STORE_DIR=<other-folder> $0 store init."
+            "To create another one, run with${EXTRA_LINE}    KEEP_STORE_DIR=<other-folder> $0 store init."
     fi
     if (( status == 2 )); then
         die "$STORE_PATH exists but is not a ready Keep store" \
             "(maybe an earlier \`keep store init\` did not finish)." \
-            "Remove it and run again, or run with ${EXTRA_LINE}" \
-            "    KEEP_STORE_DIR=<other-folder> $0 store init."
+            "Remove it and run again, or run with${EXTRA_LINE}    KEEP_STORE_DIR=<other-folder> $0 store init."
     fi
 
     local key uid expiry
@@ -837,8 +834,7 @@ function find-key() {
     matches=$(list-secret-keys "$1")
     [[ -n $matches ]] || die "No secret key matches '$1'."
     if (( $(printf '%s\n' "$matches" | wc -l) > 1 )); then
-        die "More than one secret key matches '$1'; use its fingerprint:${EXTRA_LINE}" \
-            "$(printf '%s\n' "$matches" | awk -F'\t' '{ print "    " $1 "  " $2 }')"
+        die "More than one secret key matches '$1'; use its fingerprint:${EXTRA_LINE}$(printf '%s\n' "$matches" | awk -F'\t' '{ print "    " $1 "  " $2 }')"
     fi
     printf '%s\n' "${matches%%$'\t'*}"
 }

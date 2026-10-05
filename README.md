@@ -1,6 +1,6 @@
 # Keep
 
-A terminal UI for password management. It is built heavily on top of [`pass`](https://www.passwordstore.org/),
+A command-line tool for password management. It is built heavily on top of [`pass`](https://www.passwordstore.org/),
     the standard Unix password manager.
 
 - Keep adds a store for plain-text values alongside the secrets -- "item" is the term used to mean both.
@@ -35,7 +35,7 @@ Every command, with examples: [MANUAL.md](MANUAL.md).
 - `git`
 - `tar`
 - `gzip`
-- `pbcopy`
+- one clipboard tool, only for `-c`: `pbcopy` (macOS), `wl-copy` (Wayland) or `xclip` (X11)
 
 # Common Environment Variables
 
