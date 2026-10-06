@@ -364,6 +364,114 @@ keep text edit web/user
 
 ---
 
+## `keep text generate`
+
+Generates a random text, saves, signs and commits it, then prints it. It mirrors
+`keep secret generate` (`pass generate`): the same characters and default length. It is kept
+plain, so use it for things like IDs, not passwords. Signing may ask for the key's passphrase.
+
+```
+keep text generate [-n|--no-symbols] [-i|--in-place|-f|--force] <name> [<length>]
+```
+
+| Option | Meaning |
+| --- | --- |
+| `<length>` | How many characters. Default 25 (`PASSWORD_STORE_GENERATED_LENGTH`). |
+| `-n`, `--no-symbols` | Letters and digits only. |
+| `-i`, `--in-place` | Replace only the first line of an existing text and keep the rest. Its signature is checked first. |
+| `-f`, `--force` | Overwrite an existing text without asking. |
+| `-h`, `--help` | Show the options and stop. Works without a store. |
+
+There is no `-c`/`--clip`. **An existing text is only asked about at a terminal.** From a script or
+pipe, it is overwritten (the old one stays in the git history).
+
+### Generate a text
+
+```bash
+keep text generate -n id/session 12
+```
+
+Saves a 12-character text of letters and digits as `id/session`, and prints it.
+
+---
+
+## `keep text rm`
+
+Removes a text, or every text in a folder with `-r`, and commits the removal. The text stays in
+the store's git history. It mirrors `keep secret rm` (`pass rm`), but **only texts are removed**:
+`-r` on a folder keeps the secrets in it.
+
+```
+keep text rm [-r|--recursive] [-f|--force] <name>
+```
+
+| Option | Meaning |
+| --- | --- |
+| `-r`, `--recursive` | Remove every text in a folder. |
+| `-f`, `--force` | Do not ask. |
+| `-h`, `--help` | Show the options and stop. Works without a store. |
+
+At a terminal it asks first. **From a script or pipe, it does not ask.** A name that is both a
+text and a folder means the text; end it with `/` for the folder.
+
+### Remove a text
+
+```bash
+keep text rm -f mail/work
+```
+
+---
+
+## `keep text mv`
+
+Renames or moves a text, or every text in a folder, and commits the change. It mirrors
+`keep secret mv` (`pass mv`), but **only texts are moved**: secrets in a moved folder stay where
+they are. A signature covers the text, not its name, so a moved text still verifies.
+
+```
+keep text mv [-f|--force] <old-name> <new-name>
+```
+
+| Option | Meaning |
+| --- | --- |
+| `-f`, `--force` | Overwrite without asking. |
+| `-h`, `--help` | Show the options and stop. Works without a store. |
+
+A `<new-name>` ending in `/`, or an existing folder, is a folder: the text keeps its name inside
+it. At a terminal, it asks before overwriting. **From a script or pipe, it overwrites.**
+
+### Rename a text
+
+```bash
+keep text mv web/user web/login
+```
+
+---
+
+## `keep text cp`
+
+Copies a text, or every text in a folder, and commits the copy. It mirrors `keep secret cp`
+(`pass cp`), but **only texts are copied**.
+
+```
+keep text cp [-f|--force] <old-name> <new-name>
+```
+
+| Option | Meaning |
+| --- | --- |
+| `-f`, `--force` | Overwrite without asking. |
+| `-h`, `--help` | Show the options and stop. Works without a store. |
+
+At a terminal, it asks before overwriting. **From a script or pipe, it overwrites.**
+
+### Copy a text
+
+```bash
+keep text cp web/user web/user-copy
+```
+
+---
+
 ## `keep secret ls`
 
 Lists the secrets in the Keep store as a tree: names only, never their values. It is `pass ls`
@@ -631,7 +739,9 @@ keep secret rm [-r|--recursive] [-f|--force] <name>
 | `-f`, `--force` | Do not ask. |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
-At a terminal it asks first. **From a script or pipe, it does not ask.**
+At a terminal it asks first. **From a script or pipe, it does not ask.** On a folder, `-r` removes
+everything in it, **texts included** — `pass` acts on the whole folder. (`keep text rm -r` removes
+only the texts.)
 
 ### Remove a secret
 
@@ -655,7 +765,8 @@ keep secret mv [-f|--force] <old-name> <new-name>
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
 A `<new-name>` ending in `/` is a folder: the secret keeps its name inside it. At a terminal, it
-asks before overwriting. **From a script or pipe, it overwrites.**
+asks before overwriting. **From a script or pipe, it overwrites.** A folder moves with everything
+in it, **texts included**.
 
 ### Rename a secret
 
@@ -678,7 +789,8 @@ keep secret cp [-f|--force] <old-name> <new-name>
 | `-f`, `--force` | Overwrite without asking. |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
-At a terminal, it asks before overwriting. **From a script or pipe, it overwrites.**
+At a terminal, it asks before overwriting. **From a script or pipe, it overwrites.** A folder is
+copied with everything in it, **texts included**.
 
 ### Copy a secret
 

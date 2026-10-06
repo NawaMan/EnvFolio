@@ -62,6 +62,10 @@ function help() {
         "text show")       text-show-help       ;;
         "text insert")     text-insert-help     ;;
         "text edit")       text-edit-help       ;;
+        "text generate")   text-generate-help   ;;
+        "text rm")         text-rm-help         ;;
+        "text mv")         text-mv-help         ;;
+        "text cp")         text-cp-help         ;;
         "secret ls")       secret-ls-help       ;;
         "secret find")     secret-find-help     ;;
         "secret grep")     secret-grep-help     ;;
@@ -93,7 +97,10 @@ Commands:
   text show         Show a text (its signature checked)
   text insert       Add a text (plain, signed)
   text edit         Edit a text in $EDITOR
-  text ...          Other text commands (not yet)
+  text generate     Generate a random text
+  text rm           Remove a text
+  text mv           Rename or move a text
+  text cp           Copy a text
   secret ls         List secrets
   secret find       Find secrets by name
   secret grep       Find secrets by value
@@ -579,12 +586,215 @@ function text-edit() {
     save-text "$name" "$action text for $name using $editor." < "$tmp_file"
 }
 
-# --- Not yet ------------------------------------------------------------------
+# --- text generate ------------------------------------------------------------
 
-function text-generate() { not-yet "text generate" ; }
-function text-rm()       { not-yet "text rm" ; }
-function text-mv()       { not-yet "text mv" ; }
-function text-cp()       { not-yet "text cp" ; }
+function text-generate-help() {
+    cat <<'EOF'
+Usage: keep text generate [-n|--no-symbols] [-i|--in-place|-f|--force] <name> [<length>]
+
+Generate a random text (25 characters unless <length> is given), save and sign it, and print it.
+It is a text, kept plain — for a random password, use `keep secret generate`.
+
+Options:
+  -n, --no-symbols    Letters and digits only.
+  -i, --in-place      Replace only the first line of an existing text; keep the rest.
+  -f, --force         Overwrite an existing text without asking (only asked at a terminal).
+  -h, --help          Show this help and stop.
+EOF
+}
+
+# keep text generate [-n|--no-symbols] [-i|--in-place|-f|--force] <name> [<length>]
+# As `pass generate`, for a text: the same characters and length, then saved and signed.
+function text-generate() {
+    local chars=${PASSWORD_STORE_CHARACTER_SET:-[:punct:][:alnum:]} inplace=0 force=0 args=() arg
+    while (( $# > 0 )); do
+        arg=$1 ; shift
+        case $arg in
+            -h|--help)       text-generate-help ; return 0 ;;
+            -n|--no-symbols) chars=${PASSWORD_STORE_CHARACTER_SET_NO_SYMBOLS:-[:alnum:]} ;;
+            -i|--in-place)   inplace=1 ;;
+            -f|--force)      force=1 ;;
+            --)              args+=("$@") ; break ;;
+            -*)              die "text generate: unknown option: $arg" ;;
+            *)               args+=("$arg") ;;
+        esac
+    done
+    (( (${#args[@]} == 1 || ${#args[@]} == 2) && !(inplace && force) )) \
+        || die "Usage: keep text generate [-n|--no-symbols] [-i|--in-place|-f|--force] <name> [<length>]"
+    local name=${args[0]} length=${args[1]:-${PASSWORD_STORE_GENERATED_LENGTH:-25}} file text
+    [[ -n $name && $name != */ && /$name/ != */../* ]] || die "text generate: '$name' is not a valid name."
+    [[ $length =~ ^[0-9]+$ && $length -gt 0 ]] || die "text generate: the length must be a number above 0."
+    require-store
+    file=$STORE_PATH/$name.txt
+
+    if [[ -e $file ]] && (( ! inplace && ! force )) && [[ -t 0 ]]; then
+        confirm "An entry already exists for $name. Overwrite it?" || exit 1
+    fi
+    read -r -n "$length" text < <(LC_ALL=C tr -dc "$chars" < /dev/urandom)
+    [[ ${#text} -eq $length ]] || die "text generate: could not generate a text from /dev/urandom."
+
+    if (( inplace )) && [[ -f $file ]]; then
+        # The rest of the text is kept, so it must be the one Keep signed.
+        verify-text "$name"
+        { printf '%s\n' "$text" ; tail -n +2 "$file" ; } \
+            | save-text "$name" "Replace generated text for $name." || exit 1
+    else
+        printf '%s\n' "$text" | save-text "$name" "Add generated text for $name." || exit 1
+    fi
+    printf 'The generated text for %s is:\n%s\n' "$name" "$text"
+}
+
+# --- text rm ------------------------------------------------------------------
+
+function text-rm-help() {
+    cat <<'EOF'
+Usage: keep text rm [-r|--recursive] [-f|--force] <name>
+
+Remove a text, or every text in a folder with --recursive (secrets in it are kept). At a
+terminal, asks first unless --force; from a script or pipe, it does not ask.
+The removed text stays in the store's git history.
+
+Options:
+  -r, --recursive     Remove every text in a folder.
+  -f, --force         Do not ask.
+  -h, --help          Show this help and stop.
+EOF
+}
+
+# keep text rm [-r|--recursive] [-f|--force] <name>
+# As `pass rm`, for texts: <name> is a text, or — ending in / or not a text — a folder.
+function text-rm() {
+    local recursive=0 force=0 names=() arg
+    while (( $# > 0 )); do
+        arg=$1 ; shift
+        case $arg in
+            -h|--help)      text-rm-help ; return 0 ;;
+            -r|--recursive) recursive=1 ;;
+            -f|--force)     force=1 ;;
+            --)             names+=("$@") ; break ;;
+            -*)             die "text rm: unknown option: $arg" ;;
+            *)              names+=("$arg") ;;
+        esac
+    done
+    (( ${#names[@]} == 1 )) || die "Usage: keep text rm [-r|--recursive] [-f|--force] <name>"
+    local name=${names[0]} path=${names[0]%/} folder=0
+    [[ -n $path && /$path/ != */../* ]] || die "text rm: '$name' is not a valid name."
+    require-store
+
+    if [[ -f $STORE_PATH/$path.txt && ! ( $name == */ && -d $STORE_PATH/$path ) ]]; then
+        folder=0
+    elif [[ -d $STORE_PATH/$path ]]; then
+        (( recursive )) || die "text rm: '$path' is a folder; use -r to remove the texts in it."
+        folder=1
+    else
+        die "text rm: '$name' is not in the store."
+    fi
+    (( force )) || [[ ! -t 0 ]] || confirm "Are you sure you would like to delete $path?" || exit 1
+
+    if (( folder )); then
+        find "$STORE_PATH/$path" -type f \( -name '*.txt' -o -name '*.txt.sig' \) -exec rm -f -- {} +
+        find "$STORE_PATH/$path" -depth -type d -empty -exec rmdir -- {} \;
+        # git's * matches across folders: every text under <path>.
+        git -C "$STORE_PATH" rm -r -q --cached --ignore-unmatch -- "$path/*.txt" "$path/*.txt.sig"
+    else
+        rm -f -- "$STORE_PATH/$path.txt" "$STORE_PATH/$path.txt.sig"
+        git -C "$STORE_PATH" rm -q --cached --ignore-unmatch -- "$path.txt" "$path.txt.sig"
+    fi
+    rmdir -p "$(dirname "$STORE_PATH/$path")" 2>/dev/null
+    git -C "$STORE_PATH" diff --cached --quiet || git -C "$STORE_PATH" commit --quiet -m "Remove $path from store."
+}
+
+# --- text mv / cp -------------------------------------------------------------
+
+function text-mv-help() {
+    cat <<'EOF'
+Usage: keep text mv [-f|--force] <old-name> <new-name>
+
+Rename or move a text, or every text in a folder (secrets in it stay where they are). At a
+terminal, asks before overwriting unless --force; from a script or pipe, it overwrites.
+
+Options:
+  -f, --force         Overwrite without asking.
+  -h, --help          Show this help and stop.
+EOF
+}
+
+function text-cp-help() {
+    cat <<'EOF'
+Usage: keep text cp [-f|--force] <old-name> <new-name>
+
+Copy a text, or every text in a folder (secrets in it are not copied). At a terminal, asks before
+overwriting unless --force; from a script or pipe, it overwrites.
+
+Options:
+  -f, --force         Overwrite without asking.
+  -h, --help          Show this help and stop.
+EOF
+}
+
+function text-mv() { text-copy-move mv "$@" ; }
+function text-cp() { text-copy-move cp "$@" ; }
+
+# text-copy-move <mv|cp> [-f|--force] <old-name> <new-name>
+# As `pass mv` / `pass cp`, for texts. A signature covers the text, not its name, so it moves with
+# it and still verifies.
+function text-copy-move() {
+    local how=$1 force=0 names=() arg ; shift
+    while (( $# > 0 )); do
+        arg=$1 ; shift
+        case $arg in
+            -h|--help)  "text-$how-help" ; return 0 ;;
+            -f|--force) force=1 ;;
+            --)         names+=("$@") ; break ;;
+            -*)         die "text $how: unknown option: $arg" ;;
+            *)          names+=("$arg") ;;
+        esac
+    done
+    (( ${#names[@]} == 2 )) || die "Usage: keep text $how [-f|--force] <old-name> <new-name>"
+    local old=${names[0]} new=${names[1]} src=${names[0]%/} dest
+    [[ -n $src     && /$src/ != */../* ]] || die "text $how: '$old' is not a valid name."
+    [[ -n ${new%/} && /$new/ != */../* ]] || die "text $how: '$new' is not a valid name."
+    require-store
+
+    # The names to carry over: each old one in from[], its new one in to[].
+    local from=() to=() file rel i
+    if [[ -f $STORE_PATH/$src.txt && ! ( $old == */ && -d $STORE_PATH/$src ) ]]; then
+        # One text; into <new> when that is a folder (and not also a text), as mv/cp do.
+        dest=${new%/}
+        [[ $new == */ || ( -d $STORE_PATH/$dest && ! -f $STORE_PATH/$dest.txt ) ]] && dest=$dest/${src##*/}
+        from=("$src") ; to=("$dest")
+    elif [[ -d $STORE_PATH/$src ]]; then
+        # Every text in a folder; into <new> when that folder exists already, as mv/cp do.
+        dest=${new%/}
+        [[ -d $STORE_PATH/$dest ]] && dest=$dest/${src##*/}
+        while IFS= read -r -d '' file; do
+            rel=${file#"$STORE_PATH/$src"/} ; rel=${rel%.txt}
+            from+=("$src/$rel") ; to+=("$dest/$rel")
+        done < <(find "$STORE_PATH/$src" -type f -name '*.txt' -print0)
+        (( ${#from[@]} > 0 )) || die "text $how: '$old' holds no texts."
+    else
+        die "text $how: '$old' is not in the store."
+    fi
+
+    for (( i = 0; i < ${#from[@]}; i++ )); do
+        [[ ${from[i]} != "${to[i]}" ]] || continue
+        if [[ -e $STORE_PATH/${to[i]}.txt ]] && (( ! force )) && [[ -t 0 ]]; then
+            confirm "An entry already exists for ${to[i]}. Overwrite it?" || continue
+        fi
+        mkdir -p "$(dirname "$STORE_PATH/${to[i]}")"
+        for file in "${from[i]}.txt" "${from[i]}.txt.sig"; do
+            [[ -e $STORE_PATH/$file ]] && "$how" -f -- "$STORE_PATH/$file" "$STORE_PATH/${to[i]}${file#"${from[i]}"}"
+        done
+        if [[ $how == mv ]]; then
+            git -C "$STORE_PATH" rm -q --cached --ignore-unmatch -- "${from[i]}.txt" "${from[i]}.txt.sig"
+            rmdir -p "$(dirname "$STORE_PATH/${from[i]}")" 2>/dev/null
+        fi
+        git -C "$STORE_PATH" add -- "${to[i]}.txt"
+        [[ -e $STORE_PATH/${to[i]}.txt.sig ]] && git -C "$STORE_PATH" add -- "${to[i]}.txt.sig"
+    done
+    local verb=Copy ; [[ $how == mv ]] && verb=Rename
+    git -C "$STORE_PATH" diff --cached --quiet || git -C "$STORE_PATH" commit --quiet -m "$verb $old to $new."
+}
 
 #== Command: Secret ============================================================
 
