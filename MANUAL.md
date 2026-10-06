@@ -213,6 +213,36 @@ Search Terms: home
 
 ---
 
+## `keep text grep`
+
+Prints the lines of every text that match, each under its text's name. It mirrors
+`keep secret grep`: the same loop as `pass grep`, reading the plain texts instead of decrypting
+secrets. Secrets are never searched. Signatures are not checked here (`keep text show` will).
+
+```
+keep text grep [<grep-option>...] <pattern>
+```
+
+| Option | Meaning |
+| --- | --- |
+| `<grep-option>` | Any option of `grep`, e.g. `-i` to ignore case. |
+| `-h`, `--help` | Show the options and stop. Works without a store. In Keep, `-h` is always help, never grep's `-h`. |
+
+It needs a ready store (`keep store init`).
+
+### Find by value
+
+```bash
+keep text grep jane
+```
+
+```
+web/user:
+jane
+```
+
+---
+
 ## `keep text show`
 
 Prints a text, after checking its signature: `<name>.txt.sig` must be there, match the text, and
@@ -245,36 +275,6 @@ is not printed and the command fails. The message says how to see what changed
 
 ```bash
 keep text insert -f -m web/user < ~/.keep/web/user.txt
-```
-
----
-
-## `keep text grep`
-
-Prints the lines of every text that match, each under its text's name. It mirrors
-`keep secret grep`: the same loop as `pass grep`, reading the plain texts instead of decrypting
-secrets. Secrets are never searched. Signatures are not checked here (`keep text show` will).
-
-```
-keep text grep [<grep-option>...] <pattern>
-```
-
-| Option | Meaning |
-| --- | --- |
-| `<grep-option>` | Any option of `grep`, e.g. `-i` to ignore case. |
-| `-h`, `--help` | Show the options and stop. Works without a store. In Keep, `-h` is always help, never grep's `-h`. |
-
-It needs a ready store (`keep store init`).
-
-### Find by value
-
-```bash
-keep text grep jane
-```
-
-```
-web/user:
-jane
 ```
 
 ---
@@ -333,6 +333,34 @@ keep text insert -m notes/todo < todo.txt
 ```
 
 All of stdin is the text, kept exactly.
+
+---
+
+## `keep text edit`
+
+Opens a text in `$EDITOR` (`vi` if unset), or adds it if it is new, then signs and commits it. It
+mirrors `keep secret edit` (`pass edit`): you edit a temporary copy, removed afterwards, and the
+text is saved only if you changed it. Signing may ask for the key's passphrase.
+
+```
+keep text edit <name>
+```
+
+| Option | Meaning |
+| --- | --- |
+| `-h`, `--help` | Show the options and stop. Works without a store. |
+
+**The signature is checked first**, as `keep text show` does: a text changed outside Keep is not
+opened, so editing never signs it by accident. If you save it unchanged, it fails with *Text
+unchanged.* and nothing is committed. It needs a ready store (`keep store init`).
+
+### Edit a text
+
+```bash
+keep text edit web/user
+```
+
+*Interactive — checked by hand, and tested with a stand-in editor.*
 
 ---
 

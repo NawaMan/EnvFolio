@@ -61,6 +61,7 @@ function help() {
         "text grep")       text-grep-help       ;;
         "text show")       text-show-help       ;;
         "text insert")     text-insert-help     ;;
+        "text edit")       text-edit-help       ;;
         "secret ls")       secret-ls-help       ;;
         "secret find")     secret-find-help     ;;
         "secret grep")     secret-grep-help     ;;
@@ -91,6 +92,7 @@ Commands:
   text grep         Find texts by value
   text show         Show a text (its signature checked)
   text insert       Add a text (plain, signed)
+  text edit         Edit a text in $EDITOR
   text ...          Other text commands (not yet)
   secret ls         List secrets
   secret find       Find secrets by name
@@ -331,6 +333,41 @@ function text() {
 # A text is a plain file in the store, laid out like the secrets: <name>.txt next to <name>.gpg,
 # with <name>.txt.sig — a detached signature by the store's key, so a changed text can be told.
 
+# save-text <name> <commit-message> < content: write, sign and commit <name>.txt.
+# The text and its signature are written beside the old ones and swapped in only once signing
+# worked, so a failed signature leaves the old text as it was.
+function save-text() {
+    local name=$1 message=$2 file=$STORE_PATH/$1.txt key
+    umask "${PASSWORD_STORE_UMASK:-077}"
+    key=$(head -n 1 "$STORE_PATH/.gpg-id")
+    mkdir -p "$(dirname "$file")"
+    cat > "$file.new"
+    if ! gpg --quiet --yes --local-user "$key" --detach-sign --output "$file.sig.new" "$file.new"; then
+        rm -f "$file.new" "$file.sig.new"
+        die "signing failed; nothing was saved."
+    fi
+    mv "$file.new" "$file" && mv "$file.sig.new" "$file.sig"
+
+    git -C "$STORE_PATH" add -- "$name.txt" "$name.txt.sig"
+    git -C "$STORE_PATH" diff --cached --quiet || git -C "$STORE_PATH" commit --quiet -m "$message"
+}
+
+# verify-text <name>: die unless <name>.txt.sig is there, matches, and is by the store's key (the
+# first in .gpg-id) — i.e. the text was not changed outside Keep. Needs no passphrase.
+function verify-text() {
+    local name=$1 file=$STORE_PATH/$1.txt store_key signer check
+    check="Uncommitted change:  git -C $STORE_PATH diff -- $name.txt${EXTRA_LINE}"
+    check+="Its history:         git -C $STORE_PATH log -p -- $name.txt${EXTRA_LINE}"
+    check+="If the text is right, sign it again:  keep text insert -f -m $name < $file"
+    [[ -f $file.sig ]] || die "'$name' has no signature.${EXTRA_LINE}$check"
+    # VALIDSIG's last field is the signing key's primary fingerprint; gpg prints it for a good one only.
+    store_key=$(gpg --list-keys --with-colons "$(head -n 1 "$STORE_PATH/.gpg-id")" 2>/dev/null \
+        | awk -F: '$1 == "fpr" { print $10; exit }')
+    signer=$(gpg --status-fd 1 --verify "$file.sig" "$file" 2>/dev/null | awk '$2 == "VALIDSIG" { print $NF }')
+    [[ -n $signer && $signer == "$store_key" ]] \
+        || die "the signature of '$name' does not verify with the store's key.${EXTRA_LINE}$check"
+}
+
 # --- text ls ------------------------------------------------------------------
 
 function text-ls-help() {
@@ -432,23 +469,12 @@ EOF
 function text-show() {
     case ${1:-} in -h|--help) text-show-help ; return 0 ;; esac
     (( $# == 1 )) || die "Usage: keep text show <name>"
-    local name=$1 file store_key signer check
+    local name=$1
     [[ $name != -* && /$name/ != */../* ]] || die "text show: '$name' is not a valid name."
     require-store
-    file=$STORE_PATH/$name.txt
-    [[ -f $file ]] || die "text show: '$name' is not a text in the store."
-
-    check="Uncommitted change:  git -C $STORE_PATH diff -- $name.txt${EXTRA_LINE}"
-    check+="Its history:         git -C $STORE_PATH log -p -- $name.txt${EXTRA_LINE}"
-    check+="If the text is right, sign it again:  keep text insert -f -m $name < $file"
-    [[ -f $file.sig ]] || die "text show: '$name' has no signature.${EXTRA_LINE}$check"
-    # VALIDSIG's last field is the signing key's primary fingerprint; gpg prints it for a good one only.
-    store_key=$(gpg --list-keys --with-colons "$(head -n 1 "$STORE_PATH/.gpg-id")" 2>/dev/null \
-        | awk -F: '$1 == "fpr" { print $10; exit }')
-    signer=$(gpg --status-fd 1 --verify "$file.sig" "$file" 2>/dev/null | awk '$2 == "VALIDSIG" { print $NF }')
-    [[ -n $signer && $signer == "$store_key" ]] \
-        || die "text show: the signature of '$name' does not verify with the store's key.${EXTRA_LINE}$check"
-    cat "$file"
+    [[ -f $STORE_PATH/$name.txt ]] || die "text show: '$name' is not a text in the store."
+    verify-text "$name"
+    cat "$STORE_PATH/$name.txt"
 }
 
 # --- text insert --------------------------------------------------------------
@@ -487,7 +513,7 @@ function text-insert() {
         esac
     done
     (( ${#names[@]} == 1 )) || die "Usage: keep text insert [-m|--multiline] [-f|--force] [-t|--text <text>] <name>"
-    local name=${names[0]} file key content
+    local name=${names[0]} file content
     # As pass's check_sneaky_paths: no way out of the store.
     [[ -n $name && $name != */ && /$name/ != */../* ]] || die "text insert: '$name' is not a valid name."
     require-store
@@ -508,25 +534,53 @@ function text-insert() {
         content=$text$'\n'
     fi
 
-    # Write and sign side files first, so a failed signature leaves the old text as it was.
-    umask "${PASSWORD_STORE_UMASK:-077}"
-    key=$(head -n 1 "$STORE_PATH/.gpg-id")
-    mkdir -p "$(dirname "$file")"
-    printf '%s' "$content" > "$file.new"
-    if ! gpg --quiet --yes --local-user "$key" --detach-sign --output "$file.sig.new" "$file.new"; then
-        rm -f "$file.new" "$file.sig.new"
-        die "text insert: signing failed; nothing was saved."
-    fi
-    mv "$file.new" "$file" && mv "$file.sig.new" "$file.sig"
+    printf '%s' "$content" | save-text "$name" "Add given text for $name to store."
+}
 
-    git -C "$STORE_PATH" add -- "$name.txt" "$name.txt.sig"
-    git -C "$STORE_PATH" diff --cached --quiet \
-        || git -C "$STORE_PATH" commit --quiet -m "Add given text for $name to store."
+# --- text edit ----------------------------------------------------------------
+
+function text-edit-help() {
+    cat <<'EOF'
+Usage: keep text edit <name>
+
+Edit a text in $EDITOR (vi if unset), or add it if it is new; then sign and commit it. The text's
+signature is checked first: a text changed outside Keep is not opened.
+
+Options:
+  -h, --help          Show this help and stop.
+EOF
+}
+
+# keep text edit <name>
+# As `pass edit`: edit a copy, keep it only if it changed. A text is checked first, so editing never
+# signs a text that was changed outside Keep.
+function text-edit() {
+    case ${1:-} in -h|--help) text-edit-help ; return 0 ;; esac
+    (( $# == 1 )) || die "Usage: keep text edit <name>"
+    local name=${1%/} file tmp_dir tmp_file action=Add editor=${EDITOR:-vi}
+    [[ -n $name && $name != -* && /$name/ != */../* ]] || die "text edit: '$name' is not a valid name."
+    require-store
+    file=$STORE_PATH/$name.txt
+    tmp_dir=$(mktemp -d)
+    # shellcheck disable=SC2064  # the folder is known now; expand it now
+    trap "rm -rf -- '$tmp_dir'" EXIT
+    tmp_file=$tmp_dir/${name//\//-}.txt
+
+    if [[ -f $file ]]; then
+        verify-text "$name"
+        cp "$file" "$tmp_file"
+        action=Edit
+    fi
+    # Unquoted, as pass does: EDITOR may carry arguments, e.g. "code --wait".
+    # shellcheck disable=SC2086
+    $editor "$tmp_file"
+    [[ -f $tmp_file ]] || die "Text not saved."
+    [[ -f $file ]] && cmp -s "$file" "$tmp_file" && die "Text unchanged."
+    save-text "$name" "$action text for $name using $editor." < "$tmp_file"
 }
 
 # --- Not yet ------------------------------------------------------------------
 
-function text-edit()     { not-yet "text edit" ; }
 function text-generate() { not-yet "text generate" ; }
 function text-rm()       { not-yet "text rm" ; }
 function text-mv()       { not-yet "text mv" ; }
