@@ -55,6 +55,7 @@ function help() {
     case "$*" in
         "")                keep-help            ;;
         "store init")      store-init-help      ;;
+        "ls")              list-help            ;;
         "text ls")         text-ls-help         ;;
         "text insert")     text-insert-help     ;;
         "secret ls")       secret-ls-help       ;;
@@ -95,7 +96,7 @@ Commands:
   secret rm         Remove a secret
   secret mv         Rename or move a secret
   secret cp         Copy a secret
-  ls                List texts and secrets (not yet)
+  ls                List texts and secrets together
   version           Print Keep's version
   help [command]    Show help, e.g. `keep help store init`
 
@@ -702,7 +703,31 @@ function secret-cp() { call-pass secret-cp-help cp "$@" ; }
 
 #== Command: List ==============================================================
 
-function list() { not-yet "ls" ; }
+function list-help() {
+    cat <<'EOF'
+Usage: keep ls [<subfolder>]
+
+List the texts and secrets in the Keep store together as a tree — names only, never values.
+Each name is marked (S) for a secret or (T) for a text. Give a subfolder to list only what is
+under it.
+
+Options:
+  -h, --help          Show this help and stop.
+EOF
+}
+
+# keep ls [<subfolder>]
+# `secret ls` and `text ls` in one tree. Only a folder, as they are.
+function list() {
+    case ${1:-} in -h|--help) list-help ; return 0 ;; esac
+    (( $# <= 1 )) || die "Usage: keep ls [<subfolder>]"
+    require-store
+    [[ $# -eq 0 || ( $1 != -* && /$1/ != */../* && -d $STORE_PATH/$1 ) ]] \
+        || die "ls: '$1' is not a folder in the store."
+    echo "Keep Store"
+    [[ $# -eq 0 ]] || echo "${1%/}"
+    store-tree all "$STORE_PATH/${1:-}"
+}
 
 #== Common Functions ===========================================================
 
@@ -721,14 +746,24 @@ function call-pass() {
     pass "$command" "$@"
 }
 
-# store-tree <gpg|txt> <folder> [tree-option...]: the secrets (gpg) or texts (txt) under <folder>
-# as a tree, names only. pass's own `tree` line (ls, find), plus leaving out the other kind and
-# folders holding none of this kind.
+# store-tree <gpg|txt|all> <folder> [tree-option...]: the secrets (gpg), the texts (txt) or both
+# (all) under <folder> as a tree, names only. pass's own `tree` line (ls, find), plus leaving out
+# signatures, the other kind, and folders left empty. With all, each name gets (S) or (T) in front.
 function store-tree() {
-    local ext=$1 folder=$2 others='*.txt|*.txt.sig' ; shift 2
-    [[ $ext == txt ]] && others='*.gpg|*.txt.sig'
+    local kind=$1 folder=$2 others ; shift 2
+    case $kind in
+        gpg) others='*.txt|*.txt.sig' ;;
+        txt) others='*.gpg|*.txt.sig' ;;
+        all) others='*.txt.sig'       ;;
+    esac
     tree -N -C -l --noreport -I "$others" --prune "$@" "$folder" | tail -n +2 \
-        | sed -E "s/\\.$ext(\x1B\\[[0-9]+m)?( ->|\$)/\\1\\2/g"
+        | if [[ $kind == all ]]; then
+            # "├── name.gpg" -> "├── (S) name"; tree draws "|-- " instead outside UTF-8.
+            sed -E -e 's/^(.*(── |-- ))(.*)\.gpg(\x1B\[[0-9]+m)?( ->.*)?$/\1(S) \3\4\5/' \
+                   -e 's/^(.*(── |-- ))(.*)\.txt(\x1B\[[0-9]+m)?( ->.*)?$/\1(T) \3\4\5/'
+        else
+            sed -E "s/\\.$kind(\x1B\\[[0-9]+m)?( ->|\$)/\\1\\2/g"
+        fi
 }
 
 # --- Requirements -------------------------------------------------------------

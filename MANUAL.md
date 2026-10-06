@@ -102,6 +102,47 @@ run is kept, and shows up in the key menu.
 
 ---
 
+## `keep ls`
+
+Lists the texts and secrets in the Keep store together as one tree: names only, never values.
+Each name is marked **(S)** for a secret or **(T)** for a text. A name that is both shows twice.
+Signatures (`.txt.sig`) are left out.
+
+```
+keep ls [<subfolder>]
+```
+
+| Option | Meaning |
+| --- | --- |
+| `-h`, `--help` | Show the options and stop. Works without a store. |
+
+Only a folder can be listed. It needs a ready store (`keep store init`).
+
+### List everything
+
+```bash
+keep ls
+```
+
+```
+Keep Store
+├── (T) note
+└── web
+    ├── (S) github
+    ├── (T) github
+    └── (T) home
+```
+
+### List one folder
+
+```bash
+keep ls web
+```
+
+Lists only what is under `web`.
+
+---
+
 ## `keep text ls`
 
 Lists the texts in the Keep store as a tree: names only. It mirrors `keep secret ls`: the same

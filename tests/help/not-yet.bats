@@ -25,7 +25,7 @@ teardown() {
     local command stdout
     for command in "store backup" "store restore" "store export" "store import" \
                    "text find" "text grep" "text show" \
-                   "text edit" "text generate" "text rm" "text mv" "text cp" "ls"; do
+                   "text edit" "text generate" "text rm" "text mv" "text cp"; do
         # shellcheck disable=SC2086  # split "store backup" into its words
         run "$KEEP" $command < /dev/null
         [ "$status" -eq 1 ]

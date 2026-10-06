@@ -15,6 +15,7 @@ User-visible changes to Keep. Newest first.
   put a secret on screen without asking are refused: `insert --echo`, and `--qrcode` on `show`
   and `generate`. `secret ls` lists folders only; `secret show` shows entries only. `secret ls` and
   `secret find` leave texts out.
+- `keep ls` — lists texts and secrets together in one tree, each marked (S) or (T).
 - `keep text ls` — lists the texts as a tree, names only; mirrors `keep secret ls`.
 - `keep text insert` — adds a text: kept plain as `<name>.txt` in the same layout as the secrets,
   signed with the store's key as `<name>.txt.sig`, and committed. `-t <text>` gives it on the
