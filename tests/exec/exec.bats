@@ -90,6 +90,44 @@ make-store() {
     [[ $stderr == *"'[x]y/z' would be [X]Y_Z"* ]]
 }
 
+@test "MANUAL: exec — load everything" {
+    make-store
+    run --separate-stderr "$KEEP" exec --all -- sh -c 'echo "$GIT_EMAIL|$GH_USER|${GH_TOKEN-unset}|$BOTH_X|$MULTI_CERT"'
+    [ "$status" -eq 0 ]
+    [ "$output" = $'test@example.com|shared-user|unset|both text|line one\nline two' ]
+    # Secrets left out are counted outside the namespaces only: gh/token, both/x.
+    [[ $stderr == *"keep exec: left out 2 secret(s) in the store; add --secrets to load them."* ]]
+    [[ $stderr == *"'odd/api-key' would be ODD_API-KEY"* ]]
+}
+
+@test "exec --all: loads first wherever it is typed; namespaces and VAR= layer over it" {
+    make-store
+    run --separate-stderr "$KEEP" exec @nawa --all -- printenv GH_USER
+    [ "$output" = "nawa-user" ]
+    run --separate-stderr "$KEEP" exec --all X=@nawa/gh/user -- sh -c 'echo "$X|$GH_USER"'
+    [ "$output" = "nawa-user|shared-user" ]
+    # With --secrets, both/x (a text and a secret) is refused; without it, all secrets load.
+    run "$KEEP" exec --all --secrets -- touch "$SANDBOX/ran"
+    [ "$status" -eq 1 ]
+    [ ! -e "$SANDBOX/ran" ]
+    "$KEEP" secret rm -f both/x < /dev/null >/dev/null
+    run --separate-stderr "$KEEP" exec --all --secrets -- printenv GH_TOKEN
+    [ "$status" -eq 0 ]
+    [ "$output" = "shared-token" ]
+    # --all on a store of only namespaced entries: nothing to load.
+    rm -rf "$KEEP_STORE_DIR"/{git,gh,odd,both,multi}
+    run "$KEEP" exec --all -- true
+    [ "$status" -eq 1 ]
+    [[ $output == *"the store has no entries to load"* ]]
+}
+
+@test "shell --all: needs no entry" {
+    make-store
+    SHELL=/bin/sh run --separate-stderr "$KEEP" shell --all < <(printf 'echo "$GIT_USER_NAME"\n')
+    [ "$status" -eq 0 ]
+    [ "$output" = "Test User" ]
+}
+
 @test "MANUAL: exec — pick the variable name" {
     make-store
     run "$KEEP" exec --secrets GITHUB_TOKEN=gh/token gh -- sh -c 'echo "$GITHUB_TOKEN|${GH_TOKEN-unset}|$GH_USER"'
@@ -144,7 +182,7 @@ make-store() {
     [ "$status" -eq 1 ]
     [ ! -e "$SANDBOX/ran" ]
     # Without --secrets only the text loads.
-    run "$KEEP" exec both -- printenv BOTH_X
+    run --separate-stderr "$KEEP" exec both -- printenv BOTH_X
     [ "$status" -eq 0 ]
     [ "$output" = "both text" ]
 }
@@ -154,8 +192,34 @@ make-store() {
     run "$KEEP" exec gh/token -- true
     [ "$status" -eq 1 ]
     [[ $output == *"'gh/token' is a secret; add --secrets"* ]]
-    run "$KEEP" exec gh -- sh -c 'echo "${GH_TOKEN-unset}|$GH_USER"'
+    run --separate-stderr "$KEEP" exec gh -- sh -c 'echo "${GH_TOKEN-unset}|$GH_USER"'
     [ "$output" = "unset|shared-user" ]
+    [ "$stderr" = "keep exec: left out 1 secret(s) under 'gh'; add --secrets to load them." ]
+    # A folder of secrets only: nothing to load without --secrets.
+    "$KEEP" secret insert -m only/s < <(printf 'x\n') >/dev/null
+    run "$KEEP" exec only -- touch "$SANDBOX/ran"
+    [ "$status" -eq 1 ]
+    [[ $output == *"only secrets under 'only' (1); add --secrets"* ]]
+    [ ! -e "$SANDBOX/ran" ]
+}
+
+@test "exec: a name bash keeps for itself is refused; Keep's own names load like any other" {
+    make-store
+    "$KEEP" text insert -t "seed" random    < /dev/null
+    "$KEEP" text insert -t "me"   uid       < /dev/null
+    "$KEEP" text insert -t "ev"   exec/vars < /dev/null
+    run "$KEEP" exec random -- touch "$SANDBOX/ran"
+    [ "$status" -eq 1 ]
+    [[ $output == *"could not set RANDOM"*"VAR=<name>"* ]]
+    run "$KEEP" exec uid -- touch "$SANDBOX/ran"
+    [ "$status" -eq 1 ]
+    [[ $output == *"could not set UID"* ]]
+    [ ! -e "$SANDBOX/ran" ]
+    run "$KEEP" exec SEED=random -- printenv SEED
+    [ "$output" = "seed" ]
+    run "$KEEP" exec exec/vars pairs=git/email entries=git/user_name -- sh -c 'echo "$EXEC_VARS|$pairs|$entries"'
+    [ "$status" -eq 0 ]
+    [ "$output" = "ev|test@example.com|Test User" ]
 }
 
 @test "exec: a text changed outside Keep stops everything; the command does not run" {

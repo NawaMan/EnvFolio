@@ -9,7 +9,9 @@ User-visible changes to Keep. Newest first.
 - `keep exec` and `keep shell` — run a command, or your shell, with entries from the store as
   environment variables; secrets only with `--secrets`. A variable is named by the entry's path,
   a top `@namespace` folder removed (`@nawa/gh/token` → `GH_TOKEN`); a later entry overrides an
-  earlier one, and `VAR=<name>` overrides them all. Values are never printed.
+  earlier one, and `VAR=<name>` overrides them all. `--all` loads every entry outside the
+  namespaces first. Values are never printed. Secrets left out for want of `--secrets` are
+  counted on stderr; a name bash keeps for itself (`RANDOM`, `UID`) is refused.
 - `keep store init` — creates the Keep store (`$KEEP_STORE_DIR`, default `~/.keep`): picks or
   creates the GPG key, runs `pass init`, and starts the store's git history. Options: `--key`,
   `--new-key`, `--name`, `--email`, `--passphrase-stdin`.

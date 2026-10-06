@@ -1103,7 +1103,7 @@ function list() {
 
 function run-exec-help() {
     cat <<'HELP'
-Usage: keep exec [-s|--secrets] <entry>... -- <command> [<arg>...]
+Usage: keep exec [-s|--secrets] [-a|--all] <entry>... -- <command> [<arg>...]
 
 Run a command with entries from the store as environment variables. Texts load by default;
 secrets only with --secrets. Values are never printed.
@@ -1115,13 +1115,14 @@ later entry overrides an earlier one; VAR=<name> overrides them all.
 
 Options:
   -s, --secrets       Also load secrets.
+  -a, --all           Load every entry outside the @namespaces first; <entry> is then optional.
   -h, --help          Show this help and stop.
 HELP
 }
 
 function run-shell-help() {
     cat <<'HELP'
-Usage: keep shell [-s|--secrets] <entry>...
+Usage: keep shell [-s|--secrets] [-a|--all] <entry>...
 
 Start your shell ($SHELL) with entries from the store as environment variables, and say which
 names were loaded (never their values). KEEP_SHELL=1 is set. Type `exit` to leave.
@@ -1129,6 +1130,7 @@ Entries and variable names are as in `keep exec`.
 
 Options:
   -s, --secrets       Also load secrets.
+  -a, --all           Load every entry outside the @namespaces first; <entry> is then optional.
   -h, --help          Show this help and stop.
 HELP
 }
@@ -1142,25 +1144,29 @@ VAR_NAME_PATTERN='^[A-Za-z_][A-Za-z0-9_]*$'
 # Read every entry first, then export them all at once and exec: no `pass` or `gpg` call made
 # while reading ever sees a value already loaded.
 function exec-with-entries() {
-    local how=$1 secrets=0 dashes=0 entries=() arg ; shift
+    local how=$1 secrets=0 all=0 dashes=0 entries=() arg ; shift
     while (( $# > 0 )); do
         arg=$1 ; shift
         case $arg in
             -h|--help)    "run-$how-help" ; return 0 ;;
             -s|--secrets) secrets=1 ;;
+            -a|--all)     all=1 ;;
             --)           dashes=1 ; break ;;
             -*)           die "$how: unknown option: $arg" ;;
             *)            entries+=("$arg") ;;
         esac
     done
     if [[ $how == exec ]]; then
-        (( ${#entries[@]} > 0 && dashes && $# > 0 )) \
-            || die "Usage: keep exec [-s|--secrets] <entry>... -- <command> [<arg>...]"
+        (( (${#entries[@]} > 0 || all) && dashes && $# > 0 )) \
+            || die "Usage: keep exec [-s|--secrets] [-a|--all] <entry>... -- <command> [<arg>...]"
     else
-        (( ${#entries[@]} > 0 && ! dashes )) || die "Usage: keep shell [-s|--secrets] <entry>..."
+        (( (${#entries[@]} > 0 || all) && ! dashes )) \
+            || die "Usage: keep shell [-s|--secrets] [-a|--all] <entry>..."
         set -- "${SHELL:-/bin/sh}"
     fi
     require-store
+    # --all is the store's root (""), loaded first wherever it was typed.
+    (( all )) && entries=("" "${entries[@]}")
     resolve-entries "$how" "$secrets" "${entries[@]}"
 
     local pairs=() i file value texts=0
@@ -1186,15 +1192,35 @@ function exec-with-entries() {
     if [[ -n $CALLER_STORE_DIR_SET ]]; then export PASSWORD_STORE_DIR=$CALLER_STORE_DIR
     else unset PASSWORD_STORE_DIR
     fi
-    # One `export` for all, so no loaded name can clobber a variable this loop still needs.
-    export -- "${pairs[@]}" || die "$how: could not set the variables."
+    # Arrays would swallow a loaded name of theirs (export makes it element 0, never exported).
+    set -- "${pairs[@]}" -- "$@"
+    unset pairs entries EXEC_VARS EXEC_FILES
+    export-and-exec "$@"
+}
+
+# export-and-exec <var>=<value>... -- <command> [<arg>...]
+# Export each, check that the command will really get it, then exec. Only positional parameters,
+# so no loaded name can clobber what this needs; the check catches the names bash keeps for
+# itself (RANDOM, UID, ...).
+function export-and-exec() {
+    while [[ $1 != -- ]]; do
+        set -- "${1%%=*}" "$@"
+        # shellcheck disable=SC2163  # $2 is <var>=<value>, exported as written
+        if ! export -- "$2" 2>/dev/null \
+            || [[ $(declare -p -- "$1" 2>/dev/null) != "declare -x $1="* || ${!1} != "${2#*=}" ]]; then
+            die "could not set $1: bash or Keep keeps that name for itself. Load it under another name with VAR=<name>."
+        fi
+        shift 2
+    done
+    shift
     exec "$@"
 }
 
 # resolve-entries <exec|shell> <secrets:0|1> <entry>...
 # Work out which variable gets which entry, into EXEC_VARS[i] <- EXEC_FILES[i] (<name>.txt or
 # <name>.gpg). VAR=<name> entries first: they claim their entry, and are applied last so they win.
-# Every other entry is named by its path, a later one overriding an earlier one.
+# Every other entry is named by its path, a later one overriding an earlier one. An empty entry is
+# the store's root (--all): every entry outside the @namespaces.
 function resolve-entries() {
     local how=$1 secrets=$2 entry var name found file claimed=" " exp_vars=() exp_files=() i
     shift 2
@@ -1210,20 +1236,25 @@ function resolve-entries() {
     for entry in "$@"; do
         is-explicit "$entry" && continue
         found=0
-        if entry-file "$how" "$secrets" "$entry"; then
+        if [[ -n $entry ]] && entry-file "$how" "$secrets" "$entry"; then
             found=1
             [[ $claimed == *" $ENTRY_FILE "* ]] || add-derived "$how" "$ENTRY_FILE"
-        elif [[ -d $STORE_PATH/$entry ]]; then
+        elif [[ -z $entry || -d $STORE_PATH/$entry ]]; then
             while IFS= read -r file; do
                 file=${file#"$STORE_PATH"/}
+                [[ -n $entry || $file != @* ]] || continue
                 if [[ $file == *.gpg && -f $STORE_PATH/${file%.gpg}.txt ]]; then
                     die "$how: '${file%.gpg}' is both a text and a secret; give one VAR=<name> or rename one."
                 fi
                 found=1
                 [[ $claimed == *" $file "* ]] || add-derived "$how" "$file"
-            done < <(entries-under "$secrets" "$STORE_PATH/${entry%/}")
+            done < <(entries-under "$secrets" "$STORE_PATH${entry:+/${entry%/}}")
+            (( secrets )) || note-skipped-secrets "$how" "$entry" "$found"
         fi
-        (( found )) || die "$how: '$entry' has no entries to load."
+        if (( ! found )); then
+            [[ -n $entry ]] && die "$how: '$entry' has no entries to load."
+            die "$how: the store has no entries to load."
+        fi
     done
 
     for (( i = 0; i < ${#exp_vars[@]}; i++ )); do set-entry-var "${exp_vars[i]}" "${exp_files[i]}" ; done
@@ -1258,6 +1289,20 @@ function entries-under() {
     local kinds=(-name '*.txt')
     (( $1 )) && kinds+=(-o -name '*.gpg')
     find "$2" -mindepth 1 -name '.*' -prune -o -type f \( "${kinds[@]}" \) -print | LC_ALL=C sort
+}
+
+# note-skipped-secrets <how> <folder> <found:0|1>: say on stderr how many secrets were left out
+# for want of --secrets (names and values never shown). With nothing else found, that is the error.
+# An empty <folder> is the store's root (--all), its @namespaces left out.
+function note-skipped-secrets() {
+    local how=$1 entry=$2 found=$3 file count=0 where
+    while IFS= read -r file; do
+        [[ -n $entry || ${file#"$STORE_PATH"/} != @* ]] && count=$(( count + 1 ))
+    done < <(find "$STORE_PATH${entry:+/${entry%/}}" -mindepth 1 -name '.*' -prune -o -type f -name '*.gpg' -print)
+    (( count > 0 )) || return 0
+    where="under '$entry'" ; [[ -n $entry ]] || where="in the store"
+    (( found )) || die "$how: only secrets $where ($count); add --secrets to load them."
+    printf "keep %s: left out %d secret(s) %s; add --secrets to load them.\n" "$how" "$count" "$where" >&2
 }
 
 # add-derived <how> <file>: name <file> by its path — @nawa/gh/token.gpg -> GH_TOKEN — or, when

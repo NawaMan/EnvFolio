@@ -807,12 +807,13 @@ Runs a command with entries from the Keep store as environment variables, the wa
 on a command line, into a file, or on the screen.
 
 ```
-keep exec [-s|--secrets] <entry>... -- <command> [<arg>...]
+keep exec [-s|--secrets] [-a|--all] <entry>... -- <command> [<arg>...]
 ```
 
 | Option | Meaning |
 | --- | --- |
-| `-s`, `--secrets` | Also load secrets. Without it, a secret named directly is refused, and the secrets in a folder are skipped. |
+| `-s`, `--secrets` | Also load secrets. Without it, a secret named directly is refused, and the secrets in a folder are left out, with a note on stderr saying how many. |
+| `-a`, `--all` | Load every entry outside the namespaces (top `@` folders) first, wherever it is typed; the entries given then layer over it. With it, `<entry>` is optional. |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
 An `<entry>` is one of:
@@ -823,7 +824,8 @@ An `<entry>` is one of:
 | `<folder>` | Every text under the folder, at any depth; with `--secrets`, every secret too. |
 | `VAR=<name>` | One entry, as the variable `VAR`, exactly as written. |
 
-At least one `<entry>` is needed; the whole store is never loaded by default. The `--` is
+At least one `<entry>` is needed, unless `--all` is given; the whole store is never loaded by
+default. The `--` is
 needed, and everything after it is the command, which Keep never parses. It needs a ready store
 (`keep store init`).
 
@@ -859,7 +861,9 @@ that matches no entry is an error, and so is a run that would load nothing at al
 
 **Refused**, before anything runs: a path that is both a text and a secret
 (`gh/token.txt` and `gh/token.gpg`) when both would load, and a `VAR=<name>` pointing at such a
-path. Without `--secrets` only the text loads, so there is no conflict.
+path. Without `--secrets` only the text loads, so there is no conflict. Also refused: a name bash
+or Keep keeps for itself, such as `RANDOM` or `UID` (an entry `random` would give it), since the
+command would not get the value; load it under another name with `VAR=<name>`.
 
 **Values.** An entry's whole content, with trailing newlines removed (as `$(pass show x)` gives
 it), so multi-line values such as keys come through whole. Each text's signature is checked as
@@ -896,6 +900,15 @@ keep exec --secrets gh @nawa -- gh repo list
 Loads `gh/`, then everything in `@nawa/` over it: `@nawa/gh/token` gives `GH_TOKEN`, replacing
 `gh/token`'s. `keep exec @nawa -- cmd` alone loads only what is in the namespace.
 
+### Load everything
+
+```bash
+keep exec --all --secrets @nawa -- ./deploy
+```
+
+Loads every text and secret outside the namespaces, then `@nawa/` over them. Without
+`--secrets`, only the texts, with a note saying how many secrets were left out.
+
 ### Pick the variable name
 
 ```bash
@@ -913,12 +926,13 @@ Starts your shell (`$SHELL`, or `/bin/sh`) with entries from the Keep store as e
 variables. It is `keep exec <entry>... -- "$SHELL"`, plus a line saying what was loaded.
 
 ```
-keep shell [-s|--secrets] <entry>...
+keep shell [-s|--secrets] [-a|--all] <entry>...
 ```
 
 | Option | Meaning |
 | --- | --- |
 | `-s`, `--secrets` | Also load secrets. |
+| `-a`, `--all` | Load every entry outside the namespaces first, as in `keep exec`. |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
 Entries, variable names, values and errors are as in `keep exec`. Before the shell starts, Keep
