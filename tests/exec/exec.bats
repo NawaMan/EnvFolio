@@ -26,22 +26,22 @@ teardown() {
 }
 
 # A ready store.
-#   texts:   git/user_name, git/email, gh/user, [nawa]gh/user, multi/cert (two lines),
+#   texts:   git/user_name, git/email, gh/user, @nawa/gh/user, multi/cert (two lines),
 #            odd/ok, odd/api-key (not a valid variable name), both/x
-#   secrets: gh/token, [nawa]gh/token, both/x
+#   secrets: gh/token, @nawa/gh/token, both/x
 make-store() {
     gpg --batch --passphrase '' --quick-generate-key "Test User <test@example.com>" default default never 2>/dev/null
     "$KEEP" store init --key test@example.com < /dev/null >/dev/null 2>&1
     "$KEEP" text insert -t "Test User"        git/user_name   < /dev/null
     "$KEEP" text insert -t "test@example.com" git/email       < /dev/null
     "$KEEP" text insert -t "shared-user"      gh/user         < /dev/null
-    "$KEEP" text insert -t "nawa-user"        "[nawa]gh/user" < /dev/null
+    "$KEEP" text insert -t "nawa-user"        "@nawa/gh/user" < /dev/null
     "$KEEP" text insert -t "ok value"         odd/ok          < /dev/null
     "$KEEP" text insert -t "dash value"       odd/api-key     < /dev/null
     "$KEEP" text insert -t "both text"        both/x          < /dev/null
     "$KEEP" text insert -m multi/cert < <(printf 'line one\nline two\n') >/dev/null
     "$KEEP" secret insert -m gh/token         < <(printf 'shared-token\n') >/dev/null
-    "$KEEP" secret insert -m "[nawa]gh/token" < <(printf 'nawa-token\n')   >/dev/null
+    "$KEEP" secret insert -m "@nawa/gh/token" < <(printf 'nawa-token\n')   >/dev/null
     "$KEEP" secret insert -m both/x           < <(printf 'both secret\n')  >/dev/null
 }
 
@@ -62,12 +62,32 @@ make-store() {
 
 @test "MANUAL: exec — layer a namespace" {
     make-store
-    run "$KEEP" exec --secrets gh '[nawa]gh' -- sh -c 'echo "$GH_TOKEN|$GH_USER"'
+    run "$KEEP" exec --secrets gh @nawa -- sh -c 'echo "$GH_TOKEN|$GH_USER"'
     [ "$status" -eq 0 ]
     [ "$output" = "nawa-token|nawa-user" ]
     # The later selection wins, so the other order gives the shared ones.
-    run "$KEEP" exec --secrets '[nawa]gh' gh -- sh -c 'echo "$GH_TOKEN|$GH_USER"'
+    run "$KEEP" exec --secrets @nawa gh -- sh -c 'echo "$GH_TOKEN|$GH_USER"'
     [ "$output" = "shared-token|shared-user" ]
+}
+
+@test "exec: only a top @folder is a namespace; deeper, @ is ordinary; [ ] is ordinary" {
+    make-store
+    "$KEEP" text insert -t "a-domain" @usera/domain/user < /dev/null
+    "$KEEP" text insert -t "a-server" @usera/server/user < /dev/null
+    "$KEEP" text insert -t "b-server" @userb/server/user < /dev/null
+    "$KEEP" text insert -t "work"     sv/@work/user      < /dev/null
+    "$KEEP" text insert -t "bracket"  "[x]y/z"           < /dev/null
+    run "$KEEP" exec @usera -- sh -c 'echo "$DOMAIN_USER|$SERVER_USER"'
+    [ "$status" -eq 0 ]
+    [ "$output" = "a-domain|a-server" ]
+    run "$KEEP" exec @usera @userb -- sh -c 'echo "$DOMAIN_USER|$SERVER_USER"'
+    [ "$output" = "a-domain|b-server" ]
+    run --separate-stderr "$KEEP" exec sv/@work -- true
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"'sv/@work/user' would be SV_@WORK_USER"* ]]
+    run --separate-stderr "$KEEP" exec "[x]y" -- true
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"'[x]y/z' would be [X]Y_Z"* ]]
 }
 
 @test "MANUAL: exec — pick the variable name" {
@@ -79,12 +99,12 @@ make-store() {
 
 @test "exec: an explicit name wins wherever it is typed; the claim is only its own entry" {
     make-store
-    run "$KEEP" exec --secrets '[nawa]gh' GH_TOKEN=gh/token -- printenv GH_TOKEN
+    run "$KEEP" exec --secrets @nawa GH_TOKEN=gh/token -- printenv GH_TOKEN
     [ "$output" = "shared-token" ]
-    run "$KEEP" exec --secrets GH_TOKEN=gh/token '[nawa]gh' -- printenv GH_TOKEN
+    run "$KEEP" exec --secrets GH_TOKEN=gh/token @nawa -- printenv GH_TOKEN
     [ "$output" = "shared-token" ]
-    # gh/token is claimed; [nawa]gh/token is another entry and still gives GH_TOKEN.
-    run "$KEEP" exec --secrets MY=gh/token gh '[nawa]gh' -- sh -c 'echo "$MY|$GH_TOKEN"'
+    # gh/token is claimed; @nawa/gh/token is another entry and still gives GH_TOKEN.
+    run "$KEEP" exec --secrets MY=gh/token gh @nawa -- sh -c 'echo "$MY|$GH_TOKEN"'
     [ "$output" = "shared-token|nawa-token" ]
     # Two explicit ones for the same name: the later wins.
     run "$KEEP" exec --secrets X=gh/token X=gh/user -- printenv X
@@ -195,7 +215,7 @@ make-store() {
 
 @test "MANUAL: shell — open a shell" {
     make-store
-    SHELL=/bin/sh run --separate-stderr "$KEEP" shell --secrets gh '[nawa]gh' \
+    SHELL=/bin/sh run --separate-stderr "$KEEP" shell --secrets gh @nawa \
         < <(printf 'echo "$KEEP_SHELL|$GH_TOKEN|$GH_USER"\n')
     [ "$status" -eq 0 ]
     [ "$output" = "1|nawa-token|nawa-user" ]

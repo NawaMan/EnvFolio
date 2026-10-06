@@ -830,7 +830,7 @@ needed, and everything after it is the command, which Keep never parses. It need
 **Variable names.** An entry's name comes from its full path in the store, whatever was
 selected:
 
-1. A leading namespace `[xxx]` is removed.
+1. A namespace — a top folder whose name starts with `@` — is removed.
 2. `/` turns into `_`.
 3. It is uppercased.
 
@@ -838,7 +838,10 @@ selected:
 | --- | --- |
 | `gh/token` | `GH_TOKEN` |
 | `git/user_name` | `GIT_USER_NAME` |
-| `[nawa]gh/token` | `GH_TOKEN` |
+| `@nawa/gh/token` | `GH_TOKEN` |
+
+Only a top folder is a namespace. Deeper down, `@` is an ordinary character: `gh/@work/token`
+would be `GH_@WORK_TOKEN`, which is not a valid variable name (see below).
 
 The variables are worked out in this order:
 
@@ -852,7 +855,7 @@ The variables are worked out in this order:
 
 A derived name that is still not a valid variable name (e.g. `GH_API-KEY`, or one starting with a
 digit) is **left out with a warning** that names the entry and suggests `VAR=<name>`. A selection
-that loads nothing at all is an error.
+that matches no entry is an error, and so is a run that would load nothing at all.
 
 **Refused**, before anything runs: a path that is both a text and a secret
 (`gh/token.txt` and `gh/token.gpg`) when both would load, and a `VAR=<name>` pointing at such a
@@ -867,9 +870,6 @@ fails, the command does not run and Keep exits 1.
 **The command** replaces Keep (`exec`), so its exit status, signals and input/output are its own.
 It gets the caller's environment plus the loaded variables, which override any of the same name.
 Keep's own `PASSWORD_STORE_DIR` is not passed on: the caller's value is put back, or it is unset.
-
-`[` is special to the shell: quote a namespace, as in `keep exec '[nawa]gh' -- cmd`. Unquoted,
-zsh stops with "no matches found", and bash may match a file in the current folder.
 
 ### Run a command with texts
 
@@ -890,11 +890,11 @@ Also loads the secrets under `gh/`, e.g. `gh/token` as `GH_TOKEN`.
 ### Layer a namespace
 
 ```bash
-keep exec --secrets gh '[nawa]gh' -- gh repo list
+keep exec --secrets gh @nawa -- gh repo list
 ```
 
-Loads `gh/`, then `[nawa]gh/` over it: `[nawa]gh/token` gives `GH_TOKEN`, replacing
-`gh/token`'s.
+Loads `gh/`, then everything in `@nawa/` over it: `@nawa/gh/token` gives `GH_TOKEN`, replacing
+`gh/token`'s. `keep exec @nawa -- cmd` alone loads only what is in the namespace.
 
 ### Pick the variable name
 
@@ -929,7 +929,7 @@ ready store (`keep store init`).
 ### Open a shell
 
 ```bash
-keep shell --secrets gh '[nawa]gh'
+keep shell --secrets gh @nawa
 ```
 
 ```

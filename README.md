@@ -5,7 +5,7 @@ A command-line tool for password management. It is built heavily on top of [`pas
 
 - Keep adds a store for plain-text values alongside the secrets -- "item" is the term used to mean both.
 - Keep will make it easy to init/backup/restore/export/import items.
-- Keep will make it easy to use items when executing a program or in a subshell.
+- Keep makes it easy to use items when executing a program or in a subshell.
 - One motivation for Keep is to allow using items in environments like CodingBooth in the cloud,
     where users can safely put their sensitive items for themselves to use inside the booth,
     in a way that `CodingBooths.online` (the provider) never needs to touch the actual secrets.
@@ -25,6 +25,8 @@ A command-line tool for password management. It is built heavily on top of [`pas
 - `keep text ...`   to deal with text-related actions like: show, insert, generate, edit, find, ...
 - `keep secret ...` to deal with secret-related actions like: show, insert, generate, edit, find, ...
 - `keep ls`         to list both types of items (texts/secrets) together, as a tree or flat.
+- `keep exec ...`   to run a command with items as environment variables (secrets only with `--secrets`).
+- `keep shell ...`  to start a shell with items as environment variables.
 
 Every command, with examples: [MANUAL.md](MANUAL.md).
 

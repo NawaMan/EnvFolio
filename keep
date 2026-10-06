@@ -1109,9 +1109,9 @@ Run a command with entries from the store as environment variables. Texts load b
 secrets only with --secrets. Values are never printed.
 
 An <entry> is a text or secret name, a folder (every entry under it), or VAR=<name> to pick
-the variable's name. Otherwise the name comes from the entry's path: a leading [namespace] is
-removed, / turns into _, and it is uppercased ([nawa]gh/token -> GH_TOKEN). A later entry
-overrides an earlier one; VAR=<name> overrides them all. Quote a [namespace] for the shell.
+the variable's name. Otherwise the name comes from the entry's path: a top folder starting with @
+(a namespace) is removed, / turns into _, and it is uppercased (@nawa/gh/token -> GH_TOKEN). A
+later entry overrides an earlier one; VAR=<name> overrides them all.
 
 Options:
   -s, --secrets       Also load secrets.
@@ -1260,12 +1260,12 @@ function entries-under() {
     find "$2" -mindepth 1 -name '.*' -prune -o -type f \( "${kinds[@]}" \) -print | LC_ALL=C sort
 }
 
-# add-derived <how> <file>: name <file> by its path — [nawa]gh/token.gpg -> GH_TOKEN — or, when
-# that is not a valid variable name, warn and leave it out.
+# add-derived <how> <file>: name <file> by its path — @nawa/gh/token.gpg -> GH_TOKEN — or, when
+# that is not a valid variable name, warn and leave it out. Only a top @folder is a namespace.
 function add-derived() {
     local how=$1 name=${2%.*} var
     var=${name}
-    [[ $var == "["*"]"* ]] && var=${var#*]}
+    [[ $var == @*/* ]] && var=${var#*/}
     var=$(printf '%s' "${var//\//_}" | LC_ALL=C tr '[:lower:]' '[:upper:]')
     if [[ $var =~ $VAR_NAME_PATTERN ]]; then
         set-entry-var "$var" "$2"
