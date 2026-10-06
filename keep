@@ -64,6 +64,7 @@ function help() {
     case "$*" in
         "")                keep-help            ;;
         "store init")      store-init-help      ;;
+        "store path")      store-path-help      ;;
         "store backup")    store-backup-help    ;;
         "store restore")   store-restore-help   ;;
         "ls")              list-help            ;;
@@ -107,7 +108,7 @@ Commands:
   text ls           List texts
   text find         Find texts by name
   text grep         Find texts by value
-  text show         Show a text (its signature checked)
+  text show         Show a text (its signature checked), or copy it to the clipboard
   text insert       Add a text (plain, signed)
   text edit         Edit a text in $EDITOR
   text generate     Generate a random text
@@ -150,12 +151,28 @@ function store() {
         restore) store-restore "$@" ;;
         export)  store-export  "$@" ;;
         import)  store-import  "$@" ;;
-        "")      echo "Usage: keep store <init|backup|restore|export|import> [args...]" >&2 ; return 1 ;;
-        *)       echo "keep store: unknown command: $category"                          >&2 ; return 1 ;;
+        "")      echo "Usage: keep store <init|path|backup|restore|export|import> [args...]" >&2 ; return 1 ;;
+        *)       echo "keep store: unknown command: $category"                               >&2 ; return 1 ;;
     esac
 }
 
+# --- store path ---------------------------------------------------------------
+
+function store-path-help() {
+    cat <<'EOF'
+Usage: keep store path
+
+Print the Keep store's folder: $KEEP_STORE_DIR, default ~/.keep. Works without a store.
+
+Options:
+  -h, --help          Show this help and stop.
+EOF
+}
+
+# keep store path
 function store-path() {
+    case ${1:-} in -h|--help) store-path-help ; return 0 ;; esac
+    (( $# == 0 )) || die "Usage: keep store path"
     echo "${STORE_PATH}"
 }
 
@@ -709,27 +726,56 @@ function text-grep() {
 
 function text-show-help() {
     cat <<'EOF'
-Usage: keep text show <name>
+Usage: keep text show [-c|--clip[=<line>]] <name>
 
 Show a text: check its signature, then print it. A text whose signature is missing, does not
 match, or is not by the store's key is not shown — it was changed outside Keep.
+With --clip, copy its first line to the clipboard instead. A text is not a secret, so the
+clipboard is not cleared afterwards.
 
 Options:
+  -c, --clip[=<line>] Copy the first line — or line <line> — to the clipboard; print nothing.
   -h, --help          Show this help and stop.
 EOF
 }
 
-# keep text show <name>
+# keep text show [-c|--clip[=<line>]] <name>
 # Only a text that verifies is shown: signed (<name>.txt.sig) by the store's key, unchanged since.
+# --clip picks a line as `pass show --clip` does.
 function text-show() {
-    case ${1:-} in -h|--help) text-show-help ; return 0 ;; esac
-    (( $# == 1 )) || die "Usage: keep text show <name>"
-    local name=$1
+    local clip="" names=() arg
+    while (( $# > 0 )); do
+        arg=$1 ; shift
+        case $arg in
+            -h|--help)  text-show-help ; return 0 ;;
+            -c|--clip)  clip=1 ;;
+            -c[0-9]*)   clip=${arg#-c} ;;
+            --clip=*)   clip=${arg#*=} ;;
+            --)         names+=("$@") ; break ;;
+            -*)         die "text show: unknown option: $arg" ;;
+            *)          names+=("$arg") ;;
+        esac
+    done
+    (( ${#names[@]} == 1 )) || die "Usage: keep text show [-c|--clip[=<line>]] <name>"
+    local name=${names[0]} line copy
     [[ $name != -* && /$name/ != */../* ]] || die "text show: '$name' is not a valid name."
+    [[ -z $clip || $clip =~ ^[1-9][0-9]*$ ]] || die "text show: '$clip' is not a line number."
     require-store
     [[ -f $STORE_PATH/$name.txt ]] || die "text show: '$name' is not a text in the store."
     verify-text "$name"
-    cat "$STORE_PATH/$name.txt"
+    [[ -n $clip ]] || { cat "$STORE_PATH/$name.txt" ; return ; }
+
+    line=$(tail -n "+$clip" "$STORE_PATH/$name.txt" | head -n 1)
+    [[ -n $line ]] || die "text show: '$name' has no text at line $clip."
+    # The same tool ensure-requirements checks for.
+    if   [[ $(uname -s) == Darwin    ]]; then copy=(pbcopy)
+    elif [[ -n ${WAYLAND_DISPLAY:-}  ]]; then copy=(wl-copy)
+    elif [[ -n ${DISPLAY:-}          ]]; then copy=(xclip -selection clipboard)
+    else die "text show: no clipboard: no X11 or Wayland display."
+    fi
+    # stdout away: a clipboard tool that stays to serve the copy must not hold `$(keep ...)` open.
+    printf '%s' "$line" | "${copy[@]}" >/dev/null || die "text show: could not copy to the clipboard."
+    echo "Copied $name to clipboard. A text is not a secret: the clipboard is not cleared."
 }
 
 # --- text insert --------------------------------------------------------------
@@ -817,8 +863,7 @@ function text-edit() {
     require-store
     file=$STORE_PATH/$name.txt
     tmp_dir=$(mktemp -d)
-    # shellcheck disable=SC2064  # the folder is known now; expand it now
-    trap "rm -rf -- '$tmp_dir'" EXIT
+    remove-on-exit "$tmp_dir"
     tmp_file=$tmp_dir/${name//\//-}.txt
 
     if [[ -f $file ]]; then
@@ -1140,11 +1185,11 @@ function secret-show-help() {
     cat <<'EOF'
 Usage: keep secret show [-c|--clip[=<line>]] <name>
 
-Show a secret: decrypt it and print it. With --clip, copy it to the clipboard instead; the
-clipboard is cleared after 45 seconds (PASSWORD_STORE_CLIP_TIME).
+Show a secret: decrypt it and print it. With --clip, copy its first line to the clipboard
+instead; the clipboard is cleared after 45 seconds (PASSWORD_STORE_CLIP_TIME).
 
 Options:
-  -c, --clip[=<line>] Copy the secret — or only its line <line> — to the clipboard; print nothing.
+  -c, --clip[=<line>] Copy the first line — or line <line> — to the clipboard; print nothing.
   -h, --help          Show this help and stop.
 EOF
 }

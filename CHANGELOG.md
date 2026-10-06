@@ -23,7 +23,7 @@ User-visible changes to Keep. Newest first.
 - `keep store init` — creates the Keep store (`$KEEP_STORE_DIR`, default `~/.keep`): picks or
   creates the GPG key, runs `pass init`, and starts the store's git history. Options: `--key`,
   `--new-key`, `--name`, `--email`, `--passphrase-stdin`.
-- `keep store path` — prints the store's folder.
+- `keep store path` — prints the store's folder; `--help` and `keep help store path` explain it.
 - `keep secret ls | find | grep | show | insert | edit | generate | rm | mv | cp` — thin
   pass-throughs to the matching `pass` commands, run against the Keep store. Options that would
   put a secret on screen without asking are refused: `insert --echo`, and `--qrcode` on `show`
@@ -39,7 +39,9 @@ User-visible changes to Keep. Newest first.
 - `keep text generate | rm | mv | cp` — mirror the secret commands for texts; on a folder, they
   act on its texts only, never its secrets. A generated or moved text is signed and verifies.
 - `keep text show` — prints a text only if its signature is there, matches, and is by the store's
-  key; otherwise it fails and says how to check and re-sign.
+  key; otherwise it fails and says how to check and re-sign. `-c`/`--clip[=<line>]` copies its
+  first line (or line `<line>`) to the clipboard instead, as `secret show -c` does, but the
+  clipboard is not cleared: a text is not a secret.
 - `keep text grep` — prints the matching lines of every text under its name; mirrors
   `keep secret grep`.
 - `keep text insert` — adds a text: kept plain as `<name>.txt` in the same layout as the secrets,

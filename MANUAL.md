@@ -102,6 +102,31 @@ run is kept, and shows up in the key menu.
 
 ---
 
+## `keep store path`
+
+Prints the Keep store's folder: `$KEEP_STORE_DIR`, default `~/.keep`, as an absolute path. It
+works whether or not the store exists yet.
+
+```
+keep store path
+```
+
+| Option | Meaning |
+| --- | --- |
+| `-h`, `--help` | Show the options and stop. |
+
+### Print the store's folder
+
+```bash
+keep store path
+```
+
+```
+/home/jane/.keep
+```
+
+---
+
 ## `keep store backup`
 
 Saves the whole Keep store and its GPG key into one file, to get it all back with
@@ -361,11 +386,12 @@ Prints a text, after checking its signature: `<name>.txt.sig` must be there, mat
 be by the store's key (the first key in `.gpg-id`). Checking needs no passphrase.
 
 ```
-keep text show <name>
+keep text show [-c|--clip[=<line>]] <name>
 ```
 
 | Option | Meaning |
 | --- | --- |
+| `-c`, `--clip[=<line>]` | Copy the first line, or line `<line>`, to the clipboard and print nothing. **The clipboard is not cleared** afterwards: a text is not a secret. Needs `pbcopy`, `wl-copy` or `xclip`. |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
 Only a text can be shown; a folder or a secret is refused (use `keep secret show` for secrets).
@@ -378,6 +404,14 @@ keep text show web/user
 ```
 
 Prints the text exactly as it was inserted.
+
+### Copy to the clipboard
+
+```bash
+keep text show -c web/user
+```
+
+Copies the text's first line, once its signature is checked. `--clip=2` copies line 2 instead.
 
 ### A text changed outside Keep is not shown
 
@@ -691,7 +725,7 @@ keep secret show [-c|--clip[=<line>]] <name>
 
 | Option | Meaning |
 | --- | --- |
-| `-c`, `--clip[=<line>]` | Copy the secret, or only line `<line>` of it, to the clipboard and print nothing. The clipboard is cleared after 45 seconds (`PASSWORD_STORE_CLIP_TIME`). Needs `pbcopy`, `wl-copy` or `xclip`. |
+| `-c`, `--clip[=<line>]` | Copy the first line, or line `<line>`, to the clipboard and print nothing. The clipboard is cleared after 45 seconds (`PASSWORD_STORE_CLIP_TIME`). Needs `pbcopy`, `wl-copy` or `xclip`. |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
 Only a secret can be shown. A folder is refused, because `pass show <folder>` would list it
@@ -712,7 +746,8 @@ Prints the whole secret, every line of it.
 keep secret show -c web/github
 ```
 
-Copies the secret without showing it, and says when the clipboard will clear.
+Copies the secret's first line without showing it, and says when the clipboard will clear. As in
+`pass`, a secret's first line is its password.
 
 ### Copy one line
 

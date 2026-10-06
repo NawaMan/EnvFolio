@@ -62,6 +62,27 @@ teardown() {
     [[ $output == *"Usage: keep store init"* ]]
 }
 
+@test "MANUAL: store path — print the store's folder" {
+    run "$KEEP" store path
+    [ "$status" -eq 0 ]
+    [ "$output" = "$KEEP_STORE_DIR" ]
+    [ ! -e "$KEEP_STORE_DIR" ]
+}
+
+@test "store path --help: the same as keep help store path, without a store" {
+    run "$KEEP" store path --help
+    [ "$status" -eq 0 ]
+    [[ $output == *"Usage: keep store path"* ]]
+    local long=$output
+    run "$KEEP" help store path
+    [ "$status" -eq 0 ]
+    [ "$output" = "$long" ]
+    run "$KEEP" store path extra
+    [ "$status" -eq 1 ]
+    [[ $output == *"Usage: keep store path"* ]]
+    [ ! -e "$KEEP_STORE_DIR" ]
+}
+
 @test "keep help secret insert: shows help without a store" {
     run "$KEEP" help secret insert < /dev/null
     [ "$status" -eq 0 ]

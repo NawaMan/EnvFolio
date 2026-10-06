@@ -31,6 +31,19 @@ make-store() {
     "$KEEP" secret insert -m web/github < <(printf 's3cr3t\n') >/dev/null
 }
 
+# A stand-in xclip (and pbcopy, for macOS) whose clipboard is a sandbox file, so -c never touches
+# a real clipboard.
+fake-clipboard() {
+    CLIPBOARD="$SANDBOX/clipboard"
+    mkdir -p "$SANDBOX/bin"
+    printf '#!/usr/bin/env bash\ncat > "%s"\n' "$CLIPBOARD" > "$SANDBOX/bin/xclip"
+    cp "$SANDBOX/bin/xclip" "$SANDBOX/bin/pbcopy"
+    chmod +x "$SANDBOX/bin/xclip" "$SANDBOX/bin/pbcopy"
+    export PATH="$SANDBOX/bin:$PATH"
+    export DISPLAY=":keep-test-$$"
+    unset WAYLAND_DISPLAY
+}
+
 @test "MANUAL: text show — show a text" {
     make-store
     run "$KEEP" text show web/user
@@ -51,6 +64,64 @@ make-store() {
     [[ $output == *"does not verify with the store's key"* ]]
     [[ $output == *"git -C"*"diff -- web/user.txt"*"log -p -- web/user.txt"* ]]
     [[ $output != *"mallory"* ]]
+}
+
+@test "MANUAL: text show — copy to the clipboard" {
+    make-store
+    fake-clipboard
+    run "$KEEP" text show -c web/user
+    [ "$status" -eq 0 ]
+    [[ $output == *"Copied web/user to clipboard"*"not cleared"* && $output != *"jane"* ]]
+    [ "$(cat "$CLIPBOARD")" = "jane" ]
+}
+
+@test "text show --clip: the first line only, or the line given" {
+    make-store
+    fake-clipboard
+    "$KEEP" text show --clip note >/dev/null
+    cmp "$CLIPBOARD" <(printf 'one')
+    "$KEEP" text show --clip=2 note >/dev/null
+    cmp "$CLIPBOARD" <(printf 'two')
+    "$KEEP" text show -c2 note >/dev/null
+    cmp "$CLIPBOARD" <(printf 'two')
+}
+
+@test "text show --clip: an empty line, a line past the end, or no number is refused" {
+    make-store
+    fake-clipboard
+    local clip
+    for clip in --clip=3 --clip=9; do
+        run "$KEEP" text show "$clip" note
+        [ "$status" -eq 1 ]
+        [[ $output == *"'note' has no text at line ${clip#*=}"* ]]
+    done
+    for clip in --clip=0 --clip=x -cx; do
+        run "$KEEP" text show "$clip" note
+        [ "$status" -eq 1 ]
+        [[ $output == *"is not a line number"* || $output == *"unknown option"* ]]
+    done
+    [ ! -e "$CLIPBOARD" ]
+}
+
+@test "text show --clip: a text changed outside Keep is not copied" {
+    make-store
+    fake-clipboard
+    printf 'mallory\n' > "$KEEP_STORE_DIR/web/user.txt"
+    run "$KEEP" text show -c web/user
+    [ "$status" -eq 1 ]
+    [[ $output == *"does not verify with the store's key"* ]]
+    [ ! -e "$CLIPBOARD" ]
+}
+
+@test "text show --clip: no display fails and copies nothing" {
+    [[ $(uname -s) != Darwin ]] || skip "macOS copies with pbcopy, no display needed"
+    make-store
+    fake-clipboard
+    unset DISPLAY
+    run "$KEEP" text show -c web/user
+    [ "$status" -eq 1 ]
+    [[ $output == *"no clipboard"* ]]
+    [ ! -e "$CLIPBOARD" ]
 }
 
 @test "text show: a missing signature is refused" {
@@ -92,7 +163,7 @@ make-store() {
         [[ $output != *"s3cr3t"* ]]
     done
     for name in ../x web/../../x -c; do
-        run "$KEEP" text show "$name"
+        run "$KEEP" text show -- "$name"
         [ "$status" -eq 1 ]
         [[ $output == *"'$name' is not a valid name"* ]]
     done
