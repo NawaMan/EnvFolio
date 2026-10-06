@@ -797,3 +797,145 @@ copied with everything in it, **texts included**.
 ```bash
 keep secret cp web/github web/github-copy
 ```
+
+---
+
+## `keep exec`
+
+*(not yet: this section is the spec.)*
+
+Runs a command with entries from the Keep store as environment variables, the way `op run` and
+`aws-vault exec` do. Texts load by default; secrets load only with `--secrets`. Values never go
+on a command line, into a file, or on the screen.
+
+```
+keep exec [-s|--secrets] <entry>... -- <command> [<arg>...]
+```
+
+| Option | Meaning |
+| --- | --- |
+| `-s`, `--secrets` | Also load secrets. Without it, a secret named directly is refused, and the secrets in a folder are skipped. |
+| `-h`, `--help` | Show the options and stop. Works without a store. |
+
+An `<entry>` is one of:
+
+| Form | Loads |
+| --- | --- |
+| `<name>` | One text (or, with `--secrets`, one secret). |
+| `<folder>` | Every text under the folder, at any depth; with `--secrets`, every secret too. |
+| `VAR=<name>` | One entry, as the variable `VAR`, exactly as written. |
+
+At least one `<entry>` is needed; the whole store is never loaded by default. The `--` is
+needed, and everything after it is the command, which Keep never parses. It needs a ready store
+(`keep store init`).
+
+**Variable names.** An entry's name comes from its full path in the store, whatever was
+selected:
+
+1. A leading namespace `[xxx]` is removed.
+2. `/` turns into `_`.
+3. It is uppercased.
+
+| Entry | Variable |
+| --- | --- |
+| `gh/token` | `GH_TOKEN` |
+| `git/user_name` | `GIT_USER_NAME` |
+| `[nawa]gh/token` | `GH_TOKEN` |
+
+The variables are worked out in this order:
+
+1. **Explicit names first.** Each `VAR=<name>` takes its entry and claims it. `VAR` must be a
+   valid name (`^[A-Za-z_][A-Za-z0-9_]*$`), or the command is refused. If two of them give the
+   same `VAR`, the later one wins.
+2. **Then the rule.** The other selections are expanded in order, skipping claimed entries. A
+   later selection overrides an earlier one; this is how a namespace layers over shared entries.
+3. **Explicit names last**, so they win over any derived variable of the same name, wherever
+   they were typed.
+
+A derived name that is still not a valid variable name (e.g. `GH_API-KEY`, or one starting with a
+digit) is **left out with a warning** that names the entry and suggests `VAR=<name>`. A selection
+that loads nothing at all is an error.
+
+**Refused**, before anything runs: a path that is both a text and a secret
+(`gh/token.txt` and `gh/token.gpg`) when both would load, and a `VAR=<name>` pointing at such a
+path. Without `--secrets` only the text loads, so there is no conflict.
+
+**Values.** An entry's whole content, with trailing newlines removed (as `$(pass show x)` gives
+it), so multi-line values such as keys come through whole. Each text's signature is checked as
+in `keep text show`; each secret is decrypted with `pass show`, so gpg may ask for the key's
+passphrase. **All or nothing:** every entry is checked and read before the command starts; if one
+fails, the command does not run and Keep exits 1.
+
+**The command** replaces Keep (`exec`), so its exit status, signals and input/output are its own.
+It gets the caller's environment plus the loaded variables, which override any of the same name.
+Keep's own `PASSWORD_STORE_DIR` is not passed on: the caller's value is put back, or it is unset.
+
+`[` is special to the shell: quote a namespace, as in `keep exec '[nawa]gh' -- cmd`. Unquoted,
+zsh stops with "no matches found", and bash may match a file in the current folder.
+
+### Run a command with texts
+
+```bash
+keep exec git -- git commit
+```
+
+Runs `git commit` with every text under `git/` set, e.g. `git/user_name` as `GIT_USER_NAME`.
+
+### Add secrets
+
+```bash
+keep exec --secrets gh -- gh repo list
+```
+
+Also loads the secrets under `gh/`, e.g. `gh/token` as `GH_TOKEN`.
+
+### Layer a namespace
+
+```bash
+keep exec --secrets gh '[nawa]gh' -- gh repo list
+```
+
+Loads `gh/`, then `[nawa]gh/` over it: `[nawa]gh/token` gives `GH_TOKEN`, replacing
+`gh/token`'s.
+
+### Pick the variable name
+
+```bash
+keep exec --secrets GITHUB_TOKEN=gh/token gh -- ./deploy
+```
+
+Sets `GITHUB_TOKEN` from `gh/token`, and loads the rest of `gh/` by the rule. `gh/token` is
+claimed, so it does not also give `GH_TOKEN`.
+
+---
+
+## `keep shell`
+
+*(not yet: this section is the spec.)*
+
+Starts your shell (`$SHELL`, or `/bin/sh`) with entries from the Keep store as environment
+variables. It is `keep exec <entry>... -- "$SHELL"`, plus a line saying what was loaded.
+
+```
+keep shell [-s|--secrets] <entry>...
+```
+
+| Option | Meaning |
+| --- | --- |
+| `-s`, `--secrets` | Also load secrets. |
+| `-h`, `--help` | Show the options and stop. Works without a store. |
+
+Entries, variable names, values and errors are as in `keep exec`. Before the shell starts, Keep
+prints the loaded variable names, never their values, to stderr. It sets `KEEP_SHELL=1`, so your
+own prompt can show it; Keep does not change the prompt. `exit` leaves the shell. It needs a
+ready store (`keep store init`).
+
+### Open a shell
+
+```bash
+keep shell --secrets gh '[nawa]gh'
+```
+
+```
+keep shell: loaded GH_TOKEN, GH_USER (texts: 1, secrets: 1). Type 'exit' to leave.
+```
