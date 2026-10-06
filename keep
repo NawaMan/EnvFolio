@@ -59,6 +59,7 @@ function help() {
         "text ls")         text-ls-help         ;;
         "text find")       text-find-help       ;;
         "text grep")       text-grep-help       ;;
+        "text show")       text-show-help       ;;
         "text insert")     text-insert-help     ;;
         "secret ls")       secret-ls-help       ;;
         "secret find")     secret-find-help     ;;
@@ -88,6 +89,7 @@ Commands:
   text ls           List texts
   text find         Find texts by name
   text grep         Find texts by value
+  text show         Show a text (its signature checked)
   text insert       Add a text (plain, signed)
   text ...          Other text commands (not yet)
   secret ls         List secrets
@@ -411,6 +413,44 @@ function text-grep() {
     done < <(find -L "$STORE_PATH" -path '*/.git' -prune -o -name '*.txt' -print0)
 }
 
+# --- text show ----------------------------------------------------------------
+
+function text-show-help() {
+    cat <<'EOF'
+Usage: keep text show <name>
+
+Show a text: check its signature, then print it. A text whose signature is missing, does not
+match, or is not by the store's key is not shown — it was changed outside Keep.
+
+Options:
+  -h, --help          Show this help and stop.
+EOF
+}
+
+# keep text show <name>
+# Only a text that verifies is shown: signed (<name>.txt.sig) by the store's key, unchanged since.
+function text-show() {
+    case ${1:-} in -h|--help) text-show-help ; return 0 ;; esac
+    (( $# == 1 )) || die "Usage: keep text show <name>"
+    local name=$1 file store_key signer check
+    [[ $name != -* && /$name/ != */../* ]] || die "text show: '$name' is not a valid name."
+    require-store
+    file=$STORE_PATH/$name.txt
+    [[ -f $file ]] || die "text show: '$name' is not a text in the store."
+
+    check="Uncommitted change:  git -C $STORE_PATH diff -- $name.txt${EXTRA_LINE}"
+    check+="Its history:         git -C $STORE_PATH log -p -- $name.txt${EXTRA_LINE}"
+    check+="If the text is right, sign it again:  keep text insert -f -m $name < $file"
+    [[ -f $file.sig ]] || die "text show: '$name' has no signature.${EXTRA_LINE}$check"
+    # VALIDSIG's last field is the signing key's primary fingerprint; gpg prints it for a good one only.
+    store_key=$(gpg --list-keys --with-colons "$(head -n 1 "$STORE_PATH/.gpg-id")" 2>/dev/null \
+        | awk -F: '$1 == "fpr" { print $10; exit }')
+    signer=$(gpg --status-fd 1 --verify "$file.sig" "$file" 2>/dev/null | awk '$2 == "VALIDSIG" { print $NF }')
+    [[ -n $signer && $signer == "$store_key" ]] \
+        || die "text show: the signature of '$name' does not verify with the store's key.${EXTRA_LINE}$check"
+    cat "$file"
+}
+
 # --- text insert --------------------------------------------------------------
 
 function text-insert-help() {
@@ -486,7 +526,6 @@ function text-insert() {
 
 # --- Not yet ------------------------------------------------------------------
 
-function text-show()     { not-yet "text show" ; }
 function text-edit()     { not-yet "text edit" ; }
 function text-generate() { not-yet "text generate" ; }
 function text-rm()       { not-yet "text rm" ; }

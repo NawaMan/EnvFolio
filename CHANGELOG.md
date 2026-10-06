@@ -19,6 +19,8 @@ User-visible changes to Keep. Newest first.
 - `keep text ls` — lists the texts as a tree, names only; mirrors `keep secret ls`.
 - `keep text find` — lists the texts whose names contain any of the parts; mirrors
   `keep secret find`.
+- `keep text show` — prints a text only if its signature is there, matches, and is by the store's
+  key; otherwise it fails and says how to check and re-sign.
 - `keep text grep` — prints the matching lines of every text under its name; mirrors
   `keep secret grep`.
 - `keep text insert` — adds a text: kept plain as `<name>.txt` in the same layout as the secrets,

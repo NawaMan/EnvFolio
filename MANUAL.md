@@ -213,6 +213,42 @@ Search Terms: home
 
 ---
 
+## `keep text show`
+
+Prints a text, after checking its signature: `<name>.txt.sig` must be there, match the text, and
+be by the store's key (the first key in `.gpg-id`). Checking needs no passphrase.
+
+```
+keep text show <name>
+```
+
+| Option | Meaning |
+| --- | --- |
+| `-h`, `--help` | Show the options and stop. Works without a store. |
+
+Only a text can be shown; a folder or a secret is refused (use `keep secret show` for secrets).
+It needs a ready store (`keep store init`).
+
+### Show a text
+
+```bash
+keep text show web/user
+```
+
+Prints the text exactly as it was inserted.
+
+### A text changed outside Keep is not shown
+
+If the signature is missing, does not match, or is by another key — even one you trust — the text
+is not printed and the command fails. The message says how to see what changed
+(`git diff` / `git log -p` in the store), and how to sign it again if the text is right:
+
+```bash
+keep text insert -f -m web/user < ~/.keep/web/user.txt
+```
+
+---
+
 ## `keep text grep`
 
 Prints the lines of every text that match, each under its text's name. It mirrors
