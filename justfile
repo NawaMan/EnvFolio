@@ -9,9 +9,9 @@ default:
 # Run every test under bash 3.2 and bash 5.
 test-all: test-bash32 test-bash5
 
-# Run every test under bash 3.2, the minimum (the one macOS ships): /usr/local/bin/bash in the booth.
+# Run every test under bash 3.2, the minimum (the one macOS ships): /opt/bash-3.2/bin/bash in the booth (off PATH).
 test-bash32:
-    {{run_in_booth}} bash -c 'export PATH=/usr/local/bin:$PATH && cd $HOME/code/tests && ./test-all.sh 3'
+    {{run_in_booth}} bash -c 'export PATH=/opt/bash-3.2/bin:$PATH && cd $HOME/code/tests && ./test-all.sh 3'
 
 # Run every test under bash 5, the one Linux ships: /usr/bin/bash in the booth.
 test-bash5:

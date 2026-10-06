@@ -233,7 +233,7 @@ Starting style, not law — deviate explicitly (say so and why) rather than sile
   case changes (`${var,,}`, `${var^^}`), namerefs (`local -n`), `${var@Q}`, `;&`/`;;&`, `|&`,
   `coproc`, `wait -n` or negative array indexes. Also avoid `"${arr[@]}"` on an empty array
   under `set -u`, which 3.2 treats as unset. `just test-all` runs every test under bash 3.2
-  (`just test-bash32`, `/usr/local/bin/bash` in the booth) and bash 5 (`just test-bash5`); each
+  (`just test-bash32`, `/opt/bash-3.2/bin/bash` in the booth, off `PATH`) and bash 5 (`just test-bash5`); each
   fails at once if the wanted bash is not the one found.
 - **Runtime dependencies: `bash`, `pass`, `gpg`, `git`, `tree`, `tar`, `gzip` — and that's the
   list.** `gpg` is a direct dependency because first-run setup has to find or create a key before
@@ -277,10 +277,10 @@ Use a session name that is clearly yours, and never kill one you did not create.
   teardown. Assert the env vars point into the temp dir before running anything.
 - Never run `pass` against the user's real store (`~/.password-store`, the user's own GPG keyring)
   for verification — not even read-only `pass ls`. If a check seems to need it, stop and ask.
-- Tests never touch the user's **real folders or drives** either: set `XDG_STATE_HOME` to a temp
-  dir, and hide plugged-in drives from `removable-drives` (e.g. `USER=sb-test-nobody`, so
-  `/media/$USER` / `/run/media/$USER` match nothing). An early test wrote a sandbox backup onto
-  the user's real USB drive because this was missed.
+- Tests never touch the user's **real folders or drives** either: set `HOME` and `XDG_STATE_HOME`
+  to temp dirs, and set `USER=sb-test-nobody` so `/media/$USER` / `/run/media/$USER` match
+  nothing, should any command look for plugged-in drives. An early test wrote a sandbox backup
+  onto the user's real USB drive because this was missed.
 
 ### Handling secrets — non-negotiable
 

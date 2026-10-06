@@ -16,3 +16,4 @@
 
 # Backups and exports hold a secret key — never commit one by accident.
 *--keep.tar.gz*
+*--keep.gpg*
