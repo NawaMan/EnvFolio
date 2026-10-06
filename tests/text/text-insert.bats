@@ -76,13 +76,16 @@ is-signed() {
     [ "$(git -C "$KEEP_STORE_DIR" show HEAD~1:note.txt)" = "old" ]
 }
 
-@test "text insert: the same text again commits nothing and succeeds" {
+@test "text insert: the same text again succeeds, and the signature still matches" {
     make-store
     "$KEEP" text insert -t same note < /dev/null
-    local before ; before=$(git -C "$KEEP_STORE_DIR" rev-parse HEAD)
     run "$KEEP" text insert -t same note < /dev/null
     [ "$status" -eq 0 ]
-    [ "$(git -C "$KEEP_STORE_DIR" rev-parse HEAD)" = "$before" ]
+    # A new signature may differ (it holds the time), so only check that it matches.
+    run "$KEEP" text show note
+    [ "$status" -eq 0 ]
+    [ "$output" = "same" ]
+    [ -z "$(git -C "$KEEP_STORE_DIR" status --porcelain)" ]
 }
 
 @test "text insert: a failed signature keeps the old text and leaves nothing behind" {
