@@ -31,6 +31,9 @@ CALLER_STORE_DIR=${PASSWORD_STORE_DIR-}
 # user's own ~/.password-store. Every `pass` call goes there.
 export PASSWORD_STORE_DIR="$STORE_PATH"
 
+# gpg's passphrase prompt needs the terminal, also when its stdin is a pipe or a file (as pass does).
+[[ -n ${GPG_TTY:-} ]] || ! tty -s || { GPG_TTY=$(tty) ; export GPG_TTY ; }
+
 #== Main =======================================================================
 
 function main() {
@@ -61,6 +64,8 @@ function help() {
     case "$*" in
         "")                keep-help            ;;
         "store init")      store-init-help      ;;
+        "store backup")    store-backup-help    ;;
+        "store restore")   store-restore-help   ;;
         "ls")              list-help            ;;
         "exec")            run-exec-help        ;;
         "shell")           run-shell-help       ;;
@@ -95,8 +100,8 @@ Usage: keep <command> [args...]
 Commands:
   store init        Create the Keep store
   store path        Print the store's folder
-  store backup      (not yet)
-  store restore     (not yet)
+  store backup      Save the store and its key into one file
+  store restore     Bring the store and its key back from a backup
   store export      (not yet)
   store import      (not yet)
   text ls           List texts
@@ -320,10 +325,247 @@ function require-store() {
     store-exists || die "No ready Keep store at $STORE_PATH. Create one with: keep store init"
 }
 
+# --- store backup -------------------------------------------------------------
+
+# A backup is one file: keep-backup.txt (what it holds), key.asc (the store's keys, still protected
+# by their passphrase) and the store's folder — without .git unless --history.
+BACKUP_SUFFIX=--keep.tar.gz
+ENCRYPTED_BACKUP_SUFFIX=--keep.gpg
+
+function store-backup-usage() {
+    echo "Usage: keep store backup [--history] [--encrypt [--passphrase-stdin]] [<file>|<folder>]"
+}
+
+function store-backup-help() {
+    store-backup-usage
+    cat <<'EOF'
+
+Save the whole Keep store and its GPG key into one file, to get it all back with
+`keep store restore` — here or on a new machine. gpg asks for the key's passphrase to export it;
+in the backup, the key stays protected by that passphrase.
+
+The file is <file> (--keep.tar.gz added when missing), or backup-<date>-<time>--keep.tar.gz in
+<folder>, default the current one. An existing file is never replaced.
+
+Options:
+  --history           Keep the store's git history too. Without it, a restore starts a new one.
+  --encrypt           Encrypt the backup with a passphrase of its own; the file ends in --keep.gpg.
+                      Without it, the texts and the names of the secrets can be read by anyone
+                      who has the file (the secrets themselves stay encrypted).
+  --passphrase-stdin  Read that passphrase from the first line of stdin. Needs --encrypt.
+                      An empty passphrase is refused.
+  -h, --help          Show this help.
+EOF
+}
+
+# keep store backup [--history] [--encrypt [--passphrase-stdin]] [<file>|<folder>]
+function store-backup() {
+    local history=0 encrypt=0 passphrase_stdin=0 target=""
+    while (( $# > 0 )); do
+        case $1 in
+            --history)          history=1          ;;
+            --encrypt)          encrypt=1          ;;
+            --passphrase-stdin) passphrase_stdin=1 ;;
+            -h|--help)          store-backup-help ; return 0 ;;
+            -*) die "store backup: unknown option: $1${EXTRA_LINE}$(store-backup-usage)" ;;
+            *)  [[ -z $target ]] || die "store backup: one file or folder only.${EXTRA_LINE}$(store-backup-usage)"
+                target=$1 ;;
+        esac
+        shift
+    done
+    (( encrypt || ! passphrase_stdin )) || die "--passphrase-stdin needs --encrypt."
+    require-store
+
+    local suffix=$BACKUP_SUFFIX file=${target:-.}
+    (( encrypt )) && suffix=$ENCRYPTED_BACKUP_SUFFIX
+    [[ -d $file ]] && file=${file%/}/backup-$(date +%Y%m%d-%H%M%S)$suffix
+    [[ $file == *"$suffix" ]] || file+=$suffix
+    [[ ! -e $file ]]              || die "$file already exists."
+    [[ -d $(dirname "$file") ]]   || die "There is no folder $(dirname "$file")."
+
+    local passphrase=""
+    if (( passphrase_stdin )); then
+        IFS= read -rs passphrase || true
+        [[ -n $passphrase ]] || die "No passphrase on stdin."
+    fi
+
+    # The store's keys, by primary fingerprint; each must have its secret part here.
+    local store id ids=() keys=() key
+    store=$(cd "$STORE_PATH" && pwd -P)
+    while IFS= read -r id; do [[ -n $id ]] && ids+=("$id") ; done < "$store/.gpg-id"
+    while IFS= read -r key; do
+        gpg --list-secret-keys "$key" >/dev/null 2>&1 \
+            || die "The secret key $key is not in this keyring, so it cannot be backed up."
+        keys+=("$key")
+    done < <(gpg --list-keys --with-colons -- "${ids[@]}" 2>/dev/null \
+                | awk -F: '$1 == "pub" { p = 1 } $1 == "fpr" && p { print $10 ; p = 0 }')
+    (( ${#keys[@]} > 0 )) || die "Cannot find the store's key in this keyring."
+
+    umask 077
+    local stage
+    stage=$(mktemp -d) || die "Cannot make a temporary folder."
+    remove-on-exit "$stage" "$file.partial"
+    {
+        echo "keep-backup 1"
+        echo "created $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        echo "store ${store##*/}"
+        printf 'key %s\n' "${keys[@]}"
+    } > "$stage/keep-backup.txt"
+
+    section "Export the key (gpg may ask for its passphrase)"
+    if ! gpg --armor --output "$stage/key.asc" --export-secret-keys "${keys[@]}" || [[ ! -s $stage/key.asc ]]; then
+        die "Exporting the key failed."
+    fi
+    show-answer "Key" "${keys[*]}"
+
+    section "Pack the backup"
+    local pack=(tar -czf -) seal=(cat)
+    (( history )) || pack+=(--exclude=.git)
+    pack+=(-C "$stage" keep-backup.txt key.asc -C "$(dirname "$store")" "${store##*/}")
+    if (( encrypt )); then
+        seal=(gpg --symmetric --compress-algo none --output -)
+        (( passphrase_stdin )) && seal=(gpg --batch --pinentry-mode loopback --passphrase-fd 3 "${seal[@]:1}")
+    fi
+    # The passphrase reaches gpg on fd 3 (printf is a builtin: never in argv). COPYFILE_DISABLE
+    # keeps macOS tar from adding ._ files.
+    COPYFILE_DISABLE=1 "${pack[@]}" | "${seal[@]}" > "$file.partial" 3< <(printf '%s\n' "$passphrase")
+    [[ ${PIPESTATUS[*]} == "0 0" ]] || die "Packing the backup failed."
+    unset passphrase
+    mv "$file.partial" "$file" || die "Cannot write $file."
+    show-answer "File" "$file"
+
+    local lines=(
+        "Your Keep store is backed up."
+        ""
+        "File:      $(tilde-path "$file")"
+        "Key:       ${keys[0]}"
+        "History:   $( (( history )) && echo "included" || echo "not included (add --history)" )"
+        "Encrypted: $( (( encrypt )) && echo "yes" || echo "no (add --encrypt)" )"
+        ""
+        "To restore it, here or on a new machine:"
+        "  keep store restore $file"
+        "That needs the key's passphrase$( (( encrypt )) && echo ", and the backup's own" )."
+        "Keep the file somewhere safe and offline."
+    )
+    echo ""
+    show-box "${lines[@]}"
+}
+
+# --- store restore ------------------------------------------------------------
+
+function store-restore-usage() {
+    echo "Usage: keep store restore [--passphrase-stdin] <file>"
+}
+
+function store-restore-help() {
+    store-restore-usage
+    cat <<'EOF'
+
+Bring back a Keep store from a file made by `keep store backup`: import its GPG key (trusted as
+your own), and put the store at $KEEP_STORE_DIR (default ~/.keep). A backup without its git
+history starts a new one. Refuses when anything is already at $KEEP_STORE_DIR.
+
+Options:
+  --passphrase-stdin  Read the passphrase of an encrypted backup (--keep.gpg) from the first line
+                      of stdin, instead of gpg's prompt.
+  -h, --help          Show this help.
+EOF
+}
+
+# keep store restore [--passphrase-stdin] <file>
+function store-restore() {
+    local passphrase_stdin=0 file=""
+    while (( $# > 0 )); do
+        case $1 in
+            --passphrase-stdin) passphrase_stdin=1 ;;
+            -h|--help)          store-restore-help ; return 0 ;;
+            -*) die "store restore: unknown option: $1${EXTRA_LINE}$(store-restore-usage)" ;;
+            *)  [[ -z $file ]] || die "store restore: one file only.${EXTRA_LINE}$(store-restore-usage)"
+                file=$1 ;;
+        esac
+        shift
+    done
+    [[ -n $file ]] || die "$(store-restore-usage)"
+    [[ -f $file ]] || die "There is no file $file."
+
+    local open=(cat)
+    case $file in
+        *"$ENCRYPTED_BACKUP_SUFFIX")
+            open=(gpg --decrypt --output -)
+            (( passphrase_stdin )) && open=(gpg --batch --pinentry-mode loopback --passphrase-fd 3 "${open[@]:1}") ;;
+        *"$BACKUP_SUFFIX")
+            (( ! passphrase_stdin )) || die "--passphrase-stdin is only for an encrypted backup ($ENCRYPTED_BACKUP_SUFFIX)." ;;
+        *)  die "$file is not a Keep backup: its name ends in neither $BACKUP_SUFFIX nor $ENCRYPTED_BACKUP_SUFFIX." ;;
+    esac
+    [[ ! -e $STORE_PATH ]] \
+        || die "$STORE_PATH already exists. Move it away to restore there, or run with${EXTRA_LINE}    KEEP_STORE_DIR=<other-folder> $0 store restore $file"
+
+    local passphrase=""
+    if (( passphrase_stdin )); then
+        IFS= read -rs passphrase || true
+        [[ -n $passphrase ]] || die "No passphrase on stdin."
+    fi
+
+    # Unpack next to the store's place, so the last step is one rename.
+    local target=${STORE_PATH%/} stage
+    umask 077
+    mkdir -p "$(dirname "$target")" || die "Cannot create $(dirname "$target")."
+    stage=$(mktemp -d "$(dirname "$target")/.keep-restore.XXXXXX") || die "Cannot make a temporary folder."
+    remove-on-exit "$stage"
+
+    section "Unpack the backup"
+    "${open[@]}" < "$file" 3< <(printf '%s\n' "$passphrase") | tar -xzf - -C "$stage"
+    [[ ${PIPESTATUS[*]} == "0 0" ]] || die "Unpacking $file failed."
+    unset passphrase
+
+    local field value format="" name="" keys=() key
+    [[ -f $stage/keep-backup.txt ]] || die "$file is not a Keep backup: it has no keep-backup.txt."
+    while read -r field value; do
+        case $field in
+            keep-backup) format=$value ;;
+            store)       name=$value   ;;
+            key)         keys+=("$value") ;;
+        esac
+    done < "$stage/keep-backup.txt"
+    [[ $format == 1 ]] || die "$file is a Keep backup of a format this Keep cannot read ($format)."
+    [[ -n $name && $name != */* && $name != . && $name != .. && -s $stage/$name/.gpg-id ]] \
+        || die "$file has no store in it."
+    [[ -s $stage/key.asc && ${#keys[@]} -gt 0 ]] || die "$file has no key in it."
+    for key in "${keys[@]}"; do
+        [[ $key =~ ^[0-9A-F]{40,64}$ ]] || die "$file names a key that is not a fingerprint: $key"
+    done
+    show-answer "Store" "$name"
+
+    section "Import the key"
+    gpg --batch --quiet --import "$stage/key.asc" || die "Importing the key failed."
+    printf '%s:6:\n' "${keys[@]}" | gpg --batch --quiet --import-ownertrust || die "Trusting the key failed."
+    for key in "${keys[@]}"; do
+        gpg --list-secret-keys "$key" >/dev/null 2>&1 || die "The backup's key.asc has no secret key $key."
+    done
+    show-answer "Key" "${keys[*]}"
+
+    local uid history="from the backup"
+    uid=$(key-uid "${keys[0]}")
+    if [[ ! -e $stage/$name/.git ]]; then
+        section "Start the store's git history"
+        STORE_PATH=$stage/$name PASSWORD_STORE_DIR=$stage/$name start-store-history "$uid"
+        history="new (the backup had none)"
+    fi
+
+    mv "$stage/$name" "$target" || die "Cannot move the store to $target."
+
+    section "Summary"
+    show-box "Your Keep store is restored." \
+             "" \
+             "Store:   $(tilde-path "$target")" \
+             "Key:     ${keys[0]}" \
+             "         $uid" \
+             "History: $history"
+    echo ""
+}
+
 # --- Not yet ------------------------------------------------------------------
 
-function store-backup()  { not-yet "store backup" ; }
-function store-restore() { not-yet "store restore" ; }
 function store-export()  { not-yet "store export" ; }
 function store-import()  { not-yet "store import" ; }
 
@@ -1461,6 +1703,12 @@ function ensure-requirements() {
 
 function info() { printf '%s\n' "$*"; }
 function die()  { printf 'keep: %s\n' "$*" >&2; exit 1; }
+# remove-on-exit <path>...: remove these when Keep exits, however it exits.
+REMOVE_ON_EXIT=()
+function remove-on-exit() {
+    REMOVE_ON_EXIT+=("$@")
+    trap 'rm -rf -- "${REMOVE_ON_EXIT[@]}"' EXIT
+}
 # not-yet <command>: fail for a command that isn't built yet.
 function not-yet() { die "$1 is not built yet." ; }
 

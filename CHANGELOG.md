@@ -6,6 +6,13 @@ User-visible changes to Keep. Newest first.
 
 ### Added
 
+- `keep store backup` — saves the whole store and its GPG key (still protected by its
+  passphrase) into one file, `backup-<date>-<time>--keep.tar.gz`. `--history` keeps the store's
+  git history (off by default); `--encrypt` encrypts the file with a passphrase of its own
+  (`--keep.gpg`), `--passphrase-stdin` reads that passphrase from stdin.
+- `keep store restore <file>` — brings the store and its key back from such a backup: imports and
+  trusts the key, starts a new git history when the backup has none, and refuses when the store
+  folder already exists.
 - `keep exec` and `keep shell` — run a command, or your shell, with entries from the store as
   environment variables; secrets only with `--secrets`. A variable is named by the entry's path,
   a top `@namespace` folder removed (`@nawa/gh/token` → `GH_TOKEN`); a later entry overrides an

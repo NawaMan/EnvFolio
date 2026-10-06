@@ -102,6 +102,101 @@ run is kept, and shows up in the key menu.
 
 ---
 
+## `keep store backup`
+
+Saves the whole Keep store and its GPG key into one file, to get it all back with
+`keep store restore` — on this machine or a new one.
+
+```
+keep store backup [--history] [--encrypt [--passphrase-stdin]] [<file>|<folder>]
+```
+
+| Option | Meaning |
+| --- | --- |
+| `--history` | Keep the store's git history too. Without it, a restore starts a new one. |
+| `--encrypt` | Encrypt the backup with a passphrase of its own (`gpg --symmetric`); the file ends in `--keep.gpg` instead of `--keep.tar.gz`. |
+| `--passphrase-stdin` | Read that passphrase from the first line of stdin instead of gpg's prompt. Needs `--encrypt`. An empty passphrase is refused. |
+| `-h`, `--help` | Show the options and stop. |
+
+The file is `<file>` (the suffix added when missing), or `backup-<date>-<time>--keep.tar.gz` in
+`<folder>` — default the current folder. An existing file is never replaced. The file is readable
+by you only.
+
+What is in it:
+
+- `keep-backup.txt` — when it was made, the store's folder name, and the key's fingerprint.
+- `key.asc` — the store's secret key, exported with `gpg --export-secret-keys`. gpg asks for the
+  key's passphrase to export it, and the key stays protected by that passphrase in the file.
+- The store's folder: the secrets (encrypted), the texts and their signatures (plain) — and with
+  `--history`, its `.git`.
+
+Without `--encrypt`, anyone with the file can read the texts and the names of the secrets; the
+secrets themselves need the key and its passphrase. Keep the file somewhere safe and offline.
+
+### Back up into the current folder
+
+```bash
+keep store backup
+```
+
+Writes `backup-20261006-120000--keep.tar.gz` (the date and time now) here.
+
+### Restore on a new machine
+
+```bash
+keep store backup /media/usb
+# ... on the new machine:
+keep store restore /media/usb/backup-20261006-120000--keep.tar.gz
+```
+
+The store comes back with a new git history, its texts still verify and its secrets decrypt.
+
+### With the git history
+
+```bash
+keep store backup --history
+```
+
+The restored store has the same history as this one.
+
+### Encrypted
+
+```bash
+keep store backup --encrypt
+```
+
+gpg asks for a passphrase for the backup (twice), and writes `backup-…--keep.gpg`. A restore asks
+for it again. With `--passphrase-stdin`, the first line of stdin is the passphrase — feed it from
+a file or another secret tool, not with `echo`.
+
+---
+
+## `keep store restore`
+
+Brings back a Keep store from a file made by `keep store backup`.
+
+```
+keep store restore [--passphrase-stdin] <file>
+```
+
+| Option | Meaning |
+| --- | --- |
+| `--passphrase-stdin` | Read the passphrase of an encrypted backup (`--keep.gpg`) from the first line of stdin instead of gpg's prompt. |
+| `-h`, `--help` | Show the options and stop. |
+
+It imports the backup's key into your keyring and trusts it as your own (so `pass` can encrypt to
+it), then puts the store at `$KEEP_STORE_DIR` (default `~/.keep`). A key already in your keyring
+is fine. A backup without its git history gets a new one: one commit of everything restored.
+
+It refuses when anything is already at `$KEEP_STORE_DIR` and changes nothing: move that folder
+away first, or restore elsewhere with `KEEP_STORE_DIR=<other-folder> keep store restore <file>`.
+A file whose name ends in neither `--keep.tar.gz` nor `--keep.gpg`, or that is not a Keep backup,
+is refused too. Nothing is left behind when it fails.
+
+Examples: see `keep store backup` above.
+
+---
+
 ## `keep ls`
 
 Lists the texts and secrets in the Keep store together as one tree: names only, never values.
