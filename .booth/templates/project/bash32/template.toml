@@ -1,0 +1,9 @@
+display-name = "Bash 3.2"
+display-disc = "Build bash 3.2.57 (the one macOS ships) into /opt/bash-3.2, off PATH, for `just test-bash32`"
+tags = ["bash", "macos", "test"]
+
+# Late, so it lands after the package installs; it doesn't depend on them.
+[segments]
+"Boothfile--90" = """
+setup bash32
+"""

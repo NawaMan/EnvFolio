@@ -228,8 +228,12 @@ Starting style, not law — deviate explicitly (say so and why) rather than sile
 
 - **Must run on both Linux and macOS.** Every change is written for both; anything that differs
   (package manager, clipboard tool, GNU vs BSD flags) is handled explicitly, not assumed.
-- `#!/usr/bin/env bash`. **Decide the minimum bash version up front** and write it here — macOS
-  still ships bash 3.2 (no associative arrays, no `mapfile`, no `${var,,}`). *Open question.*
+- `#!/usr/bin/env bash`. **Minimum bash: 3.2**, the version macOS still ships, so Keep runs on a
+  stock Mac. No bash 4+ features: no associative arrays (`declare -A`), `mapfile`/`readarray`,
+  case changes (`${var,,}`, `${var^^}`), namerefs (`local -n`), `${var@Q}`, `;&`/`;;&`, `|&`,
+  `coproc`, `wait -n` or negative array indexes. Also avoid `"${arr[@]}"` on an empty array
+  under `set -u`, which 3.2 treats as unset. `just test-bash32` runs every test under bash 3.2
+  (built into the booth at `/opt/bash-3.2` by the `bash32` setup).
 - **Runtime dependencies: `bash`, `pass`, `gpg`, `git`, `tree`, `tar`, `gzip` — and that's the
   list.** `gpg` is a direct dependency because first-run setup has to find or create a key before
   `pass init`, and texts are signed with it; `git` because the store is synced as a git repo;

@@ -30,6 +30,7 @@ Every command, with examples: [MANUAL.md](MANUAL.md).
 
 # Dependencies
 
+- `bash` 3.2 or newer (the one macOS ships is enough)
 - `pass`
 - `gpg`
 - `git`
