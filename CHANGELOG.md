@@ -17,6 +17,8 @@ User-visible changes to Keep. Newest first.
   `secret find` leave texts out.
 - `keep ls` — lists texts and secrets together in one tree, each marked (S) or (T).
 - `keep text ls` — lists the texts as a tree, names only; mirrors `keep secret ls`.
+- `keep text find` — lists the texts whose names contain any of the parts; mirrors
+  `keep secret find`.
 - `keep text insert` — adds a text: kept plain as `<name>.txt` in the same layout as the secrets,
   signed with the store's key as `<name>.txt.sig`, and committed. `-t <text>` gives it on the
   command line; `-m` takes several lines.

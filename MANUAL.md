@@ -184,6 +184,35 @@ Lists only what is under `web`.
 
 ---
 
+## `keep text find`
+
+Lists the texts whose names contain any of the given parts, ignoring case, as a tree: names
+only. It mirrors `keep secret find`: `pass find`, for the texts.
+
+```
+keep text find <part>...
+```
+
+| Option | Meaning |
+| --- | --- |
+| `-h`, `--help` | Show the options and stop. Works without a store. |
+
+It needs a ready store (`keep store init`).
+
+### Find by name
+
+```bash
+keep text find home
+```
+
+```
+Search Terms: home
+└── web
+    └── home
+```
+
+---
+
 ## `keep text insert`
 
 Adds a text to the Keep store. A text is **not a secret**: it is kept plain, not encrypted, as

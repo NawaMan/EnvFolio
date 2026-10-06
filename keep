@@ -57,6 +57,7 @@ function help() {
         "store init")      store-init-help      ;;
         "ls")              list-help            ;;
         "text ls")         text-ls-help         ;;
+        "text find")       text-find-help       ;;
         "text insert")     text-insert-help     ;;
         "secret ls")       secret-ls-help       ;;
         "secret find")     secret-find-help     ;;
@@ -84,6 +85,7 @@ Commands:
   store export      (not yet)
   store import      (not yet)
   text ls           List texts
+  text find         Find texts by name
   text insert       Add a text (plain, signed)
   text ...          Other text commands (not yet)
   secret ls         List secrets
@@ -352,6 +354,31 @@ function text-ls() {
     store-tree txt "$STORE_PATH/${1:-}"
 }
 
+# --- text find ----------------------------------------------------------------
+
+function text-find-help() {
+    cat <<'EOF'
+Usage: keep text find <part>...
+
+List the texts whose names contain any of the parts (ignoring case), as a tree — names only.
+
+Options:
+  -h, --help          Show this help and stop.
+EOF
+}
+
+# keep text find <part>...
+# As `secret find`: `pass find`, for the texts.
+function text-find() {
+    local arg terms
+    for arg in "$@"; do case $arg in -h|--help) text-find-help ; return 0 ;; esac ; done
+    (( $# > 0 )) || die "Usage: keep text find <part>..."
+    require-store
+    terms="*$(printf '%s*|*' "$@")"
+    printf 'Search Terms: %s\n' "$*"
+    store-tree txt "$STORE_PATH" -P "${terms%|*}" --matchdirs --ignore-case
+}
+
 # --- text insert --------------------------------------------------------------
 
 function text-insert-help() {
@@ -427,7 +454,6 @@ function text-insert() {
 
 # --- Not yet ------------------------------------------------------------------
 
-function text-find()     { not-yet "text find" ; }
 function text-grep()     { not-yet "text grep" ; }
 function text-show()     { not-yet "text show" ; }
 function text-edit()     { not-yet "text edit" ; }
