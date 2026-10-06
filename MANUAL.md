@@ -213,6 +213,36 @@ Search Terms: home
 
 ---
 
+## `keep text grep`
+
+Prints the lines of every text that match, each under its text's name. It mirrors
+`keep secret grep`: the same loop as `pass grep`, reading the plain texts instead of decrypting
+secrets. Secrets are never searched. Signatures are not checked here (`keep text show` will).
+
+```
+keep text grep [<grep-option>...] <pattern>
+```
+
+| Option | Meaning |
+| --- | --- |
+| `<grep-option>` | Any option of `grep`, e.g. `-i` to ignore case. |
+| `-h`, `--help` | Show the options and stop. Works without a store. In Keep, `-h` is always help, never grep's `-h`. |
+
+It needs a ready store (`keep store init`).
+
+### Find by value
+
+```bash
+keep text grep jane
+```
+
+```
+web/user:
+jane
+```
+
+---
+
 ## `keep text insert`
 
 Adds a text to the Keep store. A text is **not a secret**: it is kept plain, not encrypted, as

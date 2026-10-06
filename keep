@@ -58,6 +58,7 @@ function help() {
         "ls")              list-help            ;;
         "text ls")         text-ls-help         ;;
         "text find")       text-find-help       ;;
+        "text grep")       text-grep-help       ;;
         "text insert")     text-insert-help     ;;
         "secret ls")       secret-ls-help       ;;
         "secret find")     secret-find-help     ;;
@@ -86,6 +87,7 @@ Commands:
   store import      (not yet)
   text ls           List texts
   text find         Find texts by name
+  text grep         Find texts by value
   text insert       Add a text (plain, signed)
   text ...          Other text commands (not yet)
   secret ls         List secrets
@@ -379,6 +381,36 @@ function text-find() {
     store-tree txt "$STORE_PATH" -P "${terms%|*}" --matchdirs --ignore-case
 }
 
+# --- text grep ----------------------------------------------------------------
+
+function text-grep-help() {
+    cat <<'EOF'
+Usage: keep text grep [<grep-option>...] <pattern>
+
+Print the lines of every text that match <pattern>, under each text's name.
+
+Options:
+  <grep-option>       Any option of grep, e.g. -i to ignore case, -v to invert the match.
+  -h, --help          Show this help and stop (not grep's -h).
+EOF
+}
+
+# keep text grep [<grep-option>...] <pattern>
+# As `pass grep`, over the texts: the same loop, reading each .txt instead of decrypting a .gpg.
+function text-grep() {
+    local arg file found dir
+    for arg in "$@"; do case $arg in --) break ;; -h|--help) text-grep-help ; return 0 ;; esac ; done
+    (( $# > 0 )) || die "Usage: keep text grep [<grep-option>...] <pattern>"
+    require-store
+    while IFS= read -r -d '' file; do
+        found=$(grep --color=always "$@" < "$file") || continue
+        file=${file%.txt} ; file=${file#"$STORE_PATH"/}
+        dir="${file%/*}/" ; [[ $dir == "$file/" ]] && dir=""
+        printf '\e[94m%s\e[1m%s\e[0m:\n' "$dir" "${file##*/}"
+        printf '%s\n' "$found"
+    done < <(find -L "$STORE_PATH" -path '*/.git' -prune -o -name '*.txt' -print0)
+}
+
 # --- text insert --------------------------------------------------------------
 
 function text-insert-help() {
@@ -454,7 +486,6 @@ function text-insert() {
 
 # --- Not yet ------------------------------------------------------------------
 
-function text-grep()     { not-yet "text grep" ; }
 function text-show()     { not-yet "text show" ; }
 function text-edit()     { not-yet "text edit" ; }
 function text-generate() { not-yet "text generate" ; }
