@@ -802,8 +802,6 @@ keep secret cp web/github web/github-copy
 
 ## `keep exec`
 
-*(not yet: this section is the spec.)*
-
 Runs a command with entries from the Keep store as environment variables, the way `op run` and
 `aws-vault exec` do. Texts load by default; secrets load only with `--secrets`. Values never go
 on a command line, into a file, or on the screen.
@@ -910,8 +908,6 @@ claimed, so it does not also give `GH_TOKEN`.
 ---
 
 ## `keep shell`
-
-*(not yet: this section is the spec.)*
 
 Starts your shell (`$SHELL`, or `/bin/sh`) with entries from the Keep store as environment
 variables. It is `keep exec <entry>... -- "$SHELL"`, plus a line saying what was loaded.

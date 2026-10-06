@@ -8,7 +8,7 @@
 #   keep store  init | path | backup | restore | export | import
 #   keep text   ls | find | grep | show | insert | edit | generate | rm | mv | cp
 #   keep secret ls | find | grep | show | insert | edit | generate | rm | mv | cp
-#   keep ls | version | help [command]
+#   keep ls | exec | shell | version | help [command]
 #
 # Environment:
 #   KEEP_STORE_DIR  The Keep store (default ~/.keep). Laid out like a pass store, but kept apart
@@ -22,6 +22,10 @@ STORE_PATH=${KEEP_STORE_DIR:-$HOME/.keep}
 # Always absolute: `pass` loops forever on a relative PASSWORD_STORE_DIR whose folder doesn't exist
 # yet (its set_git keeps stripping "/…" off a path that has none left).
 [[ $STORE_PATH == /* ]] || STORE_PATH=$PWD/$STORE_PATH
+
+# The caller's own PASSWORD_STORE_DIR (set or not), put back for the command `keep exec` runs.
+CALLER_STORE_DIR_SET=${PASSWORD_STORE_DIR+set}
+CALLER_STORE_DIR=${PASSWORD_STORE_DIR-}
 
 # The Keep store is laid out like a pass store, but lives in its own place so it never touches the
 # user's own ~/.password-store. Every `pass` call goes there.
@@ -39,9 +43,11 @@ function main() {
         text)    text   "$@" ;;
         secret)  secret "$@" ;;
         ls)      list   "$@" ;;
+        exec)    run-exec  "$@" ;;
+        shell)   run-shell "$@" ;;
         version) version "$@" ;;
         help)    help   "$@" ;;
-        "")      echo   "Usage: keep <version|help|store|text|secret|ls> [args...]" >&2 ; return 1 ;;
+        "")      echo   "Usage: keep <version|help|store|text|secret|ls|exec|shell> [args...]" >&2 ; return 1 ;;
         *)       echo   "keep: unknown command: $category"                        >&2 ; return 1 ;;
     esac
 }
@@ -56,6 +62,8 @@ function help() {
         "")                keep-help            ;;
         "store init")      store-init-help      ;;
         "ls")              list-help            ;;
+        "exec")            run-exec-help        ;;
+        "shell")           run-shell-help       ;;
         "text ls")         text-ls-help         ;;
         "text find")       text-find-help       ;;
         "text grep")       text-grep-help       ;;
@@ -112,6 +120,8 @@ Commands:
   secret mv         Rename or move a secret
   secret cp         Copy a secret
   ls                List texts and secrets together
+  exec              Run a command with entries as environment variables
+  shell             Start a shell with entries as environment variables
   version           Print Keep's version
   help [command]    Show help, e.g. `keep help store init`
 
@@ -1087,6 +1097,191 @@ function list() {
     echo "Keep Store"
     [[ $# -eq 0 ]] || echo "${1%/}"
     store-tree all "$STORE_PATH/${1:-}"
+}
+
+#== Command: Exec ==============================================================
+
+function run-exec-help() {
+    cat <<'HELP'
+Usage: keep exec [-s|--secrets] <entry>... -- <command> [<arg>...]
+
+Run a command with entries from the store as environment variables. Texts load by default;
+secrets only with --secrets. Values are never printed.
+
+An <entry> is a text or secret name, a folder (every entry under it), or VAR=<name> to pick
+the variable's name. Otherwise the name comes from the entry's path: a leading [namespace] is
+removed, / turns into _, and it is uppercased ([nawa]gh/token -> GH_TOKEN). A later entry
+overrides an earlier one; VAR=<name> overrides them all. Quote a [namespace] for the shell.
+
+Options:
+  -s, --secrets       Also load secrets.
+  -h, --help          Show this help and stop.
+HELP
+}
+
+function run-shell-help() {
+    cat <<'HELP'
+Usage: keep shell [-s|--secrets] <entry>...
+
+Start your shell ($SHELL) with entries from the store as environment variables, and say which
+names were loaded (never their values). KEEP_SHELL=1 is set. Type `exit` to leave.
+Entries and variable names are as in `keep exec`.
+
+Options:
+  -s, --secrets       Also load secrets.
+  -h, --help          Show this help and stop.
+HELP
+}
+
+function run-exec()  { exec-with-entries exec  "$@" ; }
+function run-shell() { exec-with-entries shell "$@" ; }
+
+VAR_NAME_PATTERN='^[A-Za-z_][A-Za-z0-9_]*$'
+
+# exec-with-entries <exec|shell> [-s|--secrets] <entry>... [-- <command> [<arg>...]]
+# Read every entry first, then export them all at once and exec: no `pass` or `gpg` call made
+# while reading ever sees a value already loaded.
+function exec-with-entries() {
+    local how=$1 secrets=0 dashes=0 entries=() arg ; shift
+    while (( $# > 0 )); do
+        arg=$1 ; shift
+        case $arg in
+            -h|--help)    "run-$how-help" ; return 0 ;;
+            -s|--secrets) secrets=1 ;;
+            --)           dashes=1 ; break ;;
+            -*)           die "$how: unknown option: $arg" ;;
+            *)            entries+=("$arg") ;;
+        esac
+    done
+    if [[ $how == exec ]]; then
+        (( ${#entries[@]} > 0 && dashes && $# > 0 )) \
+            || die "Usage: keep exec [-s|--secrets] <entry>... -- <command> [<arg>...]"
+    else
+        (( ${#entries[@]} > 0 && ! dashes )) || die "Usage: keep shell [-s|--secrets] <entry>..."
+        set -- "${SHELL:-/bin/sh}"
+    fi
+    require-store
+    resolve-entries "$how" "$secrets" "${entries[@]}"
+
+    local pairs=() i file value texts=0
+    for (( i = 0; i < ${#EXEC_VARS[@]}; i++ )); do
+        file=${EXEC_FILES[i]}
+        if [[ $file == *.txt ]]; then
+            verify-text "${file%.txt}"
+            value=$(cat "$STORE_PATH/$file") ; texts=$(( texts + 1 ))
+        else
+            value=$(pass show -- "${file%.gpg}") || die "$how: could not decrypt '${file%.gpg}'."
+        fi
+        pairs+=("${EXEC_VARS[i]}=$value")
+    done
+    unset value
+
+    if [[ $how == shell ]]; then
+        local names
+        names=$(printf ', %s' "${EXEC_VARS[@]}")
+        printf "keep shell: loaded %s (texts: %d, secrets: %d). Type 'exit' to leave.\n" \
+            "${names#, }" "$texts" $(( ${#EXEC_VARS[@]} - texts )) >&2
+        export KEEP_SHELL=1
+    fi
+    if [[ -n $CALLER_STORE_DIR_SET ]]; then export PASSWORD_STORE_DIR=$CALLER_STORE_DIR
+    else unset PASSWORD_STORE_DIR
+    fi
+    # One `export` for all, so no loaded name can clobber a variable this loop still needs.
+    export -- "${pairs[@]}" || die "$how: could not set the variables."
+    exec "$@"
+}
+
+# resolve-entries <exec|shell> <secrets:0|1> <entry>...
+# Work out which variable gets which entry, into EXEC_VARS[i] <- EXEC_FILES[i] (<name>.txt or
+# <name>.gpg). VAR=<name> entries first: they claim their entry, and are applied last so they win.
+# Every other entry is named by its path, a later one overriding an earlier one.
+function resolve-entries() {
+    local how=$1 secrets=$2 entry var name found file claimed=" " exp_vars=() exp_files=() i
+    shift 2
+    EXEC_VARS=() EXEC_FILES=()
+    for entry in "$@"; do
+        is-explicit "$entry" || continue
+        var=${entry%%=*} name=${entry#*=}
+        [[ $var =~ $VAR_NAME_PATTERN ]] || die "$how: '$var' is not a valid variable name."
+        entry-file "$how" "$secrets" "$name" || die "$how: '$name' is not a text or secret in the store."
+        exp_vars+=("$var") ; exp_files+=("$ENTRY_FILE") ; claimed+="$ENTRY_FILE "
+    done
+
+    for entry in "$@"; do
+        is-explicit "$entry" && continue
+        found=0
+        if entry-file "$how" "$secrets" "$entry"; then
+            found=1
+            [[ $claimed == *" $ENTRY_FILE "* ]] || add-derived "$how" "$ENTRY_FILE"
+        elif [[ -d $STORE_PATH/$entry ]]; then
+            while IFS= read -r file; do
+                file=${file#"$STORE_PATH"/}
+                if [[ $file == *.gpg && -f $STORE_PATH/${file%.gpg}.txt ]]; then
+                    die "$how: '${file%.gpg}' is both a text and a secret; give one VAR=<name> or rename one."
+                fi
+                found=1
+                [[ $claimed == *" $file "* ]] || add-derived "$how" "$file"
+            done < <(entries-under "$secrets" "$STORE_PATH/${entry%/}")
+        fi
+        (( found )) || die "$how: '$entry' has no entries to load."
+    done
+
+    for (( i = 0; i < ${#exp_vars[@]}; i++ )); do set-entry-var "${exp_vars[i]}" "${exp_files[i]}" ; done
+    (( ${#EXEC_VARS[@]} > 0 )) || die "$how: nothing to load."
+}
+
+# is-explicit <entry>: true for VAR=<name> (no / or [ before the =).
+function is-explicit() { [[ $1 == *=* && ${1%%=*} != *[/[]* ]] ; }
+
+# entry-file <how> <secrets> <name>: set ENTRY_FILE to the one entry <name> is, or return 1 when
+# it is none (e.g. a folder). Refuse a secret without --secrets, and a name that is both kinds.
+function entry-file() {
+    local how=$1 secrets=$2 name=$3
+    [[ -n ${name%/} && $name != -* && /$name/ != */../* && /$name/ != */./* ]] \
+        || die "$how: '$name' is not a valid name."
+    local txt=$STORE_PATH/$name.txt gpg=$STORE_PATH/$name.gpg
+    if [[ -f $gpg ]] && (( secrets )); then
+        [[ ! -f $txt ]] || die "$how: '$name' is both a text and a secret; give one VAR=<name> or rename one."
+        ENTRY_FILE=$name.gpg
+    elif [[ -f $txt ]]; then
+        ENTRY_FILE=$name.txt
+    elif [[ -f $gpg ]]; then
+        die "$how: '$name' is a secret; add --secrets to load it."
+    else
+        return 1
+    fi
+}
+
+# entries-under <secrets> <folder>: the texts (and with secrets, the secrets) under <folder>,
+# sorted, leaving out hidden ones like .git.
+function entries-under() {
+    local kinds=(-name '*.txt')
+    (( $1 )) && kinds+=(-o -name '*.gpg')
+    find "$2" -mindepth 1 -name '.*' -prune -o -type f \( "${kinds[@]}" \) -print | LC_ALL=C sort
+}
+
+# add-derived <how> <file>: name <file> by its path — [nawa]gh/token.gpg -> GH_TOKEN — or, when
+# that is not a valid variable name, warn and leave it out.
+function add-derived() {
+    local how=$1 name=${2%.*} var
+    var=${name}
+    [[ $var == "["*"]"* ]] && var=${var#*]}
+    var=$(printf '%s' "${var//\//_}" | LC_ALL=C tr '[:lower:]' '[:upper:]')
+    if [[ $var =~ $VAR_NAME_PATTERN ]]; then
+        set-entry-var "$var" "$2"
+    else
+        printf "keep %s: warning: '%s' would be %s, not a valid variable name; left out. Use VAR=%s.\n" \
+            "$how" "$name" "$var" "$name" >&2
+    fi
+}
+
+# set-entry-var <var> <file>: <var> gets <file>, replacing what it had.
+function set-entry-var() {
+    local i
+    for (( i = 0; i < ${#EXEC_VARS[@]}; i++ )); do
+        [[ ${EXEC_VARS[i]} == "$1" ]] && { EXEC_FILES[i]=$2 ; return 0 ; }
+    done
+    EXEC_VARS+=("$1") ; EXEC_FILES+=("$2")
 }
 
 #== Common Functions ===========================================================
