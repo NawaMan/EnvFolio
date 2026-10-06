@@ -109,11 +109,12 @@ Each name is marked **(S)** for a secret or **(T)** for a text. A name that is b
 Signatures (`.txt.sig`) are left out.
 
 ```
-keep ls [<subfolder>]
+keep ls [--flat] [<subfolder>]
 ```
 
 | Option | Meaning |
 | --- | --- |
+| `--flat` | Full names, one per line, sorted, instead of a tree: `(S) web/github`. |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
 Only a folder can be listed. It needs a ready store (`keep store init`).
@@ -141,6 +142,21 @@ keep ls web
 
 Lists only what is under `web`.
 
+### List flat
+
+```bash
+keep ls --flat
+```
+
+```
+(T) note
+(S) web/github
+(T) web/github
+(T) web/home
+```
+
+One full name per line, ready for `grep` or a script.
+
 ---
 
 ## `keep text ls`
@@ -150,11 +166,12 @@ tree as `pass ls`, but with the texts instead of the secrets. Signatures (`.txt.
 holding no texts are left out.
 
 ```
-keep text ls [<subfolder>]
+keep text ls [--flat] [<subfolder>]
 ```
 
 | Option | Meaning |
 | --- | --- |
+| `--flat` | Full names, one per line, sorted, instead of a tree. |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
 Only a folder can be listed; a text's own name is refused (use `keep text show` once it exists).
@@ -478,11 +495,12 @@ Lists the secrets in the Keep store as a tree: names only, never their values. I
 without the texts: the same tree, minus `*.txt`/`*.txt.sig` files and folders holding only texts.
 
 ```
-keep secret ls [<subfolder>]
+keep secret ls [--flat] [<subfolder>]
 ```
 
 | Option | Meaning |
 | --- | --- |
+| `--flat` | Full names, one per line, sorted, instead of a tree. |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
 Only a folder can be listed. A secret's own name is refused, because `pass ls <name>` would
@@ -807,13 +825,14 @@ Runs a command with entries from the Keep store as environment variables, the wa
 on a command line, into a file, or on the screen.
 
 ```
-keep exec [-s|--secrets] [-a|--all] <entry>... -- <command> [<arg>...]
+keep exec [-s|--secrets] [-a|--all] [-n|--names] <entry>... -- <command> [<arg>...]
 ```
 
 | Option | Meaning |
 | --- | --- |
 | `-s`, `--secrets` | Also load secrets. Without it, a secret named directly is refused, and the secrets in a folder are left out, with a note on stderr saying how many. |
 | `-a`, `--all` | Load every entry outside the namespaces (top `@` folders) first, wherever it is typed; the entries given then layer over it. With it, `<entry>` is optional. |
+| `-n`, `--names` | Only show which variable would get which entry, in the order they are set, marked (S)ecret or (T)ext, and stop. Nothing is read or decrypted (no passphrase, no signature check), and the command, if given, does not run. |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
 An `<entry>` is one of:
@@ -909,6 +928,19 @@ keep exec --all --secrets @nawa -- ./deploy
 Loads every text and secret outside the namespaces, then `@nawa/` over them. Without
 `--secrets`, only the texts, with a note saying how many secrets were left out.
 
+### Check the names first
+
+```bash
+keep exec --names --secrets gh @nawa -- gh repo list
+```
+
+```
+GH_TOKEN <- @nawa/gh/token (S)
+GH_USER  <- @nawa/gh/user (T)
+```
+
+Shows what the command would get, without running it. Warnings and notes still show on stderr.
+
 ### Pick the variable name
 
 ```bash
@@ -926,13 +958,14 @@ Starts your shell (`$SHELL`, or `/bin/sh`) with entries from the Keep store as e
 variables. It is `keep exec <entry>... -- "$SHELL"`, plus a line saying what was loaded.
 
 ```
-keep shell [-s|--secrets] [-a|--all] <entry>...
+keep shell [-s|--secrets] [-a|--all] [-n|--names] <entry>...
 ```
 
 | Option | Meaning |
 | --- | --- |
 | `-s`, `--secrets` | Also load secrets. |
 | `-a`, `--all` | Load every entry outside the namespaces first, as in `keep exec`. |
+| `-n`, `--names` | Only show which variable would get which entry, as in `keep exec`; no shell starts. |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
 Entries, variable names, values and errors are as in `keep exec`. Before the shell starts, Keep

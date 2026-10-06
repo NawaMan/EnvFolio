@@ -389,12 +389,13 @@ function verify-text() {
 
 function text-ls-help() {
     cat <<'EOF'
-Usage: keep text ls [<subfolder>]
+Usage: keep text ls [--flat] [<subfolder>]
 
 List the texts in the Keep store as a tree — names only. Give a subfolder to list only what is
 under it.
 
 Options:
+      --flat          Full names, one per line, sorted, instead of a tree.
   -h, --help          Show this help and stop.
 EOF
 }
@@ -403,13 +404,8 @@ EOF
 # As `secret ls`: `pass ls`, for the texts. Only a folder; a text is shown by `text show`.
 function text-ls() {
     case ${1:-} in -h|--help) text-ls-help ; return 0 ;; esac
-    (( $# <= 1 )) || die "Usage: keep text ls [<subfolder>]"
     require-store
-    [[ $# -eq 0 || ( $1 != -* && /$1/ != */../* && -d $STORE_PATH/$1 ) ]] \
-        || die "text ls: '$1' is not a folder in the store."
-    echo "Text Store"
-    [[ $# -eq 0 ]] || echo "${1%/}"
-    store-tree txt "$STORE_PATH/${1:-}"
+    list-store txt "Text Store" "text ls" "$@"
 }
 
 # --- text find ----------------------------------------------------------------
@@ -835,12 +831,13 @@ function secret() {
 
 function secret-ls-help() {
     cat <<'EOF'
-Usage: keep secret ls [<subfolder>]
+Usage: keep secret ls [--flat] [<subfolder>]
 
 List the secrets in the Keep store as a tree — names only, never their values.
 Give a subfolder to list only what is under it.
 
 Options:
+      --flat          Full names, one per line, sorted, instead of a tree.
   -h, --help          Show this help and stop.
 EOF
 }
@@ -849,12 +846,7 @@ EOF
 # `pass ls`, minus the texts. Only a folder: given an entry, `pass ls` would print the secret.
 function secret-ls() {
     case ${1:-} in -h|--help) secret-ls-help ; return 0 ;; esac
-    (( $# <= 1 )) || die "Usage: keep secret ls [<subfolder>]"
-    [[ $# -eq 0 || ( $1 != -* && /$1/ != */../* && -d $STORE_PATH/$1 ) ]] \
-        || die "secret ls: '$1' is not a folder in the store."
-    echo "Secret Store"
-    [[ $# -eq 0 ]] || echo "${1%/}"
-    store-tree gpg "$STORE_PATH/${1:-}"
+    list-store gpg "Secret Store" "secret ls" "$@"
 }
 
 # --- secret find --------------------------------------------------------------
@@ -1075,13 +1067,14 @@ function secret-cp() { call-pass secret-cp-help cp "$@" ; }
 
 function list-help() {
     cat <<'EOF'
-Usage: keep ls [<subfolder>]
+Usage: keep ls [--flat] [<subfolder>]
 
 List the texts and secrets in the Keep store together as a tree — names only, never values.
 Each name is marked (S) for a secret or (T) for a text. Give a subfolder to list only what is
 under it.
 
 Options:
+      --flat          Full names, one per line, sorted, instead of a tree.
   -h, --help          Show this help and stop.
 EOF
 }
@@ -1090,20 +1083,15 @@ EOF
 # `secret ls` and `text ls` in one tree. Only a folder, as they are.
 function list() {
     case ${1:-} in -h|--help) list-help ; return 0 ;; esac
-    (( $# <= 1 )) || die "Usage: keep ls [<subfolder>]"
     require-store
-    [[ $# -eq 0 || ( $1 != -* && /$1/ != */../* && -d $STORE_PATH/$1 ) ]] \
-        || die "ls: '$1' is not a folder in the store."
-    echo "Keep Store"
-    [[ $# -eq 0 ]] || echo "${1%/}"
-    store-tree all "$STORE_PATH/${1:-}"
+    list-store all "Keep Store" "ls" "$@"
 }
 
 #== Command: Exec ==============================================================
 
 function run-exec-help() {
     cat <<'HELP'
-Usage: keep exec [-s|--secrets] [-a|--all] <entry>... -- <command> [<arg>...]
+Usage: keep exec [-s|--secrets] [-a|--all] [-n|--names] <entry>... -- <command> [<arg>...]
 
 Run a command with entries from the store as environment variables. Texts load by default;
 secrets only with --secrets. Values are never printed.
@@ -1116,13 +1104,15 @@ later entry overrides an earlier one; VAR=<name> overrides them all.
 Options:
   -s, --secrets       Also load secrets.
   -a, --all           Load every entry outside the @namespaces first; <entry> is then optional.
+  -n, --names         Only show which variable would get which entry, and stop: nothing is read,
+                      nothing runs.
   -h, --help          Show this help and stop.
 HELP
 }
 
 function run-shell-help() {
     cat <<'HELP'
-Usage: keep shell [-s|--secrets] [-a|--all] <entry>...
+Usage: keep shell [-s|--secrets] [-a|--all] [-n|--names] <entry>...
 
 Start your shell ($SHELL) with entries from the store as environment variables, and say which
 names were loaded (never their values). KEEP_SHELL=1 is set. Type `exit` to leave.
@@ -1131,6 +1121,8 @@ Entries and variable names are as in `keep exec`.
 Options:
   -s, --secrets       Also load secrets.
   -a, --all           Load every entry outside the @namespaces first; <entry> is then optional.
+  -n, --names         Only show which variable would get which entry, and stop: nothing is read,
+                      nothing runs.
   -h, --help          Show this help and stop.
 HELP
 }
@@ -1144,30 +1136,32 @@ VAR_NAME_PATTERN='^[A-Za-z_][A-Za-z0-9_]*$'
 # Read every entry first, then export them all at once and exec: no `pass` or `gpg` call made
 # while reading ever sees a value already loaded.
 function exec-with-entries() {
-    local how=$1 secrets=0 all=0 dashes=0 entries=() arg ; shift
+    local how=$1 secrets=0 all=0 only_names=0 dashes=0 entries=() arg ; shift
     while (( $# > 0 )); do
         arg=$1 ; shift
         case $arg in
             -h|--help)    "run-$how-help" ; return 0 ;;
             -s|--secrets) secrets=1 ;;
             -a|--all)     all=1 ;;
+            -n|--names)   only_names=1 ;;
             --)           dashes=1 ; break ;;
             -*)           die "$how: unknown option: $arg" ;;
             *)            entries+=("$arg") ;;
         esac
     done
     if [[ $how == exec ]]; then
-        (( (${#entries[@]} > 0 || all) && dashes && $# > 0 )) \
-            || die "Usage: keep exec [-s|--secrets] [-a|--all] <entry>... -- <command> [<arg>...]"
+        (( (${#entries[@]} > 0 || all) && (only_names || (dashes && $# > 0)) )) \
+            || die "Usage: keep exec [-s|--secrets] [-a|--all] [-n|--names] <entry>... -- <command> [<arg>...]"
     else
         (( (${#entries[@]} > 0 || all) && ! dashes )) \
-            || die "Usage: keep shell [-s|--secrets] [-a|--all] <entry>..."
+            || die "Usage: keep shell [-s|--secrets] [-a|--all] [-n|--names] <entry>..."
         set -- "${SHELL:-/bin/sh}"
     fi
     require-store
     # --all is the store's root (""), loaded first wherever it was typed.
     (( all )) && entries=("" "${entries[@]}")
     resolve-entries "$how" "$secrets" "${entries[@]}"
+    (( only_names )) && { print-entry-names ; return 0 ; }
 
     local pairs=() i file value texts=0
     for (( i = 0; i < ${#EXEC_VARS[@]}; i++ )); do
@@ -1261,6 +1255,20 @@ function resolve-entries() {
     (( ${#EXEC_VARS[@]} > 0 )) || die "$how: nothing to load."
 }
 
+# print-entry-names: what --names shows — each variable and the entry it would get, in order,
+# (S)ecret or (T)ext. Nothing is read or decrypted.
+function print-entry-names() {
+    local i width=0 file kind
+    for (( i = 0; i < ${#EXEC_VARS[@]}; i++ )); do
+        (( ${#EXEC_VARS[i]} > width )) && width=${#EXEC_VARS[i]}
+    done
+    for (( i = 0; i < ${#EXEC_VARS[@]}; i++ )); do
+        file=${EXEC_FILES[i]} kind=T
+        [[ $file == *.gpg ]] && kind=S
+        printf '%-*s <- %s (%s)\n' "$width" "${EXEC_VARS[i]}" "${file%.*}" "$kind"
+    done
+}
+
 # is-explicit <entry>: true for VAR=<name> (no / or [ before the =).
 function is-explicit() { [[ $1 == *=* && ${1%%=*} != *[/[]* ]] ; }
 
@@ -1344,6 +1352,43 @@ function call-pass() {
         esac
     done
     pass "$command" "$@"
+}
+
+# list-store <gpg|txt|all> <title> <command> [--flat] [<subfolder>]: what `keep ls`, `text ls` and
+# `secret ls` share — the tree under <title>, or with --flat, the full names one per line.
+function list-store() {
+    local kind=$1 title=$2 command=$3 flat=0 args=() arg ; shift 3
+    for arg in "$@"; do
+        case $arg in
+            --flat) flat=1 ;;
+            *)      args+=("$arg") ;;
+        esac
+    done
+    set -- "${args[@]}"
+    (( $# <= 1 )) || die "Usage: keep $command [--flat] [<subfolder>]"
+    [[ $# -eq 0 || ( $1 != -* && /$1/ != */../* && -d $STORE_PATH/$1 ) ]] \
+        || die "$command: '$1' is not a folder in the store."
+    if (( flat )); then store-flat "$kind" "$STORE_PATH${1:+/${1%/}}" ; return ; fi
+    echo "$title"
+    [[ $# -eq 0 ]] || echo "${1%/}"
+    store-tree "$kind" "$STORE_PATH/${1:-}"
+}
+
+# store-flat <gpg|txt|all> <folder>: as store-tree, but full names one per line, sorted. With all,
+# each name gets (S) or (T) in front. Follows links, as tree -l does; hidden ones (.git) left out.
+function store-flat() {
+    local kind=$1 file
+    find -L "$2" -mindepth 1 -name '.*' -prune -o -type f \( -name '*.gpg' -o -name '*.txt' \) -print \
+        | LC_ALL=C sort \
+        | while IFS= read -r file; do
+            file=${file#"$STORE_PATH"/}
+            case $kind:$file in
+                gpg:*.gpg) echo "${file%.gpg}" ;;
+                txt:*.txt) echo "${file%.txt}" ;;
+                all:*.gpg) echo "(S) ${file%.gpg}" ;;
+                all:*.txt) echo "(T) ${file%.txt}" ;;
+            esac
+        done
 }
 
 # store-tree <gpg|txt|all> <folder> [tree-option...]: the secrets (gpg), the texts (txt) or both

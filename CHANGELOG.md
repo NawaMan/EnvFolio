@@ -10,8 +10,9 @@ User-visible changes to Keep. Newest first.
   environment variables; secrets only with `--secrets`. A variable is named by the entry's path,
   a top `@namespace` folder removed (`@nawa/gh/token` → `GH_TOKEN`); a later entry overrides an
   earlier one, and `VAR=<name>` overrides them all. `--all` loads every entry outside the
-  namespaces first. Values are never printed. Secrets left out for want of `--secrets` are
-  counted on stderr; a name bash keeps for itself (`RANDOM`, `UID`) is refused.
+  namespaces first; `--names` shows which variable gets which entry, reading nothing. Values are
+  never printed. Secrets left out for want of `--secrets` are counted on stderr; a name bash
+  keeps for itself (`RANDOM`, `UID`) is refused.
 - `keep store init` — creates the Keep store (`$KEEP_STORE_DIR`, default `~/.keep`): picks or
   creates the GPG key, runs `pass init`, and starts the store's git history. Options: `--key`,
   `--new-key`, `--name`, `--email`, `--passphrase-stdin`.
@@ -21,7 +22,8 @@ User-visible changes to Keep. Newest first.
   put a secret on screen without asking are refused: `insert --echo`, and `--qrcode` on `show`
   and `generate`. `secret ls` lists folders only; `secret show` shows entries only. `secret ls` and
   `secret find` leave texts out.
-- `keep ls` — lists texts and secrets together in one tree, each marked (S) or (T).
+- `keep ls` — lists texts and secrets together in one tree, each marked (S) or (T). `--flat` (on
+  `keep ls`, `text ls` and `secret ls`) lists full names one per line instead.
 - `keep text ls` — lists the texts as a tree, names only; mirrors `keep secret ls`.
 - `keep text find` — lists the texts whose names contain any of the parts; mirrors
   `keep secret find`.

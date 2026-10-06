@@ -58,6 +58,32 @@ web
 └── (T) home" ]
 }
 
+@test "MANUAL: ls — list flat" {
+    make-store
+    run "$KEEP" ls --flat
+    [ "$status" -eq 0 ]
+    [ "$output" = "(T) note
+(S) web/github
+(T) web/github
+(T) web/home" ]
+}
+
+@test "ls --flat: one folder, full names, either place; text ls and secret ls too" {
+    make-store
+    run "$KEEP" ls web/ --flat
+    [ "$output" = $'(S) web/github\n(T) web/github\n(T) web/home' ]
+    run "$KEEP" text ls --flat
+    [ "$output" = $'note\nweb/github\nweb/home' ]
+    run "$KEEP" secret ls --flat web
+    [ "$output" = "web/github" ]
+    # No values, signatures, or the store's own files.
+    run "$KEEP" ls --flat
+    [[ $output != *"s3cr3t"* && $output != *".sig"* && $output != *".gpg-id"* && $output != *".git"* ]]
+    run "$KEEP" ls --flat web extra
+    [ "$status" -eq 1 ]
+    [[ $output == *"Usage: keep ls [--flat] [<subfolder>]"* ]]
+}
+
 @test "ls: never shows values, signatures or extensions" {
     make-store
     run "$KEEP" ls
