@@ -232,8 +232,9 @@ Starting style, not law — deviate explicitly (say so and why) rather than sile
   stock Mac. No bash 4+ features: no associative arrays (`declare -A`), `mapfile`/`readarray`,
   case changes (`${var,,}`, `${var^^}`), namerefs (`local -n`), `${var@Q}`, `;&`/`;;&`, `|&`,
   `coproc`, `wait -n` or negative array indexes. Also avoid `"${arr[@]}"` on an empty array
-  under `set -u`, which 3.2 treats as unset. `just test-bash32` runs every test under bash 3.2
-  (built into the booth at `/opt/bash-3.2` by the `bash32` setup).
+  under `set -u`, which 3.2 treats as unset. `just test-all` runs every test under bash 3.2
+  (`just test-bash32`, `/usr/local/bin/bash` in the booth) and bash 5 (`just test-bash5`); each
+  fails at once if the wanted bash is not the one found.
 - **Runtime dependencies: `bash`, `pass`, `gpg`, `git`, `tree`, `tar`, `gzip` — and that's the
   list.** `gpg` is a direct dependency because first-run setup has to find or create a key before
   `pass init`, and texts are signed with it; `git` because the store is synced as a git repo;
