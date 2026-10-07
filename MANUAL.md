@@ -17,7 +17,7 @@ keep help [command]
 keep help
 ```
 
-Lists every command, one line each. Commands not built yet say *(not yet)*.
+Lists every command, one line each.
 
 ### Help for one command
 
@@ -219,6 +219,114 @@ A file whose name ends in neither `--keep.tar.gz` nor `--keep.gpg`, or that is n
 is refused too. Nothing is left behind when it fails.
 
 Examples: see `keep store backup` above.
+
+---
+
+## `keep store export`
+
+Copies some items into one file, to bring them into another store with `keep store import` — on
+a server, in a booth, or on another machine. Your store's key never leaves this machine.
+
+```
+keep store export [-s|--secrets] [--to <key>] [--passphrase-stdin] [-o|--output <file>|<folder>] [<name>...]
+```
+
+| Option | Meaning |
+| --- | --- |
+| `-s`, `--secrets` | Take the secrets in a folder too. A secret named on its own always goes. |
+| `--to <key>` | Lock the file to this public key — a key file (`.asc`) or a key in your keyring (fingerprint, key id or email) — instead of a passphrase. Only its secret key can open the file. A key file is never added to your keyring. |
+| `--passphrase-stdin` | Read the file's passphrase from the first line of stdin instead of gpg's prompt. Not with `--to`. Needs a `<name>`. An empty passphrase is refused. |
+| `-o`, `--output <file>\|<folder>` | Where to write the file. |
+| `-h`, `--help` | Show the options and stop. |
+
+A `<name>` is a text or a secret, or a folder: every text under it, and its secrets with
+`--secrets`. With no `<name>`, Keep lists every item, numbered, and asks which ones
+(`1 3 5-7`, or `all`).
+
+The file is `<file>` (`.keep` added when missing), or `export-<date>-<time>.keep` in `<folder>` —
+default the current folder, never inside the store. An existing file is never replaced. The file
+is readable by you only.
+
+How it works:
+
+- A **new key** is made for this export only, in a keyring of its own that is removed afterwards.
+  Each secret is decrypted with your store's key and encrypted to the new key through a pipe —
+  the value never touches the disk. gpg may ask for your store key's passphrase. Each text is
+  checked and signed again with the new key.
+- The file holds `keep-export.txt` (when it was made, the new key's fingerprint), `key.asc` (the
+  new key, with no passphrase of its own) and `store/` — a `pass` store of the chosen items.
+- The whole file is **always locked**: with a passphrase, or with `--to`, to the public key of
+  where it is going. Whoever opens the file can read every item in it, so it is never written
+  unlocked.
+
+### Export with a passphrase
+
+```bash
+keep store export web
+```
+
+Takes the texts under `web/` (its secrets need `--secrets`); gpg asks for a passphrase for the
+file (twice) and writes `export-20261006-120000.keep` here.
+
+### Lock it to the server's public key
+
+```bash
+# on the server:
+gpg --armor --export server@example.com > server.asc
+# here:
+keep store export --secrets --to server.asc web
+```
+
+Only the server's secret key can open the file, so it can travel through places you do not trust
+(a provider, a chat, a shared drive).
+
+---
+
+## `keep store import`
+
+Brings items from a file made by `keep store export` into the Keep store.
+
+```
+keep store import [-a|--all] [--overwrite|--skip-existing] [--key <id>] [--passphrase-stdin] <file> [<name>...]
+```
+
+| Option | Meaning |
+| --- | --- |
+| `-a`, `--all` | Take every item in the export. |
+| `--overwrite` | Replace the items already in the store. |
+| `--skip-existing` | Keep the items already in the store; take only the new ones. |
+| `--key <id>` | With no store yet: make it with this key, as `keep store init --key`. |
+| `--passphrase-stdin` | Read the file's passphrase (or your key's, for a file locked to it) from the first line of stdin. Needs `--all` or a `<name>`. |
+| `-h`, `--help` | Show the options and stop. |
+
+A `<name>` is an item in the export, or a folder: every item under it. With neither `<name>` nor
+`--all`, Keep lists the export's items and asks which ones.
+
+Every text is checked against the export's signature first; one that does not verify stops the
+import before anything is written. Then each secret is encrypted to the store's key (by
+`pass insert`) and each text is signed with it (gpg may ask for its passphrase); every item is
+one commit in the store's history, as when you add it by hand. The export's key is used in a
+keyring of its own and never added to yours.
+
+With no store yet, one is made first, as `keep store init` does (`--key` picks its key without
+asking). An item already in the store is overwritten or skipped as `--overwrite` or
+`--skip-existing` says; with neither, Keep lists them and asks.
+
+### Into a new store
+
+```bash
+keep store import --all --key server@example.com export-20261006-120000.keep
+```
+
+Makes the store with the server's key, then imports every item.
+
+### Merge into a store, keeping what is there
+
+```bash
+keep store import --skip-existing export-20261006-120000.keep aws/key web/user
+```
+
+Takes `aws/key` and `web/user`; one already in the store stays as it is.
 
 ---
 

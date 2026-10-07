@@ -6,6 +6,14 @@ User-visible changes to Keep. Newest first.
 
 ### Added
 
+- `keep store export` — copies the items you name or pick (texts in a folder; its secrets with
+  `--secrets`) into one `.keep` file, encrypted and signed with a new key made for that export only.
+  The file is always locked: with a passphrase, or with `--to`, to the public key of where it is
+  going (a key file or a key in your keyring). Your store's key never leaves the machine.
+- `keep store import` — brings all (`--all`) or some of an export's items into the store, making
+  the store first when there is none (`--key`). Texts are checked against the export's signature
+  before anything is written; an item already in the store is overwritten or skipped
+  (`--overwrite`, `--skip-existing`, or asked).
 - `keep store backup` — saves the whole store and its GPG key (still protected by its
   passphrase) into one file, `backup-<date>-<time>--keep.tar.gz`. `--history` keeps the store's
   git history (off by default); `--encrypt` encrypts the file with a passphrase of its own

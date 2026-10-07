@@ -67,6 +67,8 @@ function help() {
         "store path")      store-path-help      ;;
         "store backup")    store-backup-help    ;;
         "store restore")   store-restore-help   ;;
+        "store export")    store-export-help    ;;
+        "store import")    store-import-help    ;;
         "ls")              list-help            ;;
         "exec")            run-exec-help        ;;
         "shell")           run-shell-help       ;;
@@ -103,8 +105,8 @@ Commands:
   store path        Print the store's folder
   store backup      Save the store and its key into one file
   store restore     Bring the store and its key back from a backup
-  store export      (not yet)
-  store import      (not yet)
+  store export      Copy some items into one locked file, with a key of its own
+  store import      Bring items from an export into the store (made if missing)
   text ls           List texts
   text find         Find texts by name
   text grep         Find texts by value
@@ -581,10 +583,399 @@ function store-restore() {
     echo ""
 }
 
-# --- Not yet ------------------------------------------------------------------
+# --- store export -------------------------------------------------------------
 
-function store-export()  { not-yet "store export" ; }
-function store-import()  { not-yet "store import" ; }
+# An export is one file, always locked: keep-export.txt (what it holds), key.asc (a new key made
+# for this export only, with no passphrase — the lock on the file protects it) and store/, a pass
+# store of the chosen items encrypted and signed with that key. Secrets go from one key to the
+# other through a pipe, never through a file.
+EXPORT_SUFFIX=.keep
+
+function store-export-usage() {
+    echo "Usage: keep store export [-s|--secrets] [--to <key>] [--passphrase-stdin] [-o|--output <file>|<folder>] [<name>...]"
+}
+
+function store-export-help() {
+    store-export-usage
+    cat <<'EOF'
+
+Copy some items into one file, to bring them into another store with `keep store import` — on
+a server, in a booth, or on another machine. Your store's key stays here: the items are encrypted
+and signed with a new key made for this export only, and the file is locked — with a passphrase,
+or with --to, to the public key of where it is going. gpg may ask for your store key's passphrase
+to read the secrets.
+
+A <name> is a text or secret, or a folder: every text under it, and its secrets with --secrets.
+With no <name>, Keep lists every item and asks which ones.
+
+The file is <file> (.keep added when missing), or export-<date>-<time>.keep in <folder>, default
+the current one — never inside the store. An existing file is never replaced.
+
+Options:
+  -s, --secrets       Take the secrets in a folder too. A secret named on its own always goes.
+  --to <key>          Lock the file to this public key: a key file (.asc) or a key in your
+                      keyring (fingerprint, key id or email). Only its secret key can open it.
+  --passphrase-stdin  Read the file's passphrase from the first line of stdin, instead of gpg's
+                      prompt. Not with --to. Needs a <name>. An empty passphrase is refused.
+  -o, --output <file>|<folder>
+                      Where to write the file.
+  -h, --help          Show this help.
+EOF
+}
+
+# keep store export [-s|--secrets] [--to <key>] [--passphrase-stdin] [-o|--output <file>|<folder>] [<name>...]
+function store-export() {
+    local secrets=0 to="" passphrase_stdin=0 target="" names=() arg
+    while (( $# > 0 )); do
+        arg=$1 ; shift
+        case $arg in
+            -s|--secrets)       secrets=1 ;;
+            --to|-o|--output)   [[ $# -gt 0 && -n $1 ]] || die "$arg needs a value."
+                                if [[ $arg == --to ]]; then to=$1 ; else target=$1 ; fi
+                                shift ;;
+            --to=*)             to=${arg#*=} ;;
+            --output=*)         target=${arg#*=} ;;
+            --passphrase-stdin) passphrase_stdin=1 ;;
+            -h|--help)          store-export-help ; return 0 ;;
+            --)                 names+=("$@") ; break ;;
+            -*)                 die "store export: unknown option: $arg${EXTRA_LINE}$(store-export-usage)" ;;
+            *)                  names+=("$arg") ;;
+        esac
+    done
+    [[ -z $to ]] || (( ! passphrase_stdin )) || die "--passphrase-stdin is for a passphrase; a file locked --to needs none."
+    (( ! passphrase_stdin || ${#names[@]} > 0 )) \
+        || die "--passphrase-stdin needs the items named: stdin cannot also answer which ones."
+    require-store
+
+    local file=${target:-.}
+    [[ -d $file ]] && file=${file%/}/export-$(date +%Y%m%d-%H%M%S)$EXPORT_SUFFIX
+    [[ $file == *"$EXPORT_SUFFIX" ]] || file+=$EXPORT_SUFFIX
+    [[ ! -e $file ]]            || die "$file already exists."
+    [[ -d $(dirname "$file") ]] || die "There is no folder $(dirname "$file")."
+    [[ $(cd "$(dirname "$file")" && pwd -P)/ != "$(cd "$STORE_PATH" && pwd -P)"/* ]] \
+        || die "$file is inside the store; write the export somewhere else."
+
+    select-items export "$STORE_PATH" "$secrets" 0 "${names[@]}"
+
+    local passphrase=""
+    if (( passphrase_stdin )); then
+        IFS= read -rs passphrase || true
+        [[ -n $passphrase ]] || die "No passphrase on stdin."
+    fi
+
+    umask 077
+    local stage home pack status key recipient=""
+    stage=$(mktemp -d) || die "Cannot make a temporary folder."
+    remove-on-exit "$stage" "$file.partial"
+    home=$stage/home pack=$stage/pack
+    new-gpg-home "$home"
+    mkdir -p "$pack/store"
+
+    section "Make the export's own key"
+    status=$(GNUPGHOME=$home gpg --batch --passphrase '' --status-fd 3 \
+                 --quick-generate-key "Keep export $(date +%Y%m%d-%H%M%S)" default default never 3>&1 1>/dev/null 2>/dev/null)
+    key=$(printf '%s\n' "$status" | awk '$2 == "KEY_CREATED" { print $4 }')
+    [[ -n $key ]] || die "Making the export's key failed."
+    echo "$key" > "$pack/store/.gpg-id"
+    show-answer "Key" "$key"
+
+    if [[ -n $to ]]; then
+        section "Find the key to lock the file to"
+        # Into the export's own keyring only: a key file never lands in yours.
+        if [[ -f $to ]]; then GNUPGHOME=$home gpg --batch --quiet --import "$to"
+        else gpg --export -- "$to" | GNUPGHOME=$home gpg --batch --quiet --import
+        fi 2>/dev/null
+        recipient=$(GNUPGHOME=$home gpg --list-keys --with-colons 2>/dev/null \
+            | awk -F: -v own="$key" '$1 == "pub" { p = 1 } $1 == "fpr" && p { p = 0 ; if ($10 != own) print $10 }')
+        [[ -n $recipient ]]                || die "No public key found in or for '$to'."
+        [[ $recipient != *$'\n'* ]]        || die "'$to' holds or matches more than one key; give one by its fingerprint."
+        show-answer "To" "$recipient $(GNUPGHOME=$home key-uid "$recipient")"
+    fi
+
+    section "Copy the items (gpg may ask for your store key's passphrase)"
+    local item name out texts=0
+    for item in "${SELECTED[@]}"; do
+        name=${item%.*} out=$pack/store/$item
+        mkdir -p "$(dirname "$out")"
+        if [[ $item == *.gpg ]]; then
+            pass show -- "$name" \
+                | GNUPGHOME=$home gpg --batch --quiet --trust-model always --compress-algo none \
+                      --encrypt --recipient "$key" --output "$out"
+            [[ ${PIPESTATUS[*]} == "0 0" ]] || die "export: could not copy '$name'."
+        else
+            verify-text "$name"
+            cp "$STORE_PATH/$item" "$out"
+            GNUPGHOME=$home gpg --batch --quiet --local-user "$key" --detach-sign --output "$out.sig" "$out" \
+                || die "export: could not sign '$name'."
+            texts=$(( texts + 1 ))
+        fi
+        show-answer "Copied" "$(item-label "$item")"
+    done
+    GNUPGHOME=$home gpg --batch --armor --export-secret-keys "$key" > "$pack/key.asc" 2>/dev/null
+    [[ -s $pack/key.asc ]] || die "Exporting the export's key failed."
+    {
+        echo "keep-export 1"
+        echo "created $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        echo "key $key"
+    } > "$pack/keep-export.txt"
+
+    section "Pack and lock the file"
+    local seal=(gpg --symmetric --compress-algo none --output -)
+    (( passphrase_stdin )) && seal=(gpg --batch --pinentry-mode loopback --passphrase-fd 3 "${seal[@]:1}")
+    [[ -n $recipient ]] && seal=(env GNUPGHOME="$home" gpg --batch --trust-model always --compress-algo none
+                                 --encrypt --recipient "$recipient" --output -)
+    # As in store backup: the passphrase reaches gpg on fd 3, never in argv.
+    COPYFILE_DISABLE=1 tar -czf - -C "$pack" keep-export.txt key.asc store \
+        | "${seal[@]}" > "$file.partial" 3< <(printf '%s\n' "$passphrase")
+    [[ ${PIPESTATUS[*]} == "0 0" ]] || die "Packing the export failed."
+    unset passphrase
+    mv "$file.partial" "$file" || die "Cannot write $file."
+    show-answer "File" "$file"
+
+    local lock="a passphrase" opens="the file's passphrase"
+    if [[ -n $recipient ]]; then
+        lock="to $recipient"
+        opens="the secret key of $(GNUPGHOME=$home key-uid "$recipient")"
+    fi
+    echo ""
+    show-box "Your items are exported." \
+             "" \
+             "File:   $(tilde-path "$file")" \
+             "Items:  ${#SELECTED[@]} (texts: $texts, secrets: $(( ${#SELECTED[@]} - texts )))" \
+             "Locked: $lock" \
+             "" \
+             "To bring them into a store (a new one, or one that is there):" \
+             "  keep store import $file" \
+             "That needs $opens."
+}
+
+# --- store import -------------------------------------------------------------
+
+function store-import-usage() {
+    echo "Usage: keep store import [-a|--all] [--overwrite|--skip-existing] [--key <id>] [--passphrase-stdin] <file> [<name>...]"
+}
+
+function store-import-help() {
+    store-import-usage
+    cat <<'EOF'
+
+Bring items from a file made by `keep store export` into the Keep store ($KEEP_STORE_DIR, default
+~/.keep): the secrets are encrypted to the store's key, the texts checked and signed with it
+(gpg may ask for its passphrase). With no store yet, one is made first, as `keep store init`
+does. The export's key is used here only, never added to your keyring.
+
+A <name> is an item in the export, or a folder: every item under it. With neither <name> nor
+--all, Keep lists the export's items and asks which ones. An item already in the store is
+overwritten or skipped, as the options say; otherwise Keep asks.
+
+Options:
+  -a, --all           Take every item in the export.
+  --overwrite         Replace the items already in the store.
+  --skip-existing     Keep the items already in the store; take only the new ones.
+  --key <id>          With no store yet: make it with this key, as `keep store init --key`.
+  --passphrase-stdin  Read the file's passphrase (or your key's, for a file locked to it) from the
+                      first line of stdin. Needs --all or a <name>.
+  -h, --help          Show this help.
+EOF
+}
+
+# keep store import [-a|--all] [--overwrite|--skip-existing] [--key <id>] [--passphrase-stdin] <file> [<name>...]
+function store-import() {
+    local all=0 clash="" key_id="" passphrase_stdin=0 file="" names=() arg
+    while (( $# > 0 )); do
+        arg=$1 ; shift
+        case $arg in
+            -a|--all)           all=1 ;;
+            --overwrite)        clash=overwrite ;;
+            --skip-existing)    clash=skip ;;
+            --key)              [[ $# -gt 0 && -n $1 ]] || die "--key needs a value." ; key_id=$1 ; shift ;;
+            --key=*)            key_id=${arg#*=} ;;
+            --passphrase-stdin) passphrase_stdin=1 ;;
+            -h|--help)          store-import-help ; return 0 ;;
+            -*) die "store import: unknown option: $arg${EXTRA_LINE}$(store-import-usage)" ;;
+            *)  if [[ -z $file ]]; then file=$arg ; else names+=("$arg") ; fi ;;
+        esac
+    done
+    [[ -n $file ]] || die "$(store-import-usage)"
+    [[ -f $file ]] || die "There is no file $file."
+    [[ $file == *"$EXPORT_SUFFIX" ]] || die "$file is not a Keep export: its name does not end in $EXPORT_SUFFIX."
+    (( ! all || ${#names[@]} == 0 )) || die "--all takes every item; give no <name> with it."
+    (( ! passphrase_stdin || all || ${#names[@]} > 0 )) \
+        || die "--passphrase-stdin needs --all or the items named: stdin cannot also answer which ones."
+    store-exists && [[ -n $key_id ]] && die "--key is only for making a new store, and $STORE_PATH is one already."
+
+    local passphrase=""
+    if (( passphrase_stdin )); then
+        IFS= read -rs passphrase || true
+        [[ -n $passphrase ]] || die "No passphrase on stdin."
+    fi
+
+    umask 077
+    local stage home root
+    stage=$(mktemp -d) || die "Cannot make a temporary folder."
+    remove-on-exit "$stage"
+    home=$stage/home root=$stage/unpack/store
+    new-gpg-home "$home"
+    mkdir "$stage/unpack"
+
+    section "Open the export"
+    local open=(gpg --decrypt --output -)
+    (( passphrase_stdin )) && open=(gpg --batch --pinentry-mode loopback --passphrase-fd 3 "${open[@]:1}")
+    "${open[@]}" < "$file" 3< <(printf '%s\n' "$passphrase") | tar -xzf - -C "$stage/unpack"
+    [[ ${PIPESTATUS[*]} == "0 0" ]] || die "Opening $file failed."
+    unset passphrase
+
+    local field value format="" key=""
+    [[ -f $stage/unpack/keep-export.txt ]] || die "$file is not a Keep export: it has no keep-export.txt."
+    while read -r field value; do
+        case $field in
+            keep-export) format=$value ;;
+            key)         key=$value    ;;
+        esac
+    done < "$stage/unpack/keep-export.txt"
+    [[ $format == 1 ]]                 || die "$file is a Keep export of a format this Keep cannot read ($format)."
+    [[ $key =~ ^[0-9A-F]{40,64}$ ]]    || die "$file names a key that is not a fingerprint: $key"
+    [[ -s $stage/unpack/key.asc && -d $root ]] || die "$file has no key or no items in it."
+    GNUPGHOME=$home gpg --batch --quiet --import "$stage/unpack/key.asc" 2>/dev/null
+    GNUPGHOME=$home gpg --list-secret-keys "$key" >/dev/null 2>&1 || die "$file has no secret key $key."
+    show-answer "Key" "$key"
+
+    select-items import "$root" 1 "$all" "${names[@]}"
+
+    # Every text must be the one the export signed, before anything is written.
+    local item name signer
+    for item in "${SELECTED[@]}"; do
+        [[ $item == *.txt ]] || continue
+        signer=$(GNUPGHOME=$home gpg --status-fd 1 --verify "$root/$item.sig" "$root/$item" 2>/dev/null \
+                    | awk '$2 == "VALIDSIG" { print $NF }')
+        [[ $signer == "$key" ]] || die "import: the signature of '${item%.txt}' in the export does not verify."
+    done
+
+    if ! store-exists; then
+        section "No Keep store yet: make one"
+        if [[ -n $key_id ]]; then store-init --key "$key_id" ; else store-init ; fi
+    fi
+    require-store
+
+    local clashes=()
+    for item in "${SELECTED[@]}"; do [[ -f $STORE_PATH/$item ]] && clashes+=("$item") ; done
+    if (( ${#clashes[@]} > 0 )) && [[ -z $clash ]]; then
+        section "Already in the store"
+        for item in "${clashes[@]}"; do item-label "$item" >&2 ; done
+        case $(ask-choice "What to do with these ${#clashes[@]}?" "Overwrite them" "Skip them") in
+            Overwrite*) clash=overwrite ;;
+            Skip*)      clash=skip ;;
+            *)          die "Cancelled." ;;
+        esac
+    fi
+
+    section "Import the items (gpg may ask for your store key's passphrase)"
+    local texts=0 secrets=0 skipped=0
+    for item in "${SELECTED[@]}"; do
+        name=${item%.*}
+        if [[ -f $STORE_PATH/$item && $clash == skip ]]; then
+            skipped=$(( skipped + 1 ))
+            continue
+        fi
+        if [[ $item == *.gpg ]]; then
+            # pass encrypts to the store's key(s) and commits, as for any secret it is given.
+            GNUPGHOME=$home gpg --batch --quiet --decrypt "$root/$item" 2>/dev/null \
+                | pass insert --multiline --force -- "$name" >/dev/null
+            [[ ${PIPESTATUS[*]} == "0 0" ]] || die "import: could not import '$name'."
+            secrets=$(( secrets + 1 ))
+        else
+            save-text "$name" "Import text for $name." < "$root/$item"
+            texts=$(( texts + 1 ))
+        fi
+        show-answer "Imported" "$(item-label "$item")"
+    done
+
+    echo ""
+    show-box "Your items are imported." \
+             "" \
+             "Store:   $(tilde-path "$STORE_PATH")" \
+             "Texts:   $texts" \
+             "Secrets: $secrets" \
+             "Skipped: $skipped (already in the store)"
+}
+
+# --- Items: choose some -------------------------------------------------------
+
+# select-items <how> <root> <secrets:0|1> <all:0|1> [<name>...]: set SELECTED to item files
+# (<name>.txt, <name>.gpg) under <root>: every one with <all>; else those the names pick — an item
+# by its name, or else every item under a folder, its secrets only with <secrets>; else those
+# picked from a numbered list.
+function select-items() {
+    local how=$1 root=$2 secrets=$3 all=$4 items=() taken=$'\n' item name found left answer picks i
+    shift 4
+    SELECTED=()
+    while IFS= read -r item; do items+=("${item#"$root"/}") ; done < <(entries-under 1 "$root")
+    (( ${#items[@]} > 0 )) || die "$how: there are no items."
+
+    if (( all )); then
+        SELECTED=("${items[@]}")
+    elif (( $# > 0 )); then
+        for name in "$@"; do
+            name=${name%/} found=0 left=0
+            [[ -n $name && $name != -* && /$name/ != */../* && /$name/ != */./* ]] \
+                || die "$how: '$name' is not a valid name."
+            for item in "${items[@]}"; do
+                case $item in "$name".txt|"$name".gpg) found=1 ;; *) continue ;; esac
+                [[ $taken == *$'\n'"$item"$'\n'* ]] || { SELECTED+=("$item") ; taken+=$item$'\n' ; }
+            done
+            if (( ! found )); then
+                for item in "${items[@]}"; do
+                    [[ $item == "$name"/* ]] || continue
+                    if [[ $item == *.gpg ]] && (( ! secrets )); then left=$(( left + 1 )) ; continue ; fi
+                    found=1
+                    [[ $taken == *$'\n'"$item"$'\n'* ]] || { SELECTED+=("$item") ; taken+=$item$'\n' ; }
+                done
+            fi
+            (( found || ! left )) || die "$how: only secrets under '$name' ($left); add --secrets to take them."
+            (( found ))           || die "$how: '$name' is not an item or a folder of items."
+            (( ! left )) || printf "keep %s: left out %d secret(s) under '%s'; add --secrets to take them.\n" \
+                                   "$how" "$left" "$name" >&2
+        done
+    else
+        section "Which items?"
+        for (( i = 0; i < ${#items[@]}; i++ )); do
+            printf '%4d) %s\n' $(( i + 1 )) "$(item-label "${items[i]}")" >&2
+        done
+        while :; do
+            answer=$(ask-text "Numbers or ranges, e.g. 1 3 5-7, or all") || exit 1
+            picks=$(parse-picks "${#items[@]}" "$answer") && break
+            echo "Not a choice: '$answer'." >&2
+        done
+        for i in $picks; do SELECTED+=("${items[i - 1]}") ; done
+    fi
+}
+
+# parse-picks <count> <answer>: the numbers (1..<count>) an answer like "1 3 5-7" or "all" picks,
+# one per line, in order, each once. Fails when it picks nothing or anything out of range.
+function parse-picks() {
+    local count=$1 words word from to i picked=" "
+    IFS=' ,' read -r -a words <<< "$2"
+    for word in "${words[@]}"; do
+        case $word in
+            all)                     from=1 to=$count ;;
+            *[!0-9-]*|-*|*-|*-*-*)   return 1 ;;
+            *-*)                     from=$(( 10#${word%-*} )) to=$(( 10#${word#*-} )) ;;
+            *)                       from=$(( 10#$word )) to=$from ;;
+        esac
+        (( 1 <= from && from <= to && to <= count )) || return 1
+        for (( i = from; i <= to; i++ )); do [[ $picked == *" $i "* ]] || picked+="$i " ; done
+    done
+    [[ $picked != " " ]] || return 1
+    printf '%s' "${picked# }" | tr ' ' '\n' | sort -n
+}
+
+# item-label <file>: "(S) <name>" for <name>.gpg, "(T) <name>" for <name>.txt — as `keep ls --flat`.
+function item-label() {
+    case $1 in
+        *.gpg) echo "(S) ${1%.gpg}" ;;
+        *)     echo "(T) ${1%.txt}" ;;
+    esac
+}
 
 #== Command: Text ==============================================================
 
@@ -1748,14 +2139,21 @@ function ensure-requirements() {
 
 function info() { printf '%s\n' "$*"; }
 function die()  { printf 'keep: %s\n' "$*" >&2; exit 1; }
-# remove-on-exit <path>...: remove these when Keep exits, however it exits.
-REMOVE_ON_EXIT=()
+# remove-on-exit <path>...: remove these when Keep exits, however it exits. The gpg-agent of a
+# new-gpg-home is stopped first.
+REMOVE_ON_EXIT=() GPG_HOMES=()
 function remove-on-exit() {
     REMOVE_ON_EXIT+=("$@")
-    trap 'rm -rf -- "${REMOVE_ON_EXIT[@]}"' EXIT
+    # shellcheck disable=SC2154  # h is the trap's own loop variable
+    trap 'for h in "${GPG_HOMES[@]}"; do GNUPGHOME=$h gpgconf --kill gpg-agent; done 2>/dev/null
+          rm -rf -- "${REMOVE_ON_EXIT[@]}"' EXIT
 }
-# not-yet <command>: fail for a command that isn't built yet.
-function not-yet() { die "$1 is not built yet." ; }
+# new-gpg-home <folder>: a GnuPG home of its own, for an export's key; gone when Keep exits.
+function new-gpg-home() {
+    mkdir -m 700 "$1" || die "Cannot make a temporary folder."
+    GPG_HOMES+=("$1")
+    remove-on-exit "$1"
+}
 
 # section lines up: ==| Title |=====…
 function section() {
