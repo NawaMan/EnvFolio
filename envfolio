@@ -1322,7 +1322,7 @@ function text-generate() {
     if [[ -e $file ]] && (( ! inplace && ! force )) && [[ -t 0 ]]; then
         confirm "An entry already exists for $name. Overwrite it?" || exit 1
     fi
-    read -r -n "$length" text < <(LC_ALL=C tr -dc "$chars" < /dev/urandom)
+    read -r -n "$length" text < <(LC_ALL=C tr -dc "$chars" < /dev/urandom 2>/dev/null)
     [[ ${#text} -eq $length ]] || die "text generate: could not generate a text from /dev/urandom."
 
     if (( inplace )) && [[ -f $file ]]; then

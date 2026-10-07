@@ -18,22 +18,27 @@ jobs:
       - uses: actions/checkout@v5
       - run: shellcheck envfolio tools/*.sh tests/test-all.sh
 
+  # The runner starts steps with SIGPIPE ignored, and bash cannot undo that for its children:
+  # `tr < /dev/urandom` (in `pass generate`, `text generate`) then never stops — on macOS it runs
+  # forever and the test hangs. perl puts SIGPIPE back to default before running the tests.
   test-linux-bash5:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
       - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends bats pass gnupg git tree tar gzip
-      - run: tests/test-all.sh 5
+      - run: perl -e '$SIG{PIPE} = "DEFAULT"; exec @ARGV' tests/test-all.sh 5
 
   test-macos-bash32:
     runs-on: macos-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
       - name: Install dependencies
         run: brew install bats-core pass
       # /bin/bash on macOS is 3.2; put it first so `env bash` (bats and envfolio) finds it,
       # not a Homebrew bash 5. test-all.sh fails if it is not 3.x.
-      - run: PATH="/bin:$PATH" /bin/bash tests/test-all.sh 3
+      - run: PATH="/bin:$PATH" perl -e '$SIG{PIPE} = "DEFAULT"; exec @ARGV' /bin/bash tests/test-all.sh 3
