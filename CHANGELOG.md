@@ -4,6 +4,21 @@ User-visible changes to EnvFolio. Newest first.
 
 ## Unreleased
 
+### Changed
+
+- `envfolio store init` and `envfolio store restore` accept an empty folder at `$ENVFOLIO_STORE_DIR`
+  (a mount point or bind mount, say), as it is, and make the store inside it; a folder with
+  anything in it is still refused.
+- A store folder made by `envfolio store init` is private (`700`), its git history too, as one made
+  by `envfolio store restore` already was.
+
+### Added
+
+- Like gpg for its home folder, EnvFolio warns when the store's folder belongs to someone else or
+  other users can get into it (a store made by 0.1.0 `envfolio store init` was open to them).
+  `store init`, `store restore` and `store import` then ask before using it — `--allow-unsafe-folder`
+  answers yes; every other command carries on. There is no setting to hide the warning.
+
 ## 0.1.0 — 2026-10-07
 
 ### Added

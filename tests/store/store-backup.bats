@@ -158,6 +158,65 @@ is-restored() {
     [ "$("$ENVFOLIO" text show web/home)" = "https://example.com" ]
 }
 
+@test "store restore: an open existing empty folder is asked about; no answer, nothing changed" {
+    make-store
+    "$ENVFOLIO" store backup "$SANDBOX/out" >/dev/null 2>&1
+    new-machine
+    mkdir -p "$ENVFOLIO_STORE_DIR" && chmod 755 "$ENVFOLIO_STORE_DIR"
+    run "$ENVFOLIO" store restore "$(backup-file)" < /dev/null
+    [ "$status" -eq 1 ]
+    [[ $output == *"other users can get into"*"anyway? [y/N]"*"Nothing changed"* ]]
+    [ -z "$(ls -A "$ENVFOLIO_STORE_DIR")" ]
+    [ -z "$(gpg --list-secret-keys 2>/dev/null)" ]
+}
+
+@test "store restore: into an existing empty folder (a mount point, say), kept as it is with a warning" {
+    make-store
+    "$ENVFOLIO" store backup "$SANDBOX/out" >/dev/null 2>&1
+    new-machine
+    mkdir -p "$SANDBOX/mnt" && chmod 755 "$SANDBOX/mnt"
+    ln -s "$SANDBOX/mnt" "$ENVFOLIO_STORE_DIR"
+    run "$ENVFOLIO" store restore --allow-unsafe-folder "$(backup-file)" < /dev/null
+    [ "$status" -eq 0 ]
+    [[ $output == *"Your EnvFolio store is restored."* ]]
+    [[ $output == *"warning: other users can get into $ENVFOLIO_STORE_DIR"* ]]
+    [ -L "$ENVFOLIO_STORE_DIR" ]
+    [ -s "$SANDBOX/mnt/.gpg-id" ] && [ -d "$SANDBOX/mnt/.git" ]
+    [ "$(stat -c %a "$SANDBOX/mnt" 2>/dev/null || stat -f %Lp "$SANDBOX/mnt")" = "755" ]
+    is-restored
+}
+
+@test "store: every command warns about an open store folder, and still works" {
+    make-store
+    chmod 755 "$ENVFOLIO_STORE_DIR"
+    run "$ENVFOLIO" text show web/home
+    [ "$status" -eq 0 ]
+    [[ $output == *"warning: other users can get into $ENVFOLIO_STORE_DIR"* && $output == *"https://example.com"* ]]
+    [ "$("$ENVFOLIO" text show web/home 2>/dev/null)" = "https://example.com" ]
+}
+
+@test "store restore: a store folder it makes is private (700), no warning" {
+    make-store
+    "$ENVFOLIO" store backup "$SANDBOX/out" >/dev/null 2>&1
+    new-machine
+    run "$ENVFOLIO" store restore "$(backup-file)" < /dev/null
+    [ "$status" -eq 0 ]
+    [[ $output != *warning* ]]
+    [ "$(stat -c %a "$ENVFOLIO_STORE_DIR" 2>/dev/null || stat -f %Lp "$ENVFOLIO_STORE_DIR")" = "700" ]
+}
+
+@test "store restore: refuses a folder with only a hidden file, and changes nothing" {
+    make-store
+    "$ENVFOLIO" store backup "$SANDBOX/out" >/dev/null 2>&1
+    new-machine
+    mkdir -p "$ENVFOLIO_STORE_DIR" && : > "$ENVFOLIO_STORE_DIR/.keep"
+    run "$ENVFOLIO" store restore "$(backup-file)" < /dev/null
+    [ "$status" -eq 1 ]
+    [[ $output == *"already exists"* ]]
+    [ "$(ls -A "$ENVFOLIO_STORE_DIR")" = ".keep" ]
+    [ -z "$(find "$SANDBOX" -maxdepth 1 -name '.envfolio-restore.*')" ]
+}
+
 @test "store restore: a file that is not an EnvFolio backup is refused, nothing left behind" {
     mkdir -p "$SANDBOX/junk" && echo hi > "$SANDBOX/junk/x"
     tar -czf "$SANDBOX/out/junk--envfolio.tar.gz" -C "$SANDBOX/junk" x

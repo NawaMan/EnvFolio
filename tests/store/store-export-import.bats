@@ -135,6 +135,36 @@ left-clean() {
     [ "$("$ENVFOLIO" text show web/user)" = "jane" ]
 }
 
+@test "store import: into an open store folder, asked; stdin with the passphrase cannot answer" {
+    make-store
+    "$ENVFOLIO" store export -o "$SANDBOX/out" --passphrase-stdin web/user < <(printf 'p\n') >/dev/null 2>&1
+    go-there
+    "$ENVFOLIO" store init --key server@example.com < /dev/null >/dev/null 2>&1
+    chmod 755 "$ENVFOLIO_STORE_DIR"
+    run "$ENVFOLIO" store import --all --passphrase-stdin "$(export-file)" < <(printf 'p\n')
+    [ "$status" -eq 1 ]
+    [[ $output == *"other users can get into"*"stdin carries the passphrase"*"--allow-unsafe-folder"* ]]
+    [ ! -e "$ENVFOLIO_STORE_DIR/web/user.txt" ]
+    run "$ENVFOLIO" store import --all --passphrase-stdin --allow-unsafe-folder "$(export-file)" < <(printf 'p\n')
+    [ "$status" -eq 0 ]
+    [ "$(grep -c 'warning:' <<< "$output")" -eq 1 ]
+    [ "$("$ENVFOLIO" text show web/user 2>/dev/null)" = "jane" ]
+}
+
+@test "store import: making a store in an open empty folder is asked once, then made" {
+    make-store
+    "$ENVFOLIO" store export -o "$SANDBOX/out" --passphrase-stdin web/user < <(printf 'p\n') >/dev/null 2>&1
+    go-there
+    mkdir -m 755 "$ENVFOLIO_STORE_DIR"
+    run "$ENVFOLIO" store import --all --key server@example.com --passphrase-stdin "$(export-file)" < <(printf 'p\n')
+    [ "$status" -eq 1 ]
+    [ -z "$(ls -A "$ENVFOLIO_STORE_DIR")" ]
+    run "$ENVFOLIO" store import --all --key server@example.com --passphrase-stdin --allow-unsafe-folder "$(export-file)" < <(printf 'p\n')
+    [ "$status" -eq 0 ]
+    [ "$(grep -c 'warning:' <<< "$output")" -eq 1 ]
+    [ "$("$ENVFOLIO" text show web/user 2>/dev/null)" = "jane" ]
+}
+
 @test "store import: the picker and the clash question read their answers from stdin" {
     make-store
     # An unlocked symmetric passphrase cannot be typed here, so lock to "there"'s key instead.
