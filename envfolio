@@ -20,7 +20,7 @@
 
 # Set by the release: `<major>.<minor>.<patch>` in a release, `<next>--rc` on main between releases.
 # The release workflow (.github/workflows/release.yml) reads and bumps this exact line.
-APP_VERSION=0.2.0
+APP_VERSION=0.3.0--rc
 
 STORE_PATH=${ENVFOLIO_STORE_DIR:-$HOME/.envfolio}
 # Always absolute: `pass` loops forever on a relative PASSWORD_STORE_DIR whose folder doesn't exist
