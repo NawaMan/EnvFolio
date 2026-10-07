@@ -45,3 +45,4 @@ Every command, with examples: [MANUAL.md](MANUAL.md).
 
 - `ENVFOLIO_STORE_DIR` - the path to the EnvFolio store. Defaults to `$HOME/.envfolio`. The store has the same
   layout as a `pass` store, but is kept apart from your own `~/.password-store`.
+# EnvFolio
