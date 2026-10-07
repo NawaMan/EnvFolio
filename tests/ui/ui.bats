@@ -7,13 +7,13 @@ bats_require_minimum_version 1.5.0    # run --separate-stderr
 setup() {
     SANDBOX=$(mktemp -d)
     export HOME="$SANDBOX/home"
-    export KEEP_STORE_DIR="$SANDBOX/store"
+    export ENVFOLIO_STORE_DIR="$SANDBOX/store"
     export XDG_STATE_HOME="$SANDBOX/state"
     export USER=sb-test-nobody
     mkdir -p "$HOME"
 
-    # shellcheck source=SCRIPTDIR/../../keep
-    source "$BATS_TEST_DIRNAME/../../keep"
+    # shellcheck source=SCRIPTDIR/../../envfolio
+    source "$BATS_TEST_DIRNAME/../../envfolio"
     [[ $STORE_PATH == "$SANDBOX"/* ]]
 }
 

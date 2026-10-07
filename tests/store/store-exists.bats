@@ -4,10 +4,10 @@
 
 setup() {
     SANDBOX=$(mktemp -d)
-    export KEEP_STORE_DIR="$SANDBOX/store"
+    export ENVFOLIO_STORE_DIR="$SANDBOX/store"
     export XDG_STATE_HOME="$SANDBOX/state"
-    # shellcheck source=SCRIPTDIR/../../keep
-    source "$BATS_TEST_DIRNAME/../../keep"
+    # shellcheck source=SCRIPTDIR/../../envfolio
+    source "$BATS_TEST_DIRNAME/../../envfolio"
     [[ $STORE_PATH == "$SANDBOX"/* && $PASSWORD_STORE_DIR == "$SANDBOX"/* ]]
 }
 
@@ -15,9 +15,9 @@ teardown() {
     rm -rf "$SANDBOX"
 }
 
-@test "store-path: a relative KEEP_STORE_DIR becomes absolute" {
+@test "store-path: a relative ENVFOLIO_STORE_DIR becomes absolute" {
     cd "$SANDBOX"
-    KEEP_STORE_DIR=rel/store source "$BATS_TEST_DIRNAME/../../keep"
+    ENVFOLIO_STORE_DIR=rel/store source "$BATS_TEST_DIRNAME/../../envfolio"
     [ "$STORE_PATH" = "$SANDBOX/rel/store" ]
     [ "$PASSWORD_STORE_DIR" = "$SANDBOX/rel/store" ]
     [ "$(store-path)" = "$SANDBOX/rel/store" ]
@@ -30,60 +30,60 @@ teardown() {
 }
 
 @test "store-exists: folder without .gpg-id returns 2" {
-    mkdir -p "$KEEP_STORE_DIR"
+    mkdir -p "$ENVFOLIO_STORE_DIR"
     run store-exists
     [ "$status" -eq 2 ]
 }
 
 @test "store-exists: empty .gpg-id returns 2" {
-    mkdir -p "$KEEP_STORE_DIR"
-    : > "$KEEP_STORE_DIR/.gpg-id"
+    mkdir -p "$ENVFOLIO_STORE_DIR"
+    : > "$ENVFOLIO_STORE_DIR/.gpg-id"
     run store-exists
     [ "$status" -eq 2 ]
 }
 
 @test "store-exists: .gpg-id without a git history returns 2" {
-    mkdir -p "$KEEP_STORE_DIR"
-    echo "0123456789ABCDEF" > "$KEEP_STORE_DIR/.gpg-id"
+    mkdir -p "$ENVFOLIO_STORE_DIR"
+    echo "0123456789ABCDEF" > "$ENVFOLIO_STORE_DIR/.gpg-id"
     run store-exists
     [ "$status" -eq 2 ]
 }
 
 @test "store-exists: folder with .gpg-id and a git history returns 0" {
-    mkdir -p "$KEEP_STORE_DIR/.git"
-    echo "0123456789ABCDEF" > "$KEEP_STORE_DIR/.gpg-id"
+    mkdir -p "$ENVFOLIO_STORE_DIR/.git"
+    echo "0123456789ABCDEF" > "$ENVFOLIO_STORE_DIR/.gpg-id"
     run store-exists
     [ "$status" -eq 0 ]
 }
 
 @test "store-init: refuses when the store already exists" {
-    mkdir -p "$KEEP_STORE_DIR/.git"
-    echo "0123456789ABCDEF" > "$KEEP_STORE_DIR/.gpg-id"
+    mkdir -p "$ENVFOLIO_STORE_DIR/.git"
+    echo "0123456789ABCDEF" > "$ENVFOLIO_STORE_DIR/.gpg-id"
     run store-init
     [ "$status" -eq 1 ]
     [[ $output == *"already exists"* ]]
 }
 
 @test "store-init: refuses a non-empty folder that is not a store" {
-    mkdir -p "$KEEP_STORE_DIR"
-    echo "someone else's file" > "$KEEP_STORE_DIR/notes.txt"
+    mkdir -p "$ENVFOLIO_STORE_DIR"
+    echo "someone else's file" > "$ENVFOLIO_STORE_DIR/notes.txt"
     run store-init
     [ "$status" -eq 1 ]
-    [[ $output == *"not a ready Keep store"* ]]
+    [[ $output == *"not a ready EnvFolio store"* ]]
 }
 
 @test "store-init: refuses an unfinished store (no git history)" {
-    mkdir -p "$KEEP_STORE_DIR"
-    echo "0123456789ABCDEF" > "$KEEP_STORE_DIR/.gpg-id"
+    mkdir -p "$ENVFOLIO_STORE_DIR"
+    echo "0123456789ABCDEF" > "$ENVFOLIO_STORE_DIR/.gpg-id"
     run store-init
     [ "$status" -eq 1 ]
-    [[ $output == *"not a ready Keep store"* ]]
+    [[ $output == *"not a ready EnvFolio store"* ]]
 }
 
 @test "store-init: refuses an empty folder" {
-    mkdir -p "$KEEP_STORE_DIR"
+    mkdir -p "$ENVFOLIO_STORE_DIR"
     run store-init
     [ "$status" -eq 1 ]
-    [[ $output == *"not a ready Keep store"* ]]
-    [ -z "$(ls -A "$KEEP_STORE_DIR")" ]
+    [[ $output == *"not a ready EnvFolio store"* ]]
+    [ -z "$(ls -A "$ENVFOLIO_STORE_DIR")" ]
 }

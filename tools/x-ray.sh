@@ -1,20 +1,21 @@
 #!/usr/bin/env bash
 
-# x-ray.sh — a dev tool: show how the gpg files Keep makes are locked and what they hold, without
-# ever showing a secret value, a text's contents or a key.
+# x-ray.sh — a dev tool: show how the gpg files EnvFolio makes are locked and what they hold,
+# without ever showing a secret value, a text's contents or a key.
 #
 # Usage: tools/x-ray.sh [--open] <file|folder>...
 #   <name>.gpg             Who it is encrypted to (key ids, and user ids when known), or that it
 #                          is locked with a passphrase.
 #   <name>.txt.sig         Who signed it and when; with <name>.txt next to it, whether it verifies.
 #   <folder>               A store: every secret, text (name only) and signature in it, as above.
-#   *--keep.tar.gz         A backup: its manifest, its key (fingerprint and user id), its store.
-#   *.keep, *--keep.gpg    An export, or an encrypted backup: how it is locked. With --open, unlock
+#   *--envfolio.tar.gz     A backup: its manifest, its key (fingerprint and user id), its store.
+#   *.envfolio, *--envfolio.gpg
+#                          An export, or an encrypted backup: how it is locked. With --open, unlock
 #                          it (gpg may ask) and show what is inside, as for a backup.
 #
 # Packets are only ever listed in an empty keyring, so no secret can be decrypted by x-ray — gpg
 # --list-packets decrypts whatever the keyring can. An unlocked file is unpacked into a temporary
-# folder (umask 077) that is removed on exit, as `keep store import` does.
+# folder (umask 077) that is removed on exit, as `envfolio store import` does.
 
 umask 077
 TMP=$(mktemp -d) || exit 1
@@ -98,7 +99,7 @@ function show-store() {
 function show-inside() {
     local dir=$1 home manifest store
     home=$(mktemp -d "$TMP/XXXXXX-home")
-    for manifest in "$dir/keep-backup.txt" "$dir/keep-export.txt"; do
+    for manifest in "$dir/envfolio-backup.txt" "$dir/envfolio-export.txt"; do
         [[ -f $manifest ]] && { echo "  ${manifest##*/}:" ; sed 's/^/    /' "$manifest" ; }
     done
     if [[ -f $dir/key.asc ]]; then
@@ -138,9 +139,9 @@ for file in "${files[@]}"; do
         echo "  no such file" ; status=1
     else
         case $file in
-            *--keep.tar.gz)
+            *--envfolio.tar.gz)
                 if tar -xzf "$file" -C "$unpack"; then show-inside "$unpack" ; else status=1 ; fi ;;
-            *.keep|*--keep.gpg)
+            *.envfolio|*--envfolio.gpg)
                 locks "$file" | sed 's/^/  /'
                 if (( ! open )); then
                     echo "  (--open to unlock it and see inside)"

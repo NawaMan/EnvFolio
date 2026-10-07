@@ -10,13 +10,13 @@ setup() {
     export GIT_CONFIG_NOSYSTEM=1
     unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL EMAIL
     export GNUPGHOME="$SANDBOX/gnupg"
-    export KEEP_STORE_DIR="$SANDBOX/store"
+    export ENVFOLIO_STORE_DIR="$SANDBOX/store"
     export XDG_STATE_HOME="$SANDBOX/state"
     export USER=sb-test-nobody
     mkdir -p "$HOME" && mkdir -m 700 "$GNUPGHOME"
 
-    # shellcheck source=SCRIPTDIR/../../keep
-    source "$BATS_TEST_DIRNAME/../../keep"
+    # shellcheck source=SCRIPTDIR/../../envfolio
+    source "$BATS_TEST_DIRNAME/../../envfolio"
     [[ $STORE_PATH == "$SANDBOX"/* && $PASSWORD_STORE_DIR == "$SANDBOX"/* && $GNUPGHOME == "$SANDBOX"/* ]]
 
     gpg --batch --passphrase '' --quick-generate-key "Test User <test@example.com>" default default never 2>/dev/null
@@ -49,7 +49,7 @@ teardown() {
     run store-init --key "$TEST_FPR" --name Someone
     [ "$status" -eq 1 ]
     [[ $output == *"--key cannot be used"* ]]
-    [ ! -e "$KEEP_STORE_DIR" ]
+    [ ! -e "$ENVFOLIO_STORE_DIR" ]
 }
 
 @test "store-init: --passphrase-stdin needs --name and --email" {
@@ -62,7 +62,7 @@ teardown() {
     run store-init --key nobody@nowhere.invalid
     [ "$status" -eq 1 ]
     [[ $output == *"No secret key matches"* ]]
-    [ ! -e "$KEEP_STORE_DIR" ]
+    [ ! -e "$ENVFOLIO_STORE_DIR" ]
 }
 
 @test "store-init: --key matching several keys fails" {
@@ -75,14 +75,14 @@ teardown() {
 @test "store-init: --key=<email> uses that key without asking" {
     run store-init --key=test@example.com
     [ "$status" -eq 0 ]
-    [ "$(cat "$KEEP_STORE_DIR/.gpg-id")" = "$TEST_FPR" ]
+    [ "$(cat "$ENVFOLIO_STORE_DIR/.gpg-id")" = "$TEST_FPR" ]
 }
 
 @test "store-init: a new key from --name, --email and --passphrase-stdin" {
     run store-init --name "New User" --email new@example.com --passphrase-stdin <<< "correct horse"
     [ "$status" -eq 0 ]
     local fpr
-    fpr=$(cat "$KEEP_STORE_DIR/.gpg-id")
+    fpr=$(cat "$ENVFOLIO_STORE_DIR/.gpg-id")
     [ "$fpr" != "$TEST_FPR" ]
     [ "$(key-uid "$fpr")" = "New User <new@example.com>" ]
     # The key is protected: a wrong passphrase cannot sign with it.
@@ -96,5 +96,5 @@ teardown() {
     run store-init --name "New User" --email new@example.com --passphrase-stdin < /dev/null
     [ "$status" -eq 1 ]
     [[ $output == *"No passphrase on stdin"* ]]
-    [ ! -e "$KEEP_STORE_DIR/.gpg-id" ]
+    [ ! -e "$ENVFOLIO_STORE_DIR/.gpg-id" ]
 }

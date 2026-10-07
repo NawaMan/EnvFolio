@@ -1,20 +1,20 @@
-# Keep Manual
+# EnvFolio Manual
 
 One section per command, one subsection per example. Every example that can run without a
 keyboard has a matching test in `tests/` named `MANUAL: <command> — <example>`.
 
 ---
 
-## `keep help`
+## `envfolio help`
 
 ```
-keep help [command]
+envfolio help [command]
 ```
 
 ### List the commands
 
 ```bash
-keep help
+envfolio help
 ```
 
 Lists every command, one line each.
@@ -22,21 +22,21 @@ Lists every command, one line each.
 ### Help for one command
 
 ```bash
-keep help store init
+envfolio help store init
 ```
 
-The usage and options of `keep store init` — the same as `keep store init --help`.
+The usage and options of `envfolio store init` — the same as `envfolio store init --help`.
 
 ---
 
-## `keep store init`
+## `envfolio store init`
 
-Creates the Keep store (`$KEEP_STORE_DIR`, default `~/.keep`): picks or creates the GPG key that
+Creates the EnvFolio store (`$ENVFOLIO_STORE_DIR`, default `~/.envfolio`): picks or creates the GPG key that
 encrypts it, runs `pass init`, and starts the store's git history.
 
 ```
-keep store init [--key <id>]
-keep store init [--new-key] [--name <name>] [--email <email>] [--passphrase-stdin]
+envfolio store init [--key <id>]
+envfolio store init [--new-key] [--name <name>] [--email <email>] [--passphrase-stdin]
 ```
 
 | Option | Meaning |
@@ -49,12 +49,12 @@ keep store init [--new-key] [--name <name>] [--email <email>] [--passphrase-stdi
 | `-h`, `--help` | Show the options and stop. Nothing is created. |
 
 `--opt=value` works as well as `--opt value`. Anything not given is asked for. `--key` cannot be
-combined with the new-key options. It fails if anything already exists at `$KEEP_STORE_DIR`.
+combined with the new-key options. It fails if anything already exists at `$ENVFOLIO_STORE_DIR`.
 
 ### Ask for everything
 
 ```bash
-keep store init
+envfolio store init
 ```
 
 Shows a menu of your secret keys plus *Create a new key* (straight to creating one if you have
@@ -66,7 +66,7 @@ passphrase.
 ### Use an existing key, no prompts
 
 ```bash
-keep store init --key jane@example.com < /dev/null
+envfolio store init --key jane@example.com < /dev/null
 ```
 
 Uses the one secret key matching `jane@example.com`. Nothing is asked, so this works in a script.
@@ -74,7 +74,7 @@ Uses the one secret key matching `jane@example.com`. Nothing is asked, so this w
 ### Create a new key, no prompts
 
 ```bash
-keep store init --name "Jane Doe" --email jane@example.com --passphrase-stdin < passphrase-file
+envfolio store init --name "Jane Doe" --email jane@example.com --passphrase-stdin < passphrase-file
 ```
 
 Creates a key for `Jane Doe <jane@example.com>` protected by the first line of `passphrase-file`.
@@ -84,31 +84,31 @@ Feed the passphrase from a file (made under `umask 077`) or another secret tool 
 ### Use another store folder
 
 ```bash
-KEEP_STORE_DIR=~/work-keep keep store init --key jane@example.com
+ENVFOLIO_STORE_DIR=~/work-envfolio envfolio store init --key jane@example.com
 ```
 
-Creates the store in `~/work-keep` instead of `~/.keep`. Every later `keep` command needs the
-same `KEEP_STORE_DIR` to use it.
+Creates the store in `~/work-envfolio` instead of `~/.envfolio`. Every later `envfolio` command needs the
+same `ENVFOLIO_STORE_DIR` to use it.
 
 ### When the store folder already exists
 
-`keep store init` refuses to run if the store folder already exists, and changes nothing:
+`envfolio store init` refuses to run if the store folder already exists, and changes nothing:
 
-- **A ready Keep store** (it has `.gpg-id` and a git history) — says the store already exists.
-- **Anything else**, even an empty folder — says it is not a ready Keep store. This is what an
-  earlier `keep store init` leaves if it stopped partway (an error, Ctrl-C, a closed terminal):
-  remove the folder and run `keep store init` again. A key created by the earlier
+- **A ready EnvFolio store** (it has `.gpg-id` and a git history) — says the store already exists.
+- **Anything else**, even an empty folder — says it is not a ready EnvFolio store. This is what an
+  earlier `envfolio store init` leaves if it stopped partway (an error, Ctrl-C, a closed terminal):
+  remove the folder and run `envfolio store init` again. A key created by the earlier
 run is kept, and shows up in the key menu.
 
 ---
 
-## `keep store path`
+## `envfolio store path`
 
-Prints the Keep store's folder: `$KEEP_STORE_DIR`, default `~/.keep`, as an absolute path. It
+Prints the EnvFolio store's folder: `$ENVFOLIO_STORE_DIR`, default `~/.envfolio`, as an absolute path. It
 works whether or not the store exists yet.
 
 ```
-keep store path
+envfolio store path
 ```
 
 | Option | Meaning |
@@ -118,38 +118,38 @@ keep store path
 ### Print the store's folder
 
 ```bash
-keep store path
+envfolio store path
 ```
 
 ```
-/home/jane/.keep
+/home/jane/.envfolio
 ```
 
 ---
 
-## `keep store backup`
+## `envfolio store backup`
 
-Saves the whole Keep store and its GPG key into one file, to get it all back with
-`keep store restore` — on this machine or a new one.
+Saves the whole EnvFolio store and its GPG key into one file, to get it all back with
+`envfolio store restore` — on this machine or a new one.
 
 ```
-keep store backup [--history] [--encrypt [--passphrase-stdin]] [<file>|<folder>]
+envfolio store backup [--history] [--encrypt [--passphrase-stdin]] [<file>|<folder>]
 ```
 
 | Option | Meaning |
 | --- | --- |
 | `--history` | Keep the store's git history too. Without it, a restore starts a new one. |
-| `--encrypt` | Encrypt the backup with a passphrase of its own (`gpg --symmetric`); the file ends in `--keep.gpg` instead of `--keep.tar.gz`. |
+| `--encrypt` | Encrypt the backup with a passphrase of its own (`gpg --symmetric`); the file ends in `--envfolio.gpg` instead of `--envfolio.tar.gz`. |
 | `--passphrase-stdin` | Read that passphrase from the first line of stdin instead of gpg's prompt. Needs `--encrypt`. An empty passphrase is refused. |
 | `-h`, `--help` | Show the options and stop. |
 
-The file is `<file>` (the suffix added when missing), or `backup-<date>-<time>--keep.tar.gz` in
+The file is `<file>` (the suffix added when missing), or `backup-<date>-<time>--envfolio.tar.gz` in
 `<folder>` — default the current folder. An existing file is never replaced. The file is readable
 by you only.
 
 What is in it:
 
-- `keep-backup.txt` — when it was made, the store's folder name, and the key's fingerprint.
+- `envfolio-backup.txt` — when it was made, the store's folder name, and the key's fingerprint.
 - `key.asc` — the store's secret key, exported with `gpg --export-secret-keys`. gpg asks for the
   key's passphrase to export it, and the key stays protected by that passphrase in the file.
 - The store's folder: the secrets (encrypted), the texts and their signatures (plain) — and with
@@ -161,17 +161,17 @@ secrets themselves need the key and its passphrase. Keep the file somewhere safe
 ### Back up into the current folder
 
 ```bash
-keep store backup
+envfolio store backup
 ```
 
-Writes `backup-20261006-120000--keep.tar.gz` (the date and time now) here.
+Writes `backup-20261006-120000--envfolio.tar.gz` (the date and time now) here.
 
 ### Restore on a new machine
 
 ```bash
-keep store backup /media/usb
+envfolio store backup /media/usb
 # ... on the new machine:
-keep store restore /media/usb/backup-20261006-120000--keep.tar.gz
+envfolio store restore /media/usb/backup-20261006-120000--envfolio.tar.gz
 ```
 
 The store comes back with a new git history, its texts still verify and its secrets decrypt.
@@ -179,7 +179,7 @@ The store comes back with a new git history, its texts still verify and its secr
 ### With the git history
 
 ```bash
-keep store backup --history
+envfolio store backup --history
 ```
 
 The restored store has the same history as this one.
@@ -187,48 +187,48 @@ The restored store has the same history as this one.
 ### Encrypted
 
 ```bash
-keep store backup --encrypt
+envfolio store backup --encrypt
 ```
 
-gpg asks for a passphrase for the backup (twice), and writes `backup-…--keep.gpg`. A restore asks
+gpg asks for a passphrase for the backup (twice), and writes `backup-…--envfolio.gpg`. A restore asks
 for it again. With `--passphrase-stdin`, the first line of stdin is the passphrase — feed it from
 a file or another secret tool, not with `echo`.
 
 ---
 
-## `keep store restore`
+## `envfolio store restore`
 
-Brings back a Keep store from a file made by `keep store backup`.
+Brings back an EnvFolio store from a file made by `envfolio store backup`.
 
 ```
-keep store restore [--passphrase-stdin] <file>
+envfolio store restore [--passphrase-stdin] <file>
 ```
 
 | Option | Meaning |
 | --- | --- |
-| `--passphrase-stdin` | Read the passphrase of an encrypted backup (`--keep.gpg`) from the first line of stdin instead of gpg's prompt. |
+| `--passphrase-stdin` | Read the passphrase of an encrypted backup (`--envfolio.gpg`) from the first line of stdin instead of gpg's prompt. |
 | `-h`, `--help` | Show the options and stop. |
 
 It imports the backup's key into your keyring and trusts it as your own (so `pass` can encrypt to
-it), then puts the store at `$KEEP_STORE_DIR` (default `~/.keep`). A key already in your keyring
+it), then puts the store at `$ENVFOLIO_STORE_DIR` (default `~/.envfolio`). A key already in your keyring
 is fine. A backup without its git history gets a new one: one commit of everything restored.
 
-It refuses when anything is already at `$KEEP_STORE_DIR` and changes nothing: move that folder
-away first, or restore elsewhere with `KEEP_STORE_DIR=<other-folder> keep store restore <file>`.
-A file whose name ends in neither `--keep.tar.gz` nor `--keep.gpg`, or that is not a Keep backup,
+It refuses when anything is already at `$ENVFOLIO_STORE_DIR` and changes nothing: move that folder
+away first, or restore elsewhere with `ENVFOLIO_STORE_DIR=<other-folder> envfolio store restore <file>`.
+A file whose name ends in neither `--envfolio.tar.gz` nor `--envfolio.gpg`, or that is not an EnvFolio backup,
 is refused too. Nothing is left behind when it fails.
 
-Examples: see `keep store backup` above.
+Examples: see `envfolio store backup` above.
 
 ---
 
-## `keep store export`
+## `envfolio store export`
 
-Copies some items into one file, to bring them into another store with `keep store import` — on
+Copies some items into one file, to bring them into another store with `envfolio store import` — on
 a server, in a booth, or on another machine. Your store's key never leaves this machine.
 
 ```
-keep store export [-s|--secrets] [--to <key>] [--passphrase-stdin] [-o|--output <file>|<folder>] [<name>...]
+envfolio store export [-s|--secrets] [--to <key>] [--passphrase-stdin] [-o|--output <file>|<folder>] [<name>...]
 ```
 
 | Option | Meaning |
@@ -240,10 +240,10 @@ keep store export [-s|--secrets] [--to <key>] [--passphrase-stdin] [-o|--output 
 | `-h`, `--help` | Show the options and stop. |
 
 A `<name>` is a text or a secret, or a folder: every text under it, and its secrets with
-`--secrets`. With no `<name>`, Keep lists every item, numbered, and asks which ones
+`--secrets`. With no `<name>`, EnvFolio lists every item, numbered, and asks which ones
 (`1 3 5-7`, or `all`).
 
-The file is `<file>` (`.keep` added when missing), or `export-<date>-<time>.keep` in `<folder>` —
+The file is `<file>` (`.envfolio` added when missing), or `export-<date>-<time>.envfolio` in `<folder>` —
 default the current folder, never inside the store. An existing file is never replaced. The file
 is readable by you only.
 
@@ -253,7 +253,7 @@ How it works:
   Each secret is decrypted with your store's key and encrypted to the new key through a pipe —
   the value never touches the disk. gpg may ask for your store key's passphrase. Each text is
   checked and signed again with the new key.
-- The file holds `keep-export.txt` (when it was made, the new key's fingerprint), `key.asc` (the
+- The file holds `envfolio-export.txt` (when it was made, the new key's fingerprint), `key.asc` (the
   new key, with no passphrase of its own) and `store/` — a `pass` store of the chosen items.
 - The whole file is **always locked**: with a passphrase, or with `--to`, to the public key of
   where it is going. Whoever opens the file can read every item in it, so it is never written
@@ -262,11 +262,11 @@ How it works:
 ### Export with a passphrase
 
 ```bash
-keep store export web
+envfolio store export web
 ```
 
 Takes the texts under `web/` (its secrets need `--secrets`); gpg asks for a passphrase for the
-file (twice) and writes `export-20261006-120000.keep` here.
+file (twice) and writes `export-20261006-120000.envfolio` here.
 
 ### Lock it to the server's public key
 
@@ -274,7 +274,7 @@ file (twice) and writes `export-20261006-120000.keep` here.
 # on the server:
 gpg --armor --export server@example.com > server.asc
 # here:
-keep store export --secrets --to server.asc web
+envfolio store export --secrets --to server.asc web
 ```
 
 Only the server's secret key can open the file, so it can travel through places you do not trust
@@ -282,12 +282,12 @@ Only the server's secret key can open the file, so it can travel through places 
 
 ---
 
-## `keep store import`
+## `envfolio store import`
 
-Brings items from a file made by `keep store export` into the Keep store.
+Brings items from a file made by `envfolio store export` into the EnvFolio store.
 
 ```
-keep store import [-a|--all] [--overwrite|--skip-existing] [--key <id>] [--passphrase-stdin] <file> [<name>...]
+envfolio store import [-a|--all] [--overwrite|--skip-existing] [--key <id>] [--passphrase-stdin] <file> [<name>...]
 ```
 
 | Option | Meaning |
@@ -295,12 +295,12 @@ keep store import [-a|--all] [--overwrite|--skip-existing] [--key <id>] [--passp
 | `-a`, `--all` | Take every item in the export. |
 | `--overwrite` | Replace the items already in the store. |
 | `--skip-existing` | Keep the items already in the store; take only the new ones. |
-| `--key <id>` | With no store yet: make it with this key, as `keep store init --key`. |
+| `--key <id>` | With no store yet: make it with this key, as `envfolio store init --key`. |
 | `--passphrase-stdin` | Read the file's passphrase (or your key's, for a file locked to it) from the first line of stdin. Needs `--all` or a `<name>`. |
 | `-h`, `--help` | Show the options and stop. |
 
 A `<name>` is an item in the export, or a folder: every item under it. With neither `<name>` nor
-`--all`, Keep lists the export's items and asks which ones.
+`--all`, EnvFolio lists the export's items and asks which ones.
 
 Every text is checked against the export's signature first; one that does not verify stops the
 import before anything is written. Then each secret is encrypted to the store's key (by
@@ -308,14 +308,14 @@ import before anything is written. Then each secret is encrypted to the store's 
 one commit in the store's history, as when you add it by hand. The export's key is used in a
 keyring of its own and never added to yours.
 
-With no store yet, one is made first, as `keep store init` does (`--key` picks its key without
+With no store yet, one is made first, as `envfolio store init` does (`--key` picks its key without
 asking). An item already in the store is overwritten or skipped as `--overwrite` or
-`--skip-existing` says; with neither, Keep lists them and asks.
+`--skip-existing` says; with neither, EnvFolio lists them and asks.
 
 ### Into a new store
 
 ```bash
-keep store import --all --key server@example.com export-20261006-120000.keep
+envfolio store import --all --key server@example.com export-20261006-120000.envfolio
 ```
 
 Makes the store with the server's key, then imports every item.
@@ -323,21 +323,21 @@ Makes the store with the server's key, then imports every item.
 ### Merge into a store, keeping what is there
 
 ```bash
-keep store import --skip-existing export-20261006-120000.keep aws/key web/user
+envfolio store import --skip-existing export-20261006-120000.envfolio aws/key web/user
 ```
 
 Takes `aws/key` and `web/user`; one already in the store stays as it is.
 
 ---
 
-## `keep ls`
+## `envfolio ls`
 
-Lists the texts and secrets in the Keep store together as one tree: names only, never values.
+Lists the texts and secrets in the EnvFolio store together as one tree: names only, never values.
 Each name is marked **(S)** for a secret or **(T)** for a text. A name that is both shows twice.
 Signatures (`.txt.sig`) are left out.
 
 ```
-keep ls [--flat] [<subfolder>]
+envfolio ls [--flat] [<subfolder>]
 ```
 
 | Option | Meaning |
@@ -345,16 +345,16 @@ keep ls [--flat] [<subfolder>]
 | `--flat` | Full names, one per line, sorted, instead of a tree: `(S) web/github`. |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
-Only a folder can be listed. It needs a ready store (`keep store init`).
+Only a folder can be listed. It needs a ready store (`envfolio store init`).
 
 ### List everything
 
 ```bash
-keep ls
+envfolio ls
 ```
 
 ```
-Keep Store
+EnvFolio Store
 ├── (T) note
 └── web
     ├── (S) github
@@ -365,7 +365,7 @@ Keep Store
 ### List one folder
 
 ```bash
-keep ls web
+envfolio ls web
 ```
 
 Lists only what is under `web`.
@@ -373,7 +373,7 @@ Lists only what is under `web`.
 ### List flat
 
 ```bash
-keep ls --flat
+envfolio ls --flat
 ```
 
 ```
@@ -387,14 +387,14 @@ One full name per line, ready for `grep` or a script.
 
 ---
 
-## `keep text ls`
+## `envfolio text ls`
 
-Lists the texts in the Keep store as a tree: names only. It mirrors `keep secret ls`: the same
+Lists the texts in the EnvFolio store as a tree: names only. It mirrors `envfolio secret ls`: the same
 tree as `pass ls`, but with the texts instead of the secrets. Signatures (`.txt.sig`) and folders
 holding no texts are left out.
 
 ```
-keep text ls [--flat] [<subfolder>]
+envfolio text ls [--flat] [<subfolder>]
 ```
 
 | Option | Meaning |
@@ -402,13 +402,13 @@ keep text ls [--flat] [<subfolder>]
 | `--flat` | Full names, one per line, sorted, instead of a tree. |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
-Only a folder can be listed; a text's own name is refused (use `keep text show` once it exists).
-It needs a ready store (`keep store init`).
+Only a folder can be listed; a text's own name is refused (use `envfolio text show` once it exists).
+It needs a ready store (`envfolio store init`).
 
 ### List every text
 
 ```bash
-keep text ls
+envfolio text ls
 ```
 
 ```
@@ -422,32 +422,32 @@ Text Store
 ### List one folder
 
 ```bash
-keep text ls web
+envfolio text ls web
 ```
 
 Lists only what is under `web`.
 
 ---
 
-## `keep text find`
+## `envfolio text find`
 
 Lists the texts whose names contain any of the given parts, ignoring case, as a tree: names
-only. It mirrors `keep secret find`: `pass find`, for the texts.
+only. It mirrors `envfolio secret find`: `pass find`, for the texts.
 
 ```
-keep text find <part>...
+envfolio text find <part>...
 ```
 
 | Option | Meaning |
 | --- | --- |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
-It needs a ready store (`keep store init`).
+It needs a ready store (`envfolio store init`).
 
 ### Find by name
 
 ```bash
-keep text find home
+envfolio text find home
 ```
 
 ```
@@ -458,27 +458,27 @@ Search Terms: home
 
 ---
 
-## `keep text grep`
+## `envfolio text grep`
 
 Prints the lines of every text that match, each under its text's name. It mirrors
-`keep secret grep`: the same loop as `pass grep`, reading the plain texts instead of decrypting
-secrets. Secrets are never searched. Signatures are not checked here (`keep text show` will).
+`envfolio secret grep`: the same loop as `pass grep`, reading the plain texts instead of decrypting
+secrets. Secrets are never searched. Signatures are not checked here (`envfolio text show` will).
 
 ```
-keep text grep [<grep-option>...] <pattern>
+envfolio text grep [<grep-option>...] <pattern>
 ```
 
 | Option | Meaning |
 | --- | --- |
 | `<grep-option>` | Any option of `grep`, e.g. `-i` to ignore case. |
-| `-h`, `--help` | Show the options and stop. Works without a store. In Keep, `-h` is always help, never grep's `-h`. |
+| `-h`, `--help` | Show the options and stop. Works without a store. In EnvFolio, `-h` is always help, never grep's `-h`. |
 
-It needs a ready store (`keep store init`).
+It needs a ready store (`envfolio store init`).
 
 ### Find by value
 
 ```bash
-keep text grep jane
+envfolio text grep jane
 ```
 
 ```
@@ -488,13 +488,13 @@ jane
 
 ---
 
-## `keep text show`
+## `envfolio text show`
 
 Prints a text, after checking its signature: `<name>.txt.sig` must be there, match the text, and
 be by the store's key (the first key in `.gpg-id`). Checking needs no passphrase.
 
 ```
-keep text show [-c|--clip[=<line>]] <name>
+envfolio text show [-c|--clip[=<line>]] <name>
 ```
 
 | Option | Meaning |
@@ -502,13 +502,13 @@ keep text show [-c|--clip[=<line>]] <name>
 | `-c`, `--clip[=<line>]` | Copy the first line, or line `<line>`, to the clipboard and print nothing. **The clipboard is not cleared** afterwards: a text is not a secret. Needs `pbcopy`, `wl-copy` or `xclip`. |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
-Only a text can be shown; a folder or a secret is refused (use `keep secret show` for secrets).
-It needs a ready store (`keep store init`).
+Only a text can be shown; a folder or a secret is refused (use `envfolio secret show` for secrets).
+It needs a ready store (`envfolio store init`).
 
 ### Show a text
 
 ```bash
-keep text show web/user
+envfolio text show web/user
 ```
 
 Prints the text exactly as it was inserted.
@@ -516,32 +516,32 @@ Prints the text exactly as it was inserted.
 ### Copy to the clipboard
 
 ```bash
-keep text show -c web/user
+envfolio text show -c web/user
 ```
 
 Copies the text's first line, once its signature is checked. `--clip=2` copies line 2 instead.
 
-### A text changed outside Keep is not shown
+### A text changed outside EnvFolio is not shown
 
 If the signature is missing, does not match, or is by another key — even one you trust — the text
 is not printed and the command fails. The message says how to see what changed
 (`git diff` / `git log -p` in the store), and how to sign it again if the text is right:
 
 ```bash
-keep text insert -f -m web/user < ~/.keep/web/user.txt
+envfolio text insert -f -m web/user < ~/.envfolio/web/user.txt
 ```
 
 ---
 
-## `keep text insert`
+## `envfolio text insert`
 
-Adds a text to the Keep store. A text is **not a secret**: it is kept plain, not encrypted, as
+Adds a text to the EnvFolio store. A text is **not a secret**: it is kept plain, not encrypted, as
 `<name>.txt` in the same folders as the secrets, and signed with the store's key as
 `<name>.txt.sig`, so a changed text can be told. Both are committed to the store's git history.
 Signing uses the key's secret half, so gpg may ask for its passphrase.
 
 ```
-keep text insert [-m|--multiline] [-f|--force] [-t|--text <text>] <name>
+envfolio text insert [-m|--multiline] [-f|--force] [-t|--text <text>] <name>
 ```
 
 | Option | Meaning |
@@ -554,18 +554,18 @@ keep text insert [-m|--multiline] [-f|--force] [-t|--text <text>] <name>
 A text and a secret can share a name: `web/github` can be both. At a terminal, it asks before
 overwriting a text. **From a script or pipe, it overwrites** (the old one stays in the git
 history). If signing fails, nothing is saved and the old text stays. It needs a ready store
-(`keep store init`).
+(`envfolio store init`).
 
 ### Give the text
 
 ```bash
-keep text insert -t "https://example.com" web/home
+envfolio text insert -t "https://example.com" web/home
 ```
 
 ### Type a text
 
 ```bash
-keep text insert web/user
+envfolio text insert web/user
 ```
 
 Asks for the text once, and shows it as you type.
@@ -575,7 +575,7 @@ Asks for the text once, and shows it as you type.
 ### Pipe a text in
 
 ```bash
-whoami | keep text insert web/user
+whoami | envfolio text insert web/user
 ```
 
 Only the first line is the text. For more, use `-m` below.
@@ -583,49 +583,49 @@ Only the first line is the text. For more, use `-m` below.
 ### Several lines
 
 ```bash
-keep text insert -m notes/todo < todo.txt
+envfolio text insert -m notes/todo < todo.txt
 ```
 
 All of stdin is the text, kept exactly.
 
 ---
 
-## `keep text edit`
+## `envfolio text edit`
 
 Opens a text in `$EDITOR` (`vi` if unset), or adds it if it is new, then signs and commits it. It
-mirrors `keep secret edit` (`pass edit`): you edit a temporary copy, removed afterwards, and the
+mirrors `envfolio secret edit` (`pass edit`): you edit a temporary copy, removed afterwards, and the
 text is saved only if you changed it. Signing may ask for the key's passphrase.
 
 ```
-keep text edit <name>
+envfolio text edit <name>
 ```
 
 | Option | Meaning |
 | --- | --- |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
-**The signature is checked first**, as `keep text show` does: a text changed outside Keep is not
+**The signature is checked first**, as `envfolio text show` does: a text changed outside EnvFolio is not
 opened, so editing never signs it by accident. If you save it unchanged, it fails with *Text
-unchanged.* and nothing is committed. It needs a ready store (`keep store init`).
+unchanged.* and nothing is committed. It needs a ready store (`envfolio store init`).
 
 ### Edit a text
 
 ```bash
-keep text edit web/user
+envfolio text edit web/user
 ```
 
 *Interactive — checked by hand, and tested with a stand-in editor.*
 
 ---
 
-## `keep text generate`
+## `envfolio text generate`
 
 Generates a random text, saves, signs and commits it, then prints it. It mirrors
-`keep secret generate` (`pass generate`): the same characters and default length. It is kept
+`envfolio secret generate` (`pass generate`): the same characters and default length. It is kept
 plain, so use it for things like IDs, not passwords. Signing may ask for the key's passphrase.
 
 ```
-keep text generate [-n|--no-symbols] [-i|--in-place|-f|--force] <name> [<length>]
+envfolio text generate [-n|--no-symbols] [-i|--in-place|-f|--force] <name> [<length>]
 ```
 
 | Option | Meaning |
@@ -642,21 +642,21 @@ pipe, it is overwritten (the old one stays in the git history).
 ### Generate a text
 
 ```bash
-keep text generate -n id/session 12
+envfolio text generate -n id/session 12
 ```
 
 Saves a 12-character text of letters and digits as `id/session`, and prints it.
 
 ---
 
-## `keep text rm`
+## `envfolio text rm`
 
 Removes a text, or every text in a folder with `-r`, and commits the removal. The text stays in
-the store's git history. It mirrors `keep secret rm` (`pass rm`), but **only texts are removed**:
+the store's git history. It mirrors `envfolio secret rm` (`pass rm`), but **only texts are removed**:
 `-r` on a folder keeps the secrets in it.
 
 ```
-keep text rm [-r|--recursive] [-f|--force] <name>
+envfolio text rm [-r|--recursive] [-f|--force] <name>
 ```
 
 | Option | Meaning |
@@ -671,19 +671,19 @@ text and a folder means the text; end it with `/` for the folder.
 ### Remove a text
 
 ```bash
-keep text rm -f mail/work
+envfolio text rm -f mail/work
 ```
 
 ---
 
-## `keep text mv`
+## `envfolio text mv`
 
 Renames or moves a text, or every text in a folder, and commits the change. It mirrors
-`keep secret mv` (`pass mv`), but **only texts are moved**: secrets in a moved folder stay where
+`envfolio secret mv` (`pass mv`), but **only texts are moved**: secrets in a moved folder stay where
 they are. A signature covers the text, not its name, so a moved text still verifies.
 
 ```
-keep text mv [-f|--force] <old-name> <new-name>
+envfolio text mv [-f|--force] <old-name> <new-name>
 ```
 
 | Option | Meaning |
@@ -697,18 +697,18 @@ it. At a terminal, it asks before overwriting. **From a script or pipe, it overw
 ### Rename a text
 
 ```bash
-keep text mv web/user web/login
+envfolio text mv web/user web/login
 ```
 
 ---
 
-## `keep text cp`
+## `envfolio text cp`
 
-Copies a text, or every text in a folder, and commits the copy. It mirrors `keep secret cp`
+Copies a text, or every text in a folder, and commits the copy. It mirrors `envfolio secret cp`
 (`pass cp`), but **only texts are copied**.
 
 ```
-keep text cp [-f|--force] <old-name> <new-name>
+envfolio text cp [-f|--force] <old-name> <new-name>
 ```
 
 | Option | Meaning |
@@ -721,18 +721,18 @@ At a terminal, it asks before overwriting. **From a script or pipe, it overwrite
 ### Copy a text
 
 ```bash
-keep text cp web/user web/user-copy
+envfolio text cp web/user web/user-copy
 ```
 
 ---
 
-## `keep secret ls`
+## `envfolio secret ls`
 
-Lists the secrets in the Keep store as a tree: names only, never their values. It is `pass ls`
+Lists the secrets in the EnvFolio store as a tree: names only, never their values. It is `pass ls`
 without the texts: the same tree, minus `*.txt`/`*.txt.sig` files and folders holding only texts.
 
 ```
-keep secret ls [--flat] [<subfolder>]
+envfolio secret ls [--flat] [<subfolder>]
 ```
 
 | Option | Meaning |
@@ -741,13 +741,13 @@ keep secret ls [--flat] [<subfolder>]
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
 Only a folder can be listed. A secret's own name is refused, because `pass ls <name>` would
-print the secret (use `keep secret show` once it exists). The same goes for `pass`'s other
-options, such as `-c`. It needs a ready store (`keep store init`).
+print the secret (use `envfolio secret show` once it exists). The same goes for `pass`'s other
+options, such as `-c`. It needs a ready store (`envfolio store init`).
 
 ### List every secret
 
 ```bash
-keep secret ls
+envfolio secret ls
 ```
 
 ```
@@ -760,20 +760,20 @@ Secret Store
 ### List one folder
 
 ```bash
-keep secret ls web
+envfolio secret ls web
 ```
 
 Lists only what is under `web`.
 
 ---
 
-## `keep secret find`
+## `envfolio secret find`
 
 Lists the secrets whose names contain any of the given parts, ignoring case, as a tree. It shows
 names only, never values. It is `pass find` without the texts.
 
 ```
-keep secret find <part>...
+envfolio secret find <part>...
 ```
 
 | Option | Meaning |
@@ -783,7 +783,7 @@ keep secret find <part>...
 ### Find by name
 
 ```bash
-keep secret find git
+envfolio secret find git
 ```
 
 ```
@@ -794,25 +794,25 @@ Search Terms: git
 
 ---
 
-## `keep secret grep`
+## `envfolio secret grep`
 
 Decrypts every secret and prints the lines that match, each under its secret's name. **The
 matching lines are secret values, and they are shown on screen.** It is `pass grep`, so gpg may
 ask for the key's passphrase.
 
 ```
-keep secret grep [<grep-option>...] <pattern>
+envfolio secret grep [<grep-option>...] <pattern>
 ```
 
 | Option | Meaning |
 | --- | --- |
 | `<grep-option>` | Any option of `grep`, e.g. `-i` to ignore case. |
-| `-h`, `--help` | Show the options and stop. Works without a store. In Keep, `-h` is always help, never grep's `-h`. |
+| `-h`, `--help` | Show the options and stop. Works without a store. In EnvFolio, `-h` is always help, never grep's `-h`. |
 
 ### Find by value
 
 ```bash
-keep secret grep jane
+envfolio secret grep jane
 ```
 
 ```
@@ -822,13 +822,13 @@ user: jane
 
 ---
 
-## `keep secret show`
+## `envfolio secret show`
 
 Decrypts a secret and prints it, or copies it to the clipboard. It is `pass show`, so gpg may
 ask for the key's passphrase.
 
 ```
-keep secret show [-c|--clip[=<line>]] <name>
+envfolio secret show [-c|--clip[=<line>]] <name>
 ```
 
 | Option | Meaning |
@@ -837,13 +837,13 @@ keep secret show [-c|--clip[=<line>]] <name>
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
 Only a secret can be shown. A folder is refused, because `pass show <folder>` would list it
-(use `keep secret ls`). `pass`'s `-q`/`--qrcode` is not offered. It needs a ready store
-(`keep store init`).
+(use `envfolio secret ls`). `pass`'s `-q`/`--qrcode` is not offered. It needs a ready store
+(`envfolio store init`).
 
 ### Print a secret
 
 ```bash
-keep secret show web/github
+envfolio secret show web/github
 ```
 
 Prints the whole secret, every line of it.
@@ -851,7 +851,7 @@ Prints the whole secret, every line of it.
 ### Copy to the clipboard
 
 ```bash
-keep secret show -c web/github
+envfolio secret show -c web/github
 ```
 
 Copies the secret's first line without showing it, and says when the clipboard will clear. As in
@@ -860,20 +860,20 @@ Copies the secret's first line without showing it, and says when the clipboard w
 ### Copy one line
 
 ```bash
-keep secret show --clip=2 note
+envfolio secret show --clip=2 note
 ```
 
 Copies only line 2 of `note`, e.g. the user name kept under a password.
 
 ---
 
-## `keep secret insert`
+## `envfolio secret insert`
 
-Adds a secret to the Keep store, encrypted with the store's key, and commits it to the store's git
-history. It is a plain `pass` entry, so `PASSWORD_STORE_DIR=~/.keep pass show <name>` reads it too.
+Adds a secret to the EnvFolio store, encrypted with the store's key, and commits it to the store's git
+history. It is a plain `pass` entry, so `PASSWORD_STORE_DIR=~/.envfolio pass show <name>` reads it too.
 
 ```
-keep secret insert [-m|--multiline] [-f|--force] <name>
+envfolio secret insert [-m|--multiline] [-f|--force] <name>
 ```
 
 | Option | Meaning |
@@ -884,12 +884,12 @@ keep secret insert [-m|--multiline] [-f|--force] <name>
 
 Everything except `--help` goes straight to `pass insert`, so it behaves exactly like `pass`.
 `pass`'s `-e`/`--echo` is refused: it would show the secret on screen. The secret is never taken
-as an argument. It needs a ready store (`keep store init`).
+as an argument. It needs a ready store (`envfolio store init`).
 
 ### Type a secret
 
 ```bash
-keep secret insert web/github
+envfolio secret insert web/github
 ```
 
 Asks for the secret twice, without echo. If `web/github` already exists, asks before overwriting it.
@@ -899,7 +899,7 @@ Asks for the secret twice, without echo. If `web/github` already exists, asks be
 ### Pipe a secret in
 
 ```bash
-printf '%s\n%s\n' "$value" "$value" | keep secret insert web/github
+printf '%s\n%s\n' "$value" "$value" | envfolio secret insert web/github
 ```
 
 As at the prompt, the secret is given twice — one per line — and must match. Nothing is asked:
@@ -909,14 +909,14 @@ history). For a single copy, use `-m` below.
 ### Several lines
 
 ```bash
-keep secret insert -m note < note.txt
+envfolio secret insert -m note < note.txt
 ```
 
 All of stdin is the secret.
 
 ---
 
-## `keep secret edit`
+## `envfolio secret edit`
 
 Opens a secret in `$EDITOR` (vi if unset), or adds it if it is new, and commits the change. It
 is `pass edit`: the secret is decrypted to a temporary file for the editor, in `/dev/shm` (a RAM
@@ -924,7 +924,7 @@ disk) where there is one, and removed afterwards. Without `/dev/shm` (macOS), `p
 asks first. If you save it unchanged, nothing is committed.
 
 ```
-keep secret edit <name>
+envfolio secret edit <name>
 ```
 
 | Option | Meaning |
@@ -934,20 +934,20 @@ keep secret edit <name>
 ### Edit a secret
 
 ```bash
-keep secret edit web/github
+envfolio secret edit web/github
 ```
 
 *Interactive — checked by hand, and tested with a stand-in editor.*
 
 ---
 
-## `keep secret generate`
+## `envfolio secret generate`
 
 Generates a random secret, saves and commits it, then prints it, or copies it with `-c`. It is
 `pass generate`.
 
 ```
-keep secret generate [-n|--no-symbols] [-c|--clip] [-i|--in-place|-f|--force] <name> [<length>]
+envfolio secret generate [-n|--no-symbols] [-c|--clip] [-i|--in-place|-f|--force] <name> [<length>]
 ```
 
 | Option | Meaning |
@@ -965,7 +965,7 @@ terminal.** From a script or pipe, it is overwritten (the old one stays in the g
 ### Generate a secret
 
 ```bash
-keep secret generate -n api 12
+envfolio secret generate -n api 12
 ```
 
 Saves a 12-character secret of letters and digits as `api`, and prints it.
@@ -973,20 +973,20 @@ Saves a 12-character secret of letters and digits as `api`, and prints it.
 ### Copy to the clipboard
 
 ```bash
-keep secret generate -c api
+envfolio secret generate -c api
 ```
 
 Saves the new secret and copies it without showing it.
 
 ---
 
-## `keep secret rm`
+## `envfolio secret rm`
 
 Removes a secret, or a folder with `-r`, and commits the removal. The secret stays in the store's
 git history. It is `pass rm`.
 
 ```
-keep secret rm [-r|--recursive] [-f|--force] <name>
+envfolio secret rm [-r|--recursive] [-f|--force] <name>
 ```
 
 | Option | Meaning |
@@ -996,23 +996,23 @@ keep secret rm [-r|--recursive] [-f|--force] <name>
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
 At a terminal it asks first. **From a script or pipe, it does not ask.** On a folder, `-r` removes
-everything in it, **texts included** — `pass` acts on the whole folder. (`keep text rm -r` removes
+everything in it, **texts included** — `pass` acts on the whole folder. (`envfolio text rm -r` removes
 only the texts.)
 
 ### Remove a secret
 
 ```bash
-keep secret rm -f mail/work
+envfolio secret rm -f mail/work
 ```
 
 ---
 
-## `keep secret mv`
+## `envfolio secret mv`
 
 Renames or moves a secret or a folder, and commits the change. It is `pass mv`.
 
 ```
-keep secret mv [-f|--force] <old-name> <new-name>
+envfolio secret mv [-f|--force] <old-name> <new-name>
 ```
 
 | Option | Meaning |
@@ -1027,17 +1027,17 @@ in it, **texts included**.
 ### Rename a secret
 
 ```bash
-keep secret mv web/github web/gh
+envfolio secret mv web/github web/gh
 ```
 
 ---
 
-## `keep secret cp`
+## `envfolio secret cp`
 
 Copies a secret or a folder, and commits the copy. It is `pass cp`.
 
 ```
-keep secret cp [-f|--force] <old-name> <new-name>
+envfolio secret cp [-f|--force] <old-name> <new-name>
 ```
 
 | Option | Meaning |
@@ -1051,19 +1051,19 @@ copied with everything in it, **texts included**.
 ### Copy a secret
 
 ```bash
-keep secret cp web/github web/github-copy
+envfolio secret cp web/github web/github-copy
 ```
 
 ---
 
-## `keep exec`
+## `envfolio exec`
 
-Runs a command with entries from the Keep store as environment variables, the way `op run` and
+Runs a command with entries from the EnvFolio store as environment variables, the way `op run` and
 `aws-vault exec` do. Texts load by default; secrets load only with `--secrets`. Values never go
 on a command line, into a file, or on the screen.
 
 ```
-keep exec [-s|--secrets] [-a|--all] [-n|--names] <entry>... -- <command> [<arg>...]
+envfolio exec [-s|--secrets] [-a|--all] [-n|--names] <entry>... -- <command> [<arg>...]
 ```
 
 | Option | Meaning |
@@ -1083,8 +1083,8 @@ An `<entry>` is one of:
 
 At least one `<entry>` is needed, unless `--all` is given; the whole store is never loaded by
 default. The `--` is
-needed, and everything after it is the command, which Keep never parses. It needs a ready store
-(`keep store init`).
+needed, and everything after it is the command, which EnvFolio never parses. It needs a ready store
+(`envfolio store init`).
 
 **Variable names.** An entry's name comes from its full path in the store, whatever was
 selected:
@@ -1119,23 +1119,23 @@ that matches no entry is an error, and so is a run that would load nothing at al
 **Refused**, before anything runs: a path that is both a text and a secret
 (`gh/token.txt` and `gh/token.gpg`) when both would load, and a `VAR=<name>` pointing at such a
 path. Without `--secrets` only the text loads, so there is no conflict. Also refused: a name bash
-or Keep keeps for itself, such as `RANDOM` or `UID` (an entry `random` would give it), since the
+or EnvFolio keeps for itself, such as `RANDOM` or `UID` (an entry `random` would give it), since the
 command would not get the value; load it under another name with `VAR=<name>`.
 
 **Values.** An entry's whole content, with trailing newlines removed (as `$(pass show x)` gives
 it), so multi-line values such as keys come through whole. Each text's signature is checked as
-in `keep text show`; each secret is decrypted with `pass show`, so gpg may ask for the key's
+in `envfolio text show`; each secret is decrypted with `pass show`, so gpg may ask for the key's
 passphrase. **All or nothing:** every entry is checked and read before the command starts; if one
-fails, the command does not run and Keep exits 1.
+fails, the command does not run and EnvFolio exits 1.
 
-**The command** replaces Keep (`exec`), so its exit status, signals and input/output are its own.
+**The command** replaces EnvFolio (`exec`), so its exit status, signals and input/output are its own.
 It gets the caller's environment plus the loaded variables, which override any of the same name.
-Keep's own `PASSWORD_STORE_DIR` is not passed on: the caller's value is put back, or it is unset.
+EnvFolio's own `PASSWORD_STORE_DIR` is not passed on: the caller's value is put back, or it is unset.
 
 ### Run a command with texts
 
 ```bash
-keep exec git -- git commit
+envfolio exec git -- git commit
 ```
 
 Runs `git commit` with every text under `git/` set, e.g. `git/user_name` as `GIT_USER_NAME`.
@@ -1143,7 +1143,7 @@ Runs `git commit` with every text under `git/` set, e.g. `git/user_name` as `GIT
 ### Add secrets
 
 ```bash
-keep exec --secrets gh -- gh repo list
+envfolio exec --secrets gh -- gh repo list
 ```
 
 Also loads the secrets under `gh/`, e.g. `gh/token` as `GH_TOKEN`.
@@ -1151,16 +1151,16 @@ Also loads the secrets under `gh/`, e.g. `gh/token` as `GH_TOKEN`.
 ### Layer a namespace
 
 ```bash
-keep exec --secrets gh @nawa -- gh repo list
+envfolio exec --secrets gh @nawa -- gh repo list
 ```
 
 Loads `gh/`, then everything in `@nawa/` over it: `@nawa/gh/token` gives `GH_TOKEN`, replacing
-`gh/token`'s. `keep exec @nawa -- cmd` alone loads only what is in the namespace.
+`gh/token`'s. `envfolio exec @nawa -- cmd` alone loads only what is in the namespace.
 
 ### Load everything
 
 ```bash
-keep exec --all --secrets @nawa -- ./deploy
+envfolio exec --all --secrets @nawa -- ./deploy
 ```
 
 Loads every text and secret outside the namespaces, then `@nawa/` over them. Without
@@ -1169,7 +1169,7 @@ Loads every text and secret outside the namespaces, then `@nawa/` over them. Wit
 ### Check the names first
 
 ```bash
-keep exec --names --secrets gh @nawa -- gh repo list
+envfolio exec --names --secrets gh @nawa -- gh repo list
 ```
 
 ```
@@ -1182,7 +1182,7 @@ Shows what the command would get, without running it. Warnings and notes still s
 ### Pick the variable name
 
 ```bash
-keep exec --secrets GITHUB_TOKEN=gh/token gh -- ./deploy
+envfolio exec --secrets GITHUB_TOKEN=gh/token gh -- ./deploy
 ```
 
 Sets `GITHUB_TOKEN` from `gh/token`, and loads the rest of `gh/` by the rule. `gh/token` is
@@ -1190,33 +1190,33 @@ claimed, so it does not also give `GH_TOKEN`.
 
 ---
 
-## `keep shell`
+## `envfolio shell`
 
-Starts your shell (`$SHELL`, or `/bin/sh`) with entries from the Keep store as environment
-variables. It is `keep exec <entry>... -- "$SHELL"`, plus a line saying what was loaded.
+Starts your shell (`$SHELL`, or `/bin/sh`) with entries from the EnvFolio store as environment
+variables. It is `envfolio exec <entry>... -- "$SHELL"`, plus a line saying what was loaded.
 
 ```
-keep shell [-s|--secrets] [-a|--all] [-n|--names] <entry>...
+envfolio shell [-s|--secrets] [-a|--all] [-n|--names] <entry>...
 ```
 
 | Option | Meaning |
 | --- | --- |
 | `-s`, `--secrets` | Also load secrets. |
-| `-a`, `--all` | Load every entry outside the namespaces first, as in `keep exec`. |
-| `-n`, `--names` | Only show which variable would get which entry, as in `keep exec`; no shell starts. |
+| `-a`, `--all` | Load every entry outside the namespaces first, as in `envfolio exec`. |
+| `-n`, `--names` | Only show which variable would get which entry, as in `envfolio exec`; no shell starts. |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
-Entries, variable names, values and errors are as in `keep exec`. Before the shell starts, Keep
-prints the loaded variable names, never their values, to stderr. It sets `KEEP_SHELL=1`, so your
-own prompt can show it; Keep does not change the prompt. `exit` leaves the shell. It needs a
-ready store (`keep store init`).
+Entries, variable names, values and errors are as in `envfolio exec`. Before the shell starts, EnvFolio
+prints the loaded variable names, never their values, to stderr. It sets `ENVFOLIO_SHELL=1`, so your
+own prompt can show it; EnvFolio does not change the prompt. `exit` leaves the shell. It needs a
+ready store (`envfolio store init`).
 
 ### Open a shell
 
 ```bash
-keep shell --secrets gh @nawa
+envfolio shell --secrets gh @nawa
 ```
 
 ```
-keep shell: loaded GH_TOKEN, GH_USER (texts: 1, secrets: 1). Type 'exit' to leave.
+envfolio shell: loaded GH_TOKEN, GH_USER (texts: 1, secrets: 1). Type 'exit' to leave.
 ```

@@ -2,33 +2,33 @@
 
 #== Doc ========================================================================
 #
-# Keep — a command-line tool for keeping texts and secrets, built on `pass`.
+# EnvFolio — a command-line tool for keeping texts and secrets, built on `pass`.
 #
-# Usage: keep <command> [args...]        (`keep help` lists the commands)
-#   keep store  init | path | backup | restore | export | import
-#   keep text   ls | find | grep | show | insert | edit | generate | rm | mv | cp
-#   keep secret ls | find | grep | show | insert | edit | generate | rm | mv | cp
-#   keep ls | exec | shell | version | help [command]
+# Usage: envfolio <command> [args...]        (`envfolio help` lists the commands)
+#   envfolio store  init | path | backup | restore | export | import
+#   envfolio text   ls | find | grep | show | insert | edit | generate | rm | mv | cp
+#   envfolio secret ls | find | grep | show | insert | edit | generate | rm | mv | cp
+#   envfolio ls | exec | shell | version | help [command]
 #
 # Environment:
-#   KEEP_STORE_DIR  The Keep store (default ~/.keep). Laid out like a pass store, but kept apart
-#                   from your own ~/.password-store.
+#   ENVFOLIO_STORE_DIR  The EnvFolio store (default ~/.envfolio). Laid out like a pass store, but
+#                       kept apart from your own ~/.password-store.
 #
 # Every command, with examples: MANUAL.md
 
 #== Settings ===================================================================
 
-STORE_PATH=${KEEP_STORE_DIR:-$HOME/.keep}
+STORE_PATH=${ENVFOLIO_STORE_DIR:-$HOME/.envfolio}
 # Always absolute: `pass` loops forever on a relative PASSWORD_STORE_DIR whose folder doesn't exist
 # yet (its set_git keeps stripping "/…" off a path that has none left).
 [[ $STORE_PATH == /* ]] || STORE_PATH=$PWD/$STORE_PATH
 
-# The caller's own PASSWORD_STORE_DIR (set or not), put back for the command `keep exec` runs.
+# The caller's own PASSWORD_STORE_DIR (set or not), put back for the command `envfolio exec` runs.
 CALLER_STORE_DIR_SET=${PASSWORD_STORE_DIR+set}
 CALLER_STORE_DIR=${PASSWORD_STORE_DIR-}
 
-# The Keep store is laid out like a pass store, but lives in its own place so it never touches the
-# user's own ~/.password-store. Every `pass` call goes there.
+# The EnvFolio store is laid out like a pass store, but lives in its own place so it never touches
+# the user's own ~/.password-store. Every `pass` call goes there.
 export PASSWORD_STORE_DIR="$STORE_PATH"
 
 # gpg's passphrase prompt needs the terminal, also when its stdin is a pipe or a file (as pass does).
@@ -50,19 +50,19 @@ function main() {
         shell)   run-shell "$@" ;;
         version) version "$@" ;;
         help)    help   "$@" ;;
-        "")      echo   "Usage: keep <version|help|store|text|secret|ls|exec|shell> [args...]" >&2 ; return 1 ;;
-        *)       echo   "keep: unknown command: $category"                        >&2 ; return 1 ;;
+        "")      echo   "Usage: envfolio <version|help|store|text|secret|ls|exec|shell> [args...]" >&2 ; return 1 ;;
+        *)       echo   "envfolio: unknown command: $category"                        >&2 ; return 1 ;;
     esac
 }
 
 function version() {
-    echo "Keep 0.1"
+    echo "EnvFolio 0.1"
 }
 
-# keep help [command...]
+# envfolio help [command...]
 function help() {
     case "$*" in
-        "")                keep-help            ;;
+        "")                envfolio-help            ;;
         "store init")      store-init-help      ;;
         "store path")      store-path-help      ;;
         "store backup")    store-backup-help    ;;
@@ -92,16 +92,16 @@ function help() {
         "secret rm")       secret-rm-help       ;;
         "secret mv")       secret-mv-help       ;;
         "secret cp")       secret-cp-help       ;;
-        *)                 echo "keep help: no help for '$*' yet." >&2 ; return 1 ;;
+        *)                 echo "envfolio help: no help for '$*' yet." >&2 ; return 1 ;;
     esac
 }
 
-function keep-help() {
+function envfolio-help() {
     cat <<'EOF'
-Usage: keep <command> [args...]
+Usage: envfolio <command> [args...]
 
 Commands:
-  store init        Create the Keep store
+  store init        Create the EnvFolio store
   store path        Print the store's folder
   store backup      Save the store and its key into one file
   store restore     Bring the store and its key back from a backup
@@ -130,10 +130,10 @@ Commands:
   ls                List texts and secrets together
   exec              Run a command with entries as environment variables
   shell             Start a shell with entries as environment variables
-  version           Print Keep's version
-  help [command]    Show help, e.g. `keep help store init`
+  version           Print EnvFolio's version
+  help [command]    Show help, e.g. `envfolio help store init`
 
-The store is $KEEP_STORE_DIR, default ~/.keep.
+The store is $ENVFOLIO_STORE_DIR, default ~/.envfolio.
 Details and examples: MANUAL.md
 EOF
 }
@@ -153,8 +153,8 @@ function store() {
         restore) store-restore "$@" ;;
         export)  store-export  "$@" ;;
         import)  store-import  "$@" ;;
-        "")      echo "Usage: keep store <init|path|backup|restore|export|import> [args...]" >&2 ; return 1 ;;
-        *)       echo "keep store: unknown command: $category"                               >&2 ; return 1 ;;
+        "")      echo "Usage: envfolio store <init|path|backup|restore|export|import> [args...]" >&2 ; return 1 ;;
+        *)       echo "envfolio store: unknown command: $category"                               >&2 ; return 1 ;;
     esac
 }
 
@@ -162,19 +162,19 @@ function store() {
 
 function store-path-help() {
     cat <<'EOF'
-Usage: keep store path
+Usage: envfolio store path
 
-Print the Keep store's folder: $KEEP_STORE_DIR, default ~/.keep. Works without a store.
+Print the EnvFolio store's folder: $ENVFOLIO_STORE_DIR, default ~/.envfolio. Works without a store.
 
 Options:
   -h, --help          Show this help and stop.
 EOF
 }
 
-# keep store path
+# envfolio store path
 function store-path() {
     case ${1:-} in -h|--help) store-path-help ; return 0 ;; esac
-    (( $# == 0 )) || die "Usage: keep store path"
+    (( $# == 0 )) || die "Usage: envfolio store path"
     echo "${STORE_PATH}"
 }
 
@@ -193,8 +193,8 @@ function store-exists() {
 
 function store-init-usage() {
     cat <<'EOF'
-Usage: keep store init [--key <id>]
-       keep store init [--new-key] [--name <name>] [--email <email>] [--passphrase-stdin]
+Usage: envfolio store init [--key <id>]
+       envfolio store init [--new-key] [--name <name>] [--email <email>] [--passphrase-stdin]
 EOF
 }
 
@@ -202,8 +202,9 @@ function store-init-help() {
     store-init-usage
     cat <<'EOF'
 
-Create the Keep store ($KEEP_STORE_DIR, default ~/.keep): pick or create the GPG key that
-encrypts it, run `pass init`, and start the store's git history. Anything not given is asked for.
+Create the EnvFolio store ($ENVFOLIO_STORE_DIR, default ~/.envfolio): pick or create the GPG key
+that encrypts it, run `pass init`, and start the store's git history. Anything not given is asked
+for.
 
 Options:
   --key <id>          Use an existing secret key: fingerprint, key id or email (must match one).
@@ -216,11 +217,11 @@ Options:
   -h, --help          Show this help.
 
 --opt=value works as well as --opt value.
-Examples: MANUAL.md, section `keep store init`.
+Examples: MANUAL.md, section `envfolio store init`.
 EOF
 }
 
-# keep store init [--key <id>] | [--new-key] [--name <name>] [--email <email>] [--passphrase-stdin]
+# envfolio store init [--key <id>] | [--new-key] [--name <name>] [--email <email>] [--passphrase-stdin]
 # Anything not given is asked for. An existing key needs no passphrase: the store only encrypts to it.
 function store-init() {
     # Processs inputs
@@ -256,17 +257,17 @@ function store-init() {
     local status=0
     store-exists || status=$?
     if (( status == 0 )); then
-        die "A Keep store already exists at $STORE_PATH." \
-            "To create another one, run with${EXTRA_LINE}    KEEP_STORE_DIR=<other-folder> $0 store init."
+        die "A EnvFolio store already exists at $STORE_PATH." \
+            "To create another one, run with${EXTRA_LINE}    ENVFOLIO_STORE_DIR=<other-folder> $0 store init."
     fi
     if (( status == 2 )); then
-        die "$STORE_PATH exists but is not a ready Keep store" \
-            "(maybe an earlier \`keep store init\` did not finish)." \
-            "Remove it and run again, or run with${EXTRA_LINE}    KEEP_STORE_DIR=<other-folder> $0 store init."
+        die "$STORE_PATH exists but is not a ready EnvFolio store" \
+            "(maybe an earlier \`envfolio store init\` did not finish)." \
+            "Remove it and run again, or run with${EXTRA_LINE}    ENVFOLIO_STORE_DIR=<other-folder> $0 store init."
     fi
 
     local key uid expiry
-    section "Select key to protect the keep store."
+    section "Select key to protect the envfolio store."
     if [[ -n $key_id ]]; then
         key=$(find-key "$key_id") || exit 1
         show-answer "Key" "$key"
@@ -326,7 +327,7 @@ function store-summary() {
         "1. Your passphrase — it can't be reset. Memorise it, and keep a written copy offline."
         ""
         "2. A backup of your key and store — one file, made with:"
-        "     keep store backup"
+        "     envfolio store backup"
         "   Keep it somewhere safe and offline, and run it again after you change passwords."
     )
     if [[ -n $expiry ]]; then
@@ -341,35 +342,36 @@ function store-summary() {
 
 # Die unless the store is ready; commands that read or write items call this first.
 function require-store() {
-    store-exists || die "No ready Keep store at $STORE_PATH. Create one with: keep store init"
+    store-exists || die "No ready EnvFolio store at $STORE_PATH. Create one with: envfolio store init"
 }
 
 # --- store backup -------------------------------------------------------------
 
-# A backup is one file: keep-backup.txt (what it holds), key.asc (the store's keys, still protected
-# by their passphrase) and the store's folder — without .git unless --history.
-BACKUP_SUFFIX=--keep.tar.gz
-ENCRYPTED_BACKUP_SUFFIX=--keep.gpg
+# A backup is one file: envfolio-backup.txt (what it holds), key.asc (the store's keys, still
+# protected by their passphrase) and the store's folder — without .git unless --history.
+BACKUP_SUFFIX=--envfolio.tar.gz
+ENCRYPTED_BACKUP_SUFFIX=--envfolio.gpg
 
 function store-backup-usage() {
-    echo "Usage: keep store backup [--history] [--encrypt [--passphrase-stdin]] [<file>|<folder>]"
+    echo "Usage: envfolio store backup [--history] [--encrypt [--passphrase-stdin]] [<file>|<folder>]"
 }
 
 function store-backup-help() {
     store-backup-usage
     cat <<'EOF'
 
-Save the whole Keep store and its GPG key into one file, to get it all back with
-`keep store restore` — here or on a new machine. gpg asks for the key's passphrase to export it;
-in the backup, the key stays protected by that passphrase.
+Save the whole EnvFolio store and its GPG key into one file, to get it all back with
+`envfolio store restore` — here or on a new machine. gpg asks for the key's passphrase to export
+it; in the backup, the key stays protected by that passphrase.
 
-The file is <file> (--keep.tar.gz added when missing), or backup-<date>-<time>--keep.tar.gz in
-<folder>, default the current one. An existing file is never replaced.
+The file is <file> (--envfolio.tar.gz added when missing), or
+backup-<date>-<time>--envfolio.tar.gz in <folder>, default the current one. An existing file is
+never replaced.
 
 Options:
   --history           Keep the store's git history too. Without it, a restore starts a new one.
-  --encrypt           Encrypt the backup with a passphrase of its own; the file ends in --keep.gpg.
-                      Without it, the texts and the names of the secrets can be read by anyone
+  --encrypt           Encrypt the backup with a passphrase of its own; the file ends in
+                      --envfolio.gpg. Without it, the texts and the names of the secrets can be read by anyone
                       who has the file (the secrets themselves stay encrypted).
   --passphrase-stdin  Read that passphrase from the first line of stdin. Needs --encrypt.
                       An empty passphrase is refused.
@@ -377,7 +379,7 @@ Options:
 EOF
 }
 
-# keep store backup [--history] [--encrypt [--passphrase-stdin]] [<file>|<folder>]
+# envfolio store backup [--history] [--encrypt [--passphrase-stdin]] [<file>|<folder>]
 function store-backup() {
     local history=0 encrypt=0 passphrase_stdin=0 target=""
     while (( $# > 0 )); do
@@ -425,11 +427,11 @@ function store-backup() {
     stage=$(mktemp -d) || die "Cannot make a temporary folder."
     remove-on-exit "$stage" "$file.partial"
     {
-        echo "keep-backup 1"
+        echo "envfolio-backup 1"
         echo "created $(date -u +%Y-%m-%dT%H:%M:%SZ)"
         echo "store ${store##*/}"
         printf 'key %s\n' "${keys[@]}"
-    } > "$stage/keep-backup.txt"
+    } > "$stage/envfolio-backup.txt"
 
     section "Export the key (gpg may ask for its passphrase)"
     if ! gpg --armor --output "$stage/key.asc" --export-secret-keys "${keys[@]}" || [[ ! -s $stage/key.asc ]]; then
@@ -440,7 +442,7 @@ function store-backup() {
     section "Pack the backup"
     local pack=(tar -czf -) seal=(cat)
     (( history )) || pack+=(--exclude=.git)
-    pack+=(-C "$stage" keep-backup.txt key.asc -C "$(dirname "$store")" "${store##*/}")
+    pack+=(-C "$stage" envfolio-backup.txt key.asc -C "$(dirname "$store")" "${store##*/}")
     if (( encrypt )); then
         seal=(gpg --symmetric --compress-algo none --output -)
         (( passphrase_stdin )) && seal=(gpg --batch --pinentry-mode loopback --passphrase-fd 3 "${seal[@]:1}")
@@ -454,7 +456,7 @@ function store-backup() {
     show-answer "File" "$file"
 
     local lines=(
-        "Your Keep store is backed up."
+        "Your EnvFolio store is backed up."
         ""
         "File:      $(tilde-path "$file")"
         "Key:       ${keys[0]}"
@@ -462,7 +464,7 @@ function store-backup() {
         "Encrypted: $( (( encrypt )) && echo "yes" || echo "no (add --encrypt)" )"
         ""
         "To restore it, here or on a new machine:"
-        "  keep store restore $file"
+        "  envfolio store restore $file"
         "That needs the key's passphrase$( (( encrypt )) && echo ", and the backup's own" )."
         "Keep the file somewhere safe and offline."
     )
@@ -473,25 +475,25 @@ function store-backup() {
 # --- store restore ------------------------------------------------------------
 
 function store-restore-usage() {
-    echo "Usage: keep store restore [--passphrase-stdin] <file>"
+    echo "Usage: envfolio store restore [--passphrase-stdin] <file>"
 }
 
 function store-restore-help() {
     store-restore-usage
     cat <<'EOF'
 
-Bring back a Keep store from a file made by `keep store backup`: import its GPG key (trusted as
-your own), and put the store at $KEEP_STORE_DIR (default ~/.keep). A backup without its git
-history starts a new one. Refuses when anything is already at $KEEP_STORE_DIR.
+Bring back an EnvFolio store from a file made by `envfolio store backup`: import its GPG key
+(trusted as your own), and put the store at $ENVFOLIO_STORE_DIR (default ~/.envfolio). A backup
+without its git history starts a new one. Refuses when anything is already at $ENVFOLIO_STORE_DIR.
 
 Options:
-  --passphrase-stdin  Read the passphrase of an encrypted backup (--keep.gpg) from the first line
-                      of stdin, instead of gpg's prompt.
+  --passphrase-stdin  Read the passphrase of an encrypted backup (--envfolio.gpg) from the first
+                      line of stdin, instead of gpg's prompt.
   -h, --help          Show this help.
 EOF
 }
 
-# keep store restore [--passphrase-stdin] <file>
+# envfolio store restore [--passphrase-stdin] <file>
 function store-restore() {
     local passphrase_stdin=0 file=""
     while (( $# > 0 )); do
@@ -514,10 +516,10 @@ function store-restore() {
             (( passphrase_stdin )) && open=(gpg --batch --pinentry-mode loopback --passphrase-fd 3 "${open[@]:1}") ;;
         *"$BACKUP_SUFFIX")
             (( ! passphrase_stdin )) || die "--passphrase-stdin is only for an encrypted backup ($ENCRYPTED_BACKUP_SUFFIX)." ;;
-        *)  die "$file is not a Keep backup: its name ends in neither $BACKUP_SUFFIX nor $ENCRYPTED_BACKUP_SUFFIX." ;;
+        *)  die "$file is not an EnvFolio backup: its name ends in neither $BACKUP_SUFFIX nor $ENCRYPTED_BACKUP_SUFFIX." ;;
     esac
     [[ ! -e $STORE_PATH ]] \
-        || die "$STORE_PATH already exists. Move it away to restore there, or run with${EXTRA_LINE}    KEEP_STORE_DIR=<other-folder> $0 store restore $file"
+        || die "$STORE_PATH already exists. Move it away to restore there, or run with${EXTRA_LINE}    ENVFOLIO_STORE_DIR=<other-folder> $0 store restore $file"
 
     local passphrase=""
     if (( passphrase_stdin )); then
@@ -529,7 +531,7 @@ function store-restore() {
     local target=${STORE_PATH%/} stage
     umask 077
     mkdir -p "$(dirname "$target")" || die "Cannot create $(dirname "$target")."
-    stage=$(mktemp -d "$(dirname "$target")/.keep-restore.XXXXXX") || die "Cannot make a temporary folder."
+    stage=$(mktemp -d "$(dirname "$target")/.envfolio-restore.XXXXXX") || die "Cannot make a temporary folder."
     remove-on-exit "$stage"
 
     section "Unpack the backup"
@@ -538,15 +540,15 @@ function store-restore() {
     unset passphrase
 
     local field value format="" name="" keys=() key
-    [[ -f $stage/keep-backup.txt ]] || die "$file is not a Keep backup: it has no keep-backup.txt."
+    [[ -f $stage/envfolio-backup.txt ]] || die "$file is not an EnvFolio backup: it has no envfolio-backup.txt."
     while read -r field value; do
         case $field in
-            keep-backup) format=$value ;;
+            envfolio-backup) format=$value ;;
             store)       name=$value   ;;
             key)         keys+=("$value") ;;
         esac
-    done < "$stage/keep-backup.txt"
-    [[ $format == 1 ]] || die "$file is a Keep backup of a format this Keep cannot read ($format)."
+    done < "$stage/envfolio-backup.txt"
+    [[ $format == 1 ]] || die "$file is an EnvFolio backup of a format this EnvFolio cannot read ($format)."
     [[ -n $name && $name != */* && $name != . && $name != .. && -s $stage/$name/.gpg-id ]] \
         || die "$file has no store in it."
     [[ -s $stage/key.asc && ${#keys[@]} -gt 0 ]] || die "$file has no key in it."
@@ -574,7 +576,7 @@ function store-restore() {
     mv "$stage/$name" "$target" || die "Cannot move the store to $target."
 
     section "Summary"
-    show-box "Your Keep store is restored." \
+    show-box "Your EnvFolio store is restored." \
              "" \
              "Store:   $(tilde-path "$target")" \
              "Key:     ${keys[0]}" \
@@ -585,31 +587,31 @@ function store-restore() {
 
 # --- store export -------------------------------------------------------------
 
-# An export is one file, always locked: keep-export.txt (what it holds), key.asc (a new key made
+# An export is one file, always locked: envfolio-export.txt (what it holds), key.asc (a new key made
 # for this export only, with no passphrase — the lock on the file protects it) and store/, a pass
 # store of the chosen items encrypted and signed with that key. Secrets go from one key to the
 # other through a pipe, never through a file.
-EXPORT_SUFFIX=.keep
+EXPORT_SUFFIX=.envfolio
 
 function store-export-usage() {
-    echo "Usage: keep store export [-s|--secrets] [--to <key>] [--passphrase-stdin] [-o|--output <file>|<folder>] [<name>...]"
+    echo "Usage: envfolio store export [-s|--secrets] [--to <key>] [--passphrase-stdin] [-o|--output <file>|<folder>] [<name>...]"
 }
 
 function store-export-help() {
     store-export-usage
     cat <<'EOF'
 
-Copy some items into one file, to bring them into another store with `keep store import` — on
+Copy some items into one file, to bring them into another store with `envfolio store import` — on
 a server, in a booth, or on another machine. Your store's key stays here: the items are encrypted
 and signed with a new key made for this export only, and the file is locked — with a passphrase,
 or with --to, to the public key of where it is going. gpg may ask for your store key's passphrase
 to read the secrets.
 
 A <name> is a text or secret, or a folder: every text under it, and its secrets with --secrets.
-With no <name>, Keep lists every item and asks which ones.
+With no <name>, EnvFolio lists every item and asks which ones.
 
-The file is <file> (.keep added when missing), or export-<date>-<time>.keep in <folder>, default
-the current one — never inside the store. An existing file is never replaced.
+The file is <file> (.envfolio added when missing), or export-<date>-<time>.envfolio in <folder>,
+default the current one — never inside the store. An existing file is never replaced.
 
 Options:
   -s, --secrets       Take the secrets in a folder too. A secret named on its own always goes.
@@ -623,7 +625,7 @@ Options:
 EOF
 }
 
-# keep store export [-s|--secrets] [--to <key>] [--passphrase-stdin] [-o|--output <file>|<folder>] [<name>...]
+# envfolio store export [-s|--secrets] [--to <key>] [--passphrase-stdin] [-o|--output <file>|<folder>] [<name>...]
 function store-export() {
     local secrets=0 to="" passphrase_stdin=0 target="" names=() arg
     while (( $# > 0 )); do
@@ -673,7 +675,7 @@ function store-export() {
 
     section "Make the export's own key"
     status=$(GNUPGHOME=$home gpg --batch --passphrase '' --status-fd 3 \
-                 --quick-generate-key "Keep export $(date +%Y%m%d-%H%M%S)" default default never 3>&1 1>/dev/null 2>/dev/null)
+                 --quick-generate-key "EnvFolio export $(date +%Y%m%d-%H%M%S)" default default never 3>&1 1>/dev/null 2>/dev/null)
     key=$(printf '%s\n' "$status" | awk '$2 == "KEY_CREATED" { print $4 }')
     [[ -n $key ]] || die "Making the export's key failed."
     echo "$key" > "$pack/store/.gpg-id"
@@ -714,10 +716,10 @@ function store-export() {
     GNUPGHOME=$home gpg --batch --armor --export-secret-keys "$key" > "$pack/key.asc" 2>/dev/null
     [[ -s $pack/key.asc ]] || die "Exporting the export's key failed."
     {
-        echo "keep-export 1"
+        echo "envfolio-export 1"
         echo "created $(date -u +%Y-%m-%dT%H:%M:%SZ)"
         echo "key $key"
-    } > "$pack/keep-export.txt"
+    } > "$pack/envfolio-export.txt"
 
     section "Pack and lock the file"
     local seal=(gpg --symmetric --compress-algo none --output -)
@@ -725,7 +727,7 @@ function store-export() {
     [[ -n $recipient ]] && seal=(env GNUPGHOME="$home" gpg --batch --trust-model always --compress-algo none
                                  --encrypt --recipient "$recipient" --output -)
     # As in store backup: the passphrase reaches gpg on fd 3, never in argv.
-    COPYFILE_DISABLE=1 tar -czf - -C "$pack" keep-export.txt key.asc store \
+    COPYFILE_DISABLE=1 tar -czf - -C "$pack" envfolio-export.txt key.asc store \
         | "${seal[@]}" > "$file.partial" 3< <(printf '%s\n' "$passphrase")
     [[ ${PIPESTATUS[*]} == "0 0" ]] || die "Packing the export failed."
     unset passphrase
@@ -745,41 +747,41 @@ function store-export() {
              "Locked: $lock" \
              "" \
              "To bring them into a store (a new one, or one that is there):" \
-             "  keep store import $file" \
+             "  envfolio store import $file" \
              "That needs $opens."
 }
 
 # --- store import -------------------------------------------------------------
 
 function store-import-usage() {
-    echo "Usage: keep store import [-a|--all] [--overwrite|--skip-existing] [--key <id>] [--passphrase-stdin] <file> [<name>...]"
+    echo "Usage: envfolio store import [-a|--all] [--overwrite|--skip-existing] [--key <id>] [--passphrase-stdin] <file> [<name>...]"
 }
 
 function store-import-help() {
     store-import-usage
     cat <<'EOF'
 
-Bring items from a file made by `keep store export` into the Keep store ($KEEP_STORE_DIR, default
-~/.keep): the secrets are encrypted to the store's key, the texts checked and signed with it
-(gpg may ask for its passphrase). With no store yet, one is made first, as `keep store init`
-does. The export's key is used here only, never added to your keyring.
+Bring items from a file made by `envfolio store export` into the EnvFolio store
+($ENVFOLIO_STORE_DIR, default ~/.envfolio): the secrets are encrypted to the store's key, the texts
+checked and signed with it (gpg may ask for its passphrase). With no store yet, one is made first,
+as `envfolio store init` does. The export's key is used here only, never added to your keyring.
 
 A <name> is an item in the export, or a folder: every item under it. With neither <name> nor
---all, Keep lists the export's items and asks which ones. An item already in the store is
-overwritten or skipped, as the options say; otherwise Keep asks.
+--all, EnvFolio lists the export's items and asks which ones. An item already in the store is
+overwritten or skipped, as the options say; otherwise EnvFolio asks.
 
 Options:
   -a, --all           Take every item in the export.
   --overwrite         Replace the items already in the store.
   --skip-existing     Keep the items already in the store; take only the new ones.
-  --key <id>          With no store yet: make it with this key, as `keep store init --key`.
+  --key <id>          With no store yet: make it with this key, as `envfolio store init --key`.
   --passphrase-stdin  Read the file's passphrase (or your key's, for a file locked to it) from the
                       first line of stdin. Needs --all or a <name>.
   -h, --help          Show this help.
 EOF
 }
 
-# keep store import [-a|--all] [--overwrite|--skip-existing] [--key <id>] [--passphrase-stdin] <file> [<name>...]
+# envfolio store import [-a|--all] [--overwrite|--skip-existing] [--key <id>] [--passphrase-stdin] <file> [<name>...]
 function store-import() {
     local all=0 clash="" key_id="" passphrase_stdin=0 file="" names=() arg
     while (( $# > 0 )); do
@@ -798,7 +800,7 @@ function store-import() {
     done
     [[ -n $file ]] || die "$(store-import-usage)"
     [[ -f $file ]] || die "There is no file $file."
-    [[ $file == *"$EXPORT_SUFFIX" ]] || die "$file is not a Keep export: its name does not end in $EXPORT_SUFFIX."
+    [[ $file == *"$EXPORT_SUFFIX" ]] || die "$file is not an EnvFolio export: its name does not end in $EXPORT_SUFFIX."
     (( ! all || ${#names[@]} == 0 )) || die "--all takes every item; give no <name> with it."
     (( ! passphrase_stdin || all || ${#names[@]} > 0 )) \
         || die "--passphrase-stdin needs --all or the items named: stdin cannot also answer which ones."
@@ -826,14 +828,14 @@ function store-import() {
     unset passphrase
 
     local field value format="" key=""
-    [[ -f $stage/unpack/keep-export.txt ]] || die "$file is not a Keep export: it has no keep-export.txt."
+    [[ -f $stage/unpack/envfolio-export.txt ]] || die "$file is not an EnvFolio export: it has no envfolio-export.txt."
     while read -r field value; do
         case $field in
-            keep-export) format=$value ;;
+            envfolio-export) format=$value ;;
             key)         key=$value    ;;
         esac
-    done < "$stage/unpack/keep-export.txt"
-    [[ $format == 1 ]]                 || die "$file is a Keep export of a format this Keep cannot read ($format)."
+    done < "$stage/unpack/envfolio-export.txt"
+    [[ $format == 1 ]]                 || die "$file is an EnvFolio export of a format this EnvFolio cannot read ($format)."
     [[ $key =~ ^[0-9A-F]{40,64}$ ]]    || die "$file names a key that is not a fingerprint: $key"
     [[ -s $stage/unpack/key.asc && -d $root ]] || die "$file has no key or no items in it."
     GNUPGHOME=$home gpg --batch --quiet --import "$stage/unpack/key.asc" 2>/dev/null
@@ -852,7 +854,7 @@ function store-import() {
     done
 
     if ! store-exists; then
-        section "No Keep store yet: make one"
+        section "No EnvFolio store yet: make one"
         if [[ -n $key_id ]]; then store-init --key "$key_id" ; else store-init ; fi
     fi
     require-store
@@ -933,7 +935,7 @@ function select-items() {
             fi
             (( found || ! left )) || die "$how: only secrets under '$name' ($left); add --secrets to take them."
             (( found ))           || die "$how: '$name' is not an item or a folder of items."
-            (( ! left )) || printf "keep %s: left out %d secret(s) under '%s'; add --secrets to take them.\n" \
+            (( ! left )) || printf "envfolio %s: left out %d secret(s) under '%s'; add --secrets to take them.\n" \
                                    "$how" "$left" "$name" >&2
         done
     else
@@ -969,7 +971,8 @@ function parse-picks() {
     printf '%s' "${picked# }" | tr ' ' '\n' | sort -n
 }
 
-# item-label <file>: "(S) <name>" for <name>.gpg, "(T) <name>" for <name>.txt — as `keep ls --flat`.
+# item-label <file>: "(S) <name>" for <name>.gpg, "(T) <name>" for <name>.txt — as
+# `envfolio ls --flat`.
 function item-label() {
     case $1 in
         *.gpg) echo "(S) ${1%.gpg}" ;;
@@ -992,8 +995,8 @@ function text() {
         rm)       text-rm       "$@" ;;
         mv)       text-mv       "$@" ;;
         cp)       text-cp       "$@" ;;
-        "")       echo "Usage: keep text <ls|find|grep|show|insert|edit|generate|rm|mv|cp> [args...]" >&2 ; return 1 ;;
-        *)        echo "keep text: unknown command: $category"                                        >&2 ; return 1 ;;
+        "")       echo "Usage: envfolio text <ls|find|grep|show|insert|edit|generate|rm|mv|cp> [args...]" >&2 ; return 1 ;;
+        *)        echo "envfolio text: unknown command: $category"                                        >&2 ; return 1 ;;
     esac
 }
 
@@ -1020,12 +1023,12 @@ function save-text() {
 }
 
 # verify-text <name>: die unless <name>.txt.sig is there, matches, and is by the store's key (the
-# first in .gpg-id) — i.e. the text was not changed outside Keep. Needs no passphrase.
+# first in .gpg-id) — i.e. the text was not changed outside EnvFolio. Needs no passphrase.
 function verify-text() {
     local name=$1 file=$STORE_PATH/$1.txt store_key signer check
     check="Uncommitted change:  git -C $STORE_PATH diff -- $name.txt${EXTRA_LINE}"
     check+="Its history:         git -C $STORE_PATH log -p -- $name.txt${EXTRA_LINE}"
-    check+="If the text is right, sign it again:  keep text insert -f -m $name < $file"
+    check+="If the text is right, sign it again:  envfolio text insert -f -m $name < $file"
     [[ -f $file.sig ]] || die "'$name' has no signature.${EXTRA_LINE}$check"
     # VALIDSIG's last field is the signing key's primary fingerprint; gpg prints it for a good one only.
     store_key=$(gpg --list-keys --with-colons "$(head -n 1 "$STORE_PATH/.gpg-id")" 2>/dev/null \
@@ -1039,9 +1042,9 @@ function verify-text() {
 
 function text-ls-help() {
     cat <<'EOF'
-Usage: keep text ls [--flat] [<subfolder>]
+Usage: envfolio text ls [--flat] [<subfolder>]
 
-List the texts in the Keep store as a tree — names only. Give a subfolder to list only what is
+List the texts in the EnvFolio store as a tree — names only. Give a subfolder to list only what is
 under it.
 
 Options:
@@ -1050,7 +1053,7 @@ Options:
 EOF
 }
 
-# keep text ls [<subfolder>]
+# envfolio text ls [<subfolder>]
 # As `secret ls`: `pass ls`, for the texts. Only a folder; a text is shown by `text show`.
 function text-ls() {
     case ${1:-} in -h|--help) text-ls-help ; return 0 ;; esac
@@ -1062,7 +1065,7 @@ function text-ls() {
 
 function text-find-help() {
     cat <<'EOF'
-Usage: keep text find <part>...
+Usage: envfolio text find <part>...
 
 List the texts whose names contain any of the parts (ignoring case), as a tree — names only.
 
@@ -1071,12 +1074,12 @@ Options:
 EOF
 }
 
-# keep text find <part>...
+# envfolio text find <part>...
 # As `secret find`: `pass find`, for the texts.
 function text-find() {
     local arg terms
     for arg in "$@"; do case $arg in -h|--help) text-find-help ; return 0 ;; esac ; done
-    (( $# > 0 )) || die "Usage: keep text find <part>..."
+    (( $# > 0 )) || die "Usage: envfolio text find <part>..."
     require-store
     terms="*$(printf '%s*|*' "$@")"
     printf 'Search Terms: %s\n' "$*"
@@ -1087,7 +1090,7 @@ function text-find() {
 
 function text-grep-help() {
     cat <<'EOF'
-Usage: keep text grep [<grep-option>...] <pattern>
+Usage: envfolio text grep [<grep-option>...] <pattern>
 
 Print the lines of every text that match <pattern>, under each text's name.
 
@@ -1097,12 +1100,12 @@ Options:
 EOF
 }
 
-# keep text grep [<grep-option>...] <pattern>
+# envfolio text grep [<grep-option>...] <pattern>
 # As `pass grep`, over the texts: the same loop, reading each .txt instead of decrypting a .gpg.
 function text-grep() {
     local arg file found dir
     for arg in "$@"; do case $arg in --) break ;; -h|--help) text-grep-help ; return 0 ;; esac ; done
-    (( $# > 0 )) || die "Usage: keep text grep [<grep-option>...] <pattern>"
+    (( $# > 0 )) || die "Usage: envfolio text grep [<grep-option>...] <pattern>"
     require-store
     while IFS= read -r -d '' file; do
         found=$(grep --color=always "$@" < "$file") || continue
@@ -1117,10 +1120,10 @@ function text-grep() {
 
 function text-show-help() {
     cat <<'EOF'
-Usage: keep text show [-c|--clip[=<line>]] <name>
+Usage: envfolio text show [-c|--clip[=<line>]] <name>
 
 Show a text: check its signature, then print it. A text whose signature is missing, does not
-match, or is not by the store's key is not shown — it was changed outside Keep.
+match, or is not by the store's key is not shown — it was changed outside EnvFolio.
 With --clip, copy its first line to the clipboard instead. A text is not a secret, so the
 clipboard is not cleared afterwards.
 
@@ -1130,7 +1133,7 @@ Options:
 EOF
 }
 
-# keep text show [-c|--clip[=<line>]] <name>
+# envfolio text show [-c|--clip[=<line>]] <name>
 # Only a text that verifies is shown: signed (<name>.txt.sig) by the store's key, unchanged since.
 # --clip picks a line as `pass show --clip` does.
 function text-show() {
@@ -1147,7 +1150,7 @@ function text-show() {
             *)          names+=("$arg") ;;
         esac
     done
-    (( ${#names[@]} == 1 )) || die "Usage: keep text show [-c|--clip[=<line>]] <name>"
+    (( ${#names[@]} == 1 )) || die "Usage: envfolio text show [-c|--clip[=<line>]] <name>"
     local name=${names[0]} line copy
     [[ $name != -* && /$name/ != */../* ]] || die "text show: '$name' is not a valid name."
     [[ -z $clip || $clip =~ ^[1-9][0-9]*$ ]] || die "text show: '$clip' is not a line number."
@@ -1164,7 +1167,8 @@ function text-show() {
     elif [[ -n ${DISPLAY:-}          ]]; then copy=(xclip -selection clipboard)
     else die "text show: no clipboard: no X11 or Wayland display."
     fi
-    # stdout away: a clipboard tool that stays to serve the copy must not hold `$(keep ...)` open.
+    # stdout away: a clipboard tool that stays to serve the copy must not hold `$(envfolio ...)`
+    # open.
     printf '%s' "$line" | "${copy[@]}" >/dev/null || die "text show: could not copy to the clipboard."
     echo "Copied $name to clipboard. A text is not a secret: the clipboard is not cleared."
 }
@@ -1173,9 +1177,9 @@ function text-show() {
 
 function text-insert-help() {
     cat <<'EOF'
-Usage: keep text insert [-m|--multiline] [-f|--force] [-t|--text <text>] <name>
+Usage: envfolio text insert [-m|--multiline] [-f|--force] [-t|--text <text>] <name>
 
-Add a text to the Keep store — kept plain, not encrypted — and sign it with the store's key
+Add a text to the EnvFolio store — kept plain, not encrypted — and sign it with the store's key
 (gpg may ask for the key's passphrase). The text is asked for once, with echo; piped in, it is
 the first line. Texts are not secrets: never put a secret here.
 
@@ -1187,7 +1191,7 @@ Options:
 EOF
 }
 
-# keep text insert [-m|--multiline] [-f|--force] [-t|--text <text>] <name>
+# envfolio text insert [-m|--multiline] [-f|--force] [-t|--text <text>] <name>
 # Like `pass insert`, but the text is written plain and signed, not encrypted.
 function text-insert() {
     local multiline=0 force=0 given=0 text="" names=() arg
@@ -1204,7 +1208,7 @@ function text-insert() {
             *)              names+=("$arg") ;;
         esac
     done
-    (( ${#names[@]} == 1 )) || die "Usage: keep text insert [-m|--multiline] [-f|--force] [-t|--text <text>] <name>"
+    (( ${#names[@]} == 1 )) || die "Usage: envfolio text insert [-m|--multiline] [-f|--force] [-t|--text <text>] <name>"
     local name=${names[0]} file content
     # As pass's check_sneaky_paths: no way out of the store.
     [[ -n $name && $name != */ && /$name/ != */../* ]] || die "text insert: '$name' is not a valid name."
@@ -1233,22 +1237,22 @@ function text-insert() {
 
 function text-edit-help() {
     cat <<'EOF'
-Usage: keep text edit <name>
+Usage: envfolio text edit <name>
 
 Edit a text in $EDITOR (vi if unset), or add it if it is new; then sign and commit it. The text's
-signature is checked first: a text changed outside Keep is not opened.
+signature is checked first: a text changed outside EnvFolio is not opened.
 
 Options:
   -h, --help          Show this help and stop.
 EOF
 }
 
-# keep text edit <name>
+# envfolio text edit <name>
 # As `pass edit`: edit a copy, keep it only if it changed. A text is checked first, so editing never
-# signs a text that was changed outside Keep.
+# signs a text that was changed outside EnvFolio.
 function text-edit() {
     case ${1:-} in -h|--help) text-edit-help ; return 0 ;; esac
-    (( $# == 1 )) || die "Usage: keep text edit <name>"
+    (( $# == 1 )) || die "Usage: envfolio text edit <name>"
     local name=${1%/} file tmp_dir tmp_file action=Add editor=${EDITOR:-vi}
     [[ -n $name && $name != -* && /$name/ != */../* ]] || die "text edit: '$name' is not a valid name."
     require-store
@@ -1274,10 +1278,10 @@ function text-edit() {
 
 function text-generate-help() {
     cat <<'EOF'
-Usage: keep text generate [-n|--no-symbols] [-i|--in-place|-f|--force] <name> [<length>]
+Usage: envfolio text generate [-n|--no-symbols] [-i|--in-place|-f|--force] <name> [<length>]
 
 Generate a random text (25 characters unless <length> is given), save and sign it, and print it.
-It is a text, kept plain — for a random password, use `keep secret generate`.
+It is a text, kept plain — for a random password, use `envfolio secret generate`.
 
 Options:
   -n, --no-symbols    Letters and digits only.
@@ -1287,7 +1291,7 @@ Options:
 EOF
 }
 
-# keep text generate [-n|--no-symbols] [-i|--in-place|-f|--force] <name> [<length>]
+# envfolio text generate [-n|--no-symbols] [-i|--in-place|-f|--force] <name> [<length>]
 # As `pass generate`, for a text: the same characters and length, then saved and signed.
 function text-generate() {
     local chars=${PASSWORD_STORE_CHARACTER_SET:-[:punct:][:alnum:]} inplace=0 force=0 args=() arg
@@ -1304,7 +1308,7 @@ function text-generate() {
         esac
     done
     (( (${#args[@]} == 1 || ${#args[@]} == 2) && !(inplace && force) )) \
-        || die "Usage: keep text generate [-n|--no-symbols] [-i|--in-place|-f|--force] <name> [<length>]"
+        || die "Usage: envfolio text generate [-n|--no-symbols] [-i|--in-place|-f|--force] <name> [<length>]"
     local name=${args[0]} length=${args[1]:-${PASSWORD_STORE_GENERATED_LENGTH:-25}} file text
     [[ -n $name && $name != */ && /$name/ != */../* ]] || die "text generate: '$name' is not a valid name."
     [[ $length =~ ^[0-9]+$ && $length -gt 0 ]] || die "text generate: the length must be a number above 0."
@@ -1318,7 +1322,7 @@ function text-generate() {
     [[ ${#text} -eq $length ]] || die "text generate: could not generate a text from /dev/urandom."
 
     if (( inplace )) && [[ -f $file ]]; then
-        # The rest of the text is kept, so it must be the one Keep signed.
+        # The rest of the text is kept, so it must be the one EnvFolio signed.
         verify-text "$name"
         { printf '%s\n' "$text" ; tail -n +2 "$file" ; } \
             | save-text "$name" "Replace generated text for $name." || exit 1
@@ -1332,7 +1336,7 @@ function text-generate() {
 
 function text-rm-help() {
     cat <<'EOF'
-Usage: keep text rm [-r|--recursive] [-f|--force] <name>
+Usage: envfolio text rm [-r|--recursive] [-f|--force] <name>
 
 Remove a text, or every text in a folder with --recursive (secrets in it are kept). At a
 terminal, asks first unless --force; from a script or pipe, it does not ask.
@@ -1345,7 +1349,7 @@ Options:
 EOF
 }
 
-# keep text rm [-r|--recursive] [-f|--force] <name>
+# envfolio text rm [-r|--recursive] [-f|--force] <name>
 # As `pass rm`, for texts: <name> is a text, or — ending in / or not a text — a folder.
 function text-rm() {
     local recursive=0 force=0 names=() arg
@@ -1360,7 +1364,7 @@ function text-rm() {
             *)              names+=("$arg") ;;
         esac
     done
-    (( ${#names[@]} == 1 )) || die "Usage: keep text rm [-r|--recursive] [-f|--force] <name>"
+    (( ${#names[@]} == 1 )) || die "Usage: envfolio text rm [-r|--recursive] [-f|--force] <name>"
     local name=${names[0]} path=${names[0]%/} folder=0
     [[ -n $path && /$path/ != */../* ]] || die "text rm: '$name' is not a valid name."
     require-store
@@ -1392,7 +1396,7 @@ function text-rm() {
 
 function text-mv-help() {
     cat <<'EOF'
-Usage: keep text mv [-f|--force] <old-name> <new-name>
+Usage: envfolio text mv [-f|--force] <old-name> <new-name>
 
 Rename or move a text, or every text in a folder (secrets in it stay where they are). At a
 terminal, asks before overwriting unless --force; from a script or pipe, it overwrites.
@@ -1405,7 +1409,7 @@ EOF
 
 function text-cp-help() {
     cat <<'EOF'
-Usage: keep text cp [-f|--force] <old-name> <new-name>
+Usage: envfolio text cp [-f|--force] <old-name> <new-name>
 
 Copy a text, or every text in a folder (secrets in it are not copied). At a terminal, asks before
 overwriting unless --force; from a script or pipe, it overwrites.
@@ -1434,7 +1438,7 @@ function text-copy-move() {
             *)          names+=("$arg") ;;
         esac
     done
-    (( ${#names[@]} == 2 )) || die "Usage: keep text $how [-f|--force] <old-name> <new-name>"
+    (( ${#names[@]} == 2 )) || die "Usage: envfolio text $how [-f|--force] <old-name> <new-name>"
     local old=${names[0]} new=${names[1]} src=${names[0]%/} dest
     [[ -n $src     && /$src/ != */../* ]] || die "text $how: '$old' is not a valid name."
     [[ -n ${new%/} && /$new/ != */../* ]] || die "text $how: '$new' is not a valid name."
@@ -1500,8 +1504,8 @@ function secret() {
         rm)       secret-rm       "$@" ;;
         mv)       secret-mv       "$@" ;;
         cp)       secret-cp       "$@" ;;
-        "")       echo "Usage: keep secret <ls|find|grep|show|insert|edit|generate|rm|mv|cp> [args...]" >&2 ; return 1 ;;
-        *)        echo "keep secret: unknown command: $category"                                        >&2 ; return 1 ;;
+        "")       echo "Usage: envfolio secret <ls|find|grep|show|insert|edit|generate|rm|mv|cp> [args...]" >&2 ; return 1 ;;
+        *)        echo "envfolio secret: unknown command: $category"                                        >&2 ; return 1 ;;
     esac
 }
 
@@ -1509,9 +1513,9 @@ function secret() {
 
 function secret-ls-help() {
     cat <<'EOF'
-Usage: keep secret ls [--flat] [<subfolder>]
+Usage: envfolio secret ls [--flat] [<subfolder>]
 
-List the secrets in the Keep store as a tree — names only, never their values.
+List the secrets in the EnvFolio store as a tree — names only, never their values.
 Give a subfolder to list only what is under it.
 
 Options:
@@ -1520,7 +1524,7 @@ Options:
 EOF
 }
 
-# keep secret ls [<subfolder>]
+# envfolio secret ls [<subfolder>]
 # `pass ls`, minus the texts. Only a folder: given an entry, `pass ls` would print the secret.
 function secret-ls() {
     case ${1:-} in -h|--help) secret-ls-help ; return 0 ;; esac
@@ -1531,7 +1535,7 @@ function secret-ls() {
 
 function secret-find-help() {
     cat <<'EOF'
-Usage: keep secret find <part>...
+Usage: envfolio secret find <part>...
 
 List the secrets whose names contain any of the parts (ignoring case), as a tree — names only,
 never their values.
@@ -1541,12 +1545,12 @@ Options:
 EOF
 }
 
-# keep secret find <part>...
+# envfolio secret find <part>...
 # `pass find`, minus the texts.
 function secret-find() {
     local arg terms
     for arg in "$@"; do case $arg in -h|--help) secret-find-help ; return 0 ;; esac ; done
-    (( $# > 0 )) || die "Usage: keep secret find <part>..."
+    (( $# > 0 )) || die "Usage: envfolio secret find <part>..."
     terms="*$(printf '%s*|*' "$@")"
     printf 'Search Terms: %s\n' "$*"
     store-tree gpg "$STORE_PATH" -P "${terms%|*}" --matchdirs --ignore-case
@@ -1556,7 +1560,7 @@ function secret-find() {
 
 function secret-grep-help() {
     cat <<'EOF'
-Usage: keep secret grep [<grep-option>...] <pattern>
+Usage: envfolio secret grep [<grep-option>...] <pattern>
 
 Decrypt every secret and print the lines that match <pattern>, under each secret's name.
 The matching lines are secret values: they are shown on screen.
@@ -1567,14 +1571,14 @@ Options:
 EOF
 }
 
-# keep secret grep [<grep-option>...] <pattern>
+# envfolio secret grep [<grep-option>...] <pattern>
 function secret-grep() { call-pass secret-grep-help grep "$@" ; }
 
 # --- secret show --------------------------------------------------------------
 
 function secret-show-help() {
     cat <<'EOF'
-Usage: keep secret show [-c|--clip[=<line>]] <name>
+Usage: envfolio secret show [-c|--clip[=<line>]] <name>
 
 Show a secret: decrypt it and print it. With --clip, copy its first line to the clipboard
 instead; the clipboard is cleared after 45 seconds (PASSWORD_STORE_CLIP_TIME).
@@ -1585,7 +1589,7 @@ Options:
 EOF
 }
 
-# keep secret show [-c|--clip[=<line>]] <name>
+# envfolio secret show [-c|--clip[=<line>]] <name>
 # Only an entry goes through: given a folder, `pass show` would list it.
 function secret-show() {
     local clip=() names=() arg
@@ -1600,7 +1604,7 @@ function secret-show() {
             *)                           names+=("$arg") ;;
         esac
     done
-    (( ${#names[@]} == 1 ))              || die "Usage: keep secret show [-c|--clip[=<line>]] <name>"
+    (( ${#names[@]} == 1 ))              || die "Usage: envfolio secret show [-c|--clip[=<line>]] <name>"
     [[ -f $STORE_PATH/${names[0]}.gpg ]] || die "secret show: '${names[0]}' is not a secret in the store."
     pass show "${clip[@]}" -- "${names[0]}"
 }
@@ -1609,9 +1613,9 @@ function secret-show() {
 
 function secret-insert-help() {
     cat <<'EOF'
-Usage: keep secret insert [-m|--multiline] [-f|--force] <name>
+Usage: envfolio secret insert [-m|--multiline] [-f|--force] <name>
 
-Add a secret to the Keep store, encrypted with the store's key. The secret is asked for twice,
+Add a secret to the EnvFolio store, encrypted with the store's key. The secret is asked for twice,
 without echo. Piped in, give it twice (one per line), or use --multiline to take all of stdin.
 
 Options:
@@ -1621,7 +1625,7 @@ Options:
 EOF
 }
 
-# keep secret insert [-m|--multiline] [-f|--force] <name>
+# envfolio secret insert [-m|--multiline] [-f|--force] <name>
 # Everything goes to `pass insert` — except --help, and --echo, which would show the secret.
 function secret-insert() {
     local arg
@@ -1639,7 +1643,7 @@ function secret-insert() {
 
 function secret-edit-help() {
     cat <<'EOF'
-Usage: keep secret edit <name>
+Usage: envfolio secret edit <name>
 
 Edit a secret in $EDITOR, or add it if it is new. The secret is decrypted to a temporary file
 for the editor (in /dev/shm, a RAM disk, where there is one) and removed afterwards.
@@ -1649,14 +1653,14 @@ Options:
 EOF
 }
 
-# keep secret edit <name>
+# envfolio secret edit <name>
 function secret-edit() { call-pass secret-edit-help edit "$@" ; }
 
 # --- secret generate ----------------------------------------------------------
 
 function secret-generate-help() {
     cat <<'EOF'
-Usage: keep secret generate [-n|--no-symbols] [-c|--clip] [-i|--in-place|-f|--force] <name> [<length>]
+Usage: envfolio secret generate [-n|--no-symbols] [-c|--clip] [-i|--in-place|-f|--force] <name> [<length>]
 
 Generate a random secret (25 characters unless <length> is given), save it, and print it.
 With --clip, copy it to the clipboard instead of printing it; the clipboard is cleared after
@@ -1671,7 +1675,7 @@ Options:
 EOF
 }
 
-# keep secret generate [-n|--no-symbols] [-c|--clip] [-i|--in-place|-f|--force] <name> [<length>]
+# envfolio secret generate [-n|--no-symbols] [-c|--clip] [-i|--in-place|-f|--force] <name> [<length>]
 # Everything goes to `pass generate` — except --help, and --qrcode (it needs qrencode).
 function secret-generate() {
     local arg
@@ -1689,7 +1693,7 @@ function secret-generate() {
 
 function secret-rm-help() {
     cat <<'EOF'
-Usage: keep secret rm [-r|--recursive] [-f|--force] <name>
+Usage: envfolio secret rm [-r|--recursive] [-f|--force] <name>
 
 Remove a secret, or a whole folder with --recursive. At a terminal, asks first unless --force;
 from a script or pipe, it does not ask.
@@ -1702,14 +1706,14 @@ Options:
 EOF
 }
 
-# keep secret rm [-r|--recursive] [-f|--force] <name>
+# envfolio secret rm [-r|--recursive] [-f|--force] <name>
 function secret-rm() { call-pass secret-rm-help rm "$@" ; }
 
 # --- secret mv ----------------------------------------------------------------
 
 function secret-mv-help() {
     cat <<'EOF'
-Usage: keep secret mv [-f|--force] <old-name> <new-name>
+Usage: envfolio secret mv [-f|--force] <old-name> <new-name>
 
 Rename or move a secret or a folder. At a terminal, asks before overwriting unless --force;
 from a script or pipe, it overwrites.
@@ -1720,14 +1724,14 @@ Options:
 EOF
 }
 
-# keep secret mv [-f|--force] <old-name> <new-name>
+# envfolio secret mv [-f|--force] <old-name> <new-name>
 function secret-mv() { call-pass secret-mv-help mv "$@" ; }
 
 # --- secret cp ----------------------------------------------------------------
 
 function secret-cp-help() {
     cat <<'EOF'
-Usage: keep secret cp [-f|--force] <old-name> <new-name>
+Usage: envfolio secret cp [-f|--force] <old-name> <new-name>
 
 Copy a secret or a folder. At a terminal, asks before overwriting unless --force;
 from a script or pipe, it overwrites.
@@ -1738,16 +1742,16 @@ Options:
 EOF
 }
 
-# keep secret cp [-f|--force] <old-name> <new-name>
+# envfolio secret cp [-f|--force] <old-name> <new-name>
 function secret-cp() { call-pass secret-cp-help cp "$@" ; }
 
 #== Command: List ==============================================================
 
 function list-help() {
     cat <<'EOF'
-Usage: keep ls [--flat] [<subfolder>]
+Usage: envfolio ls [--flat] [<subfolder>]
 
-List the texts and secrets in the Keep store together as a tree — names only, never values.
+List the texts and secrets in the EnvFolio store together as a tree — names only, never values.
 Each name is marked (S) for a secret or (T) for a text. Give a subfolder to list only what is
 under it.
 
@@ -1757,19 +1761,19 @@ Options:
 EOF
 }
 
-# keep ls [<subfolder>]
+# envfolio ls [<subfolder>]
 # `secret ls` and `text ls` in one tree. Only a folder, as they are.
 function list() {
     case ${1:-} in -h|--help) list-help ; return 0 ;; esac
     require-store
-    list-store all "Keep Store" "ls" "$@"
+    list-store all "EnvFolio Store" "ls" "$@"
 }
 
 #== Command: Exec ==============================================================
 
 function run-exec-help() {
     cat <<'HELP'
-Usage: keep exec [-s|--secrets] [-a|--all] [-n|--names] <entry>... -- <command> [<arg>...]
+Usage: envfolio exec [-s|--secrets] [-a|--all] [-n|--names] <entry>... -- <command> [<arg>...]
 
 Run a command with entries from the store as environment variables. Texts load by default;
 secrets only with --secrets. Values are never printed.
@@ -1790,11 +1794,11 @@ HELP
 
 function run-shell-help() {
     cat <<'HELP'
-Usage: keep shell [-s|--secrets] [-a|--all] [-n|--names] <entry>...
+Usage: envfolio shell [-s|--secrets] [-a|--all] [-n|--names] <entry>...
 
 Start your shell ($SHELL) with entries from the store as environment variables, and say which
-names were loaded (never their values). KEEP_SHELL=1 is set. Type `exit` to leave.
-Entries and variable names are as in `keep exec`.
+names were loaded (never their values). ENVFOLIO_SHELL=1 is set. Type `exit` to leave.
+Entries and variable names are as in `envfolio exec`.
 
 Options:
   -s, --secrets       Also load secrets.
@@ -1829,10 +1833,10 @@ function exec-with-entries() {
     done
     if [[ $how == exec ]]; then
         (( (${#entries[@]} > 0 || all) && (only_names || (dashes && $# > 0)) )) \
-            || die "Usage: keep exec [-s|--secrets] [-a|--all] [-n|--names] <entry>... -- <command> [<arg>...]"
+            || die "Usage: envfolio exec [-s|--secrets] [-a|--all] [-n|--names] <entry>... -- <command> [<arg>...]"
     else
         (( (${#entries[@]} > 0 || all) && ! dashes )) \
-            || die "Usage: keep shell [-s|--secrets] [-a|--all] [-n|--names] <entry>..."
+            || die "Usage: envfolio shell [-s|--secrets] [-a|--all] [-n|--names] <entry>..."
         set -- "${SHELL:-/bin/sh}"
     fi
     require-store
@@ -1857,9 +1861,9 @@ function exec-with-entries() {
     if [[ $how == shell ]]; then
         local names
         names=$(printf ', %s' "${EXEC_VARS[@]}")
-        printf "keep shell: loaded %s (texts: %d, secrets: %d). Type 'exit' to leave.\n" \
+        printf "envfolio shell: loaded %s (texts: %d, secrets: %d). Type 'exit' to leave.\n" \
             "${names#, }" "$texts" $(( ${#EXEC_VARS[@]} - texts )) >&2
-        export KEEP_SHELL=1
+        export ENVFOLIO_SHELL=1
     fi
     if [[ -n $CALLER_STORE_DIR_SET ]]; then export PASSWORD_STORE_DIR=$CALLER_STORE_DIR
     else unset PASSWORD_STORE_DIR
@@ -1880,7 +1884,7 @@ function export-and-exec() {
         # shellcheck disable=SC2163  # $2 is <var>=<value>, exported as written
         if ! export -- "$2" 2>/dev/null \
             || [[ $(declare -p -- "$1" 2>/dev/null) != "declare -x $1="* || ${!1} != "${2#*=}" ]]; then
-            die "could not set $1: bash or Keep keeps that name for itself. Load it under another name with VAR=<name>."
+            die "could not set $1: bash or EnvFolio keeps that name for itself. Load it under another name with VAR=<name>."
         fi
         shift 2
     done
@@ -1988,7 +1992,7 @@ function note-skipped-secrets() {
     (( count > 0 )) || return 0
     where="under '$entry'" ; [[ -n $entry ]] || where="in the store"
     (( found )) || die "$how: only secrets $where ($count); add --secrets to load them."
-    printf "keep %s: left out %d secret(s) %s; add --secrets to load them.\n" "$how" "$count" "$where" >&2
+    printf "envfolio %s: left out %d secret(s) %s; add --secrets to load them.\n" "$how" "$count" "$where" >&2
 }
 
 # add-derived <how> <file>: name <file> by its path — @nawa/gh/token.gpg -> GH_TOKEN — or, when
@@ -2001,7 +2005,7 @@ function add-derived() {
     if [[ $var =~ $VAR_NAME_PATTERN ]]; then
         set-entry-var "$var" "$2"
     else
-        printf "keep %s: warning: '%s' would be %s, not a valid variable name; left out. Use VAR=%s.\n" \
+        printf "envfolio %s: warning: '%s' would be %s, not a valid variable name; left out. Use VAR=%s.\n" \
             "$how" "$name" "$var" "$name" >&2
     fi
 }
@@ -2020,7 +2024,7 @@ function set-entry-var() {
 # --- Pass ---------------------------------------------------------------------
 
 # call-pass <help-function> <pass-command> [args...]
-# Show Keep's help on -h/--help (before any --); otherwise hand everything to `pass <command>`.
+# Show EnvFolio's help on -h/--help (before any --); otherwise hand everything to `pass <command>`.
 function call-pass() {
     local help=$1 command=$2 arg ; shift 2
     for arg in "$@"; do
@@ -2032,8 +2036,8 @@ function call-pass() {
     pass "$command" "$@"
 }
 
-# list-store <gpg|txt|all> <title> <command> [--flat] [<subfolder>]: what `keep ls`, `text ls` and
-# `secret ls` share — the tree under <title>, or with --flat, the full names one per line.
+# list-store <gpg|txt|all> <title> <command> [--flat] [<subfolder>]: what `envfolio ls`, `text ls`
+# and `secret ls` share — the tree under <title>, or with --flat, the full names one per line.
 function list-store() {
     local kind=$1 title=$2 command=$3 flat=0 args=() arg ; shift 3
     for arg in "$@"; do
@@ -2043,7 +2047,7 @@ function list-store() {
         esac
     done
     set -- "${args[@]}"
-    (( $# <= 1 )) || die "Usage: keep $command [--flat] [<subfolder>]"
+    (( $# <= 1 )) || die "Usage: envfolio $command [--flat] [<subfolder>]"
     [[ $# -eq 0 || ( $1 != -* && /$1/ != */../* && -d $STORE_PATH/$1 ) ]] \
         || die "$command: '$1' is not a folder in the store."
     if (( flat )); then store-flat "$kind" "$STORE_PATH${1:+/${1%/}}" ; return ; fi
@@ -2138,8 +2142,8 @@ function ensure-requirements() {
 # --- Output -------------------------------------------------------------------
 
 function info() { printf '%s\n' "$*"; }
-function die()  { printf 'keep: %s\n' "$*" >&2; exit 1; }
-# remove-on-exit <path>...: remove these when Keep exits, however it exits. The gpg-agent of a
+function die()  { printf 'envfolio: %s\n' "$*" >&2; exit 1; }
+# remove-on-exit <path>...: remove these when EnvFolio exits, however it exits. The gpg-agent of a
 # new-gpg-home is stopped first.
 REMOVE_ON_EXIT=() GPG_HOMES=()
 function remove-on-exit() {
@@ -2148,7 +2152,7 @@ function remove-on-exit() {
     trap 'for h in "${GPG_HOMES[@]}"; do GNUPGHOME=$h gpgconf --kill gpg-agent; done 2>/dev/null
           rm -rf -- "${REMOVE_ON_EXIT[@]}"' EXIT
 }
-# new-gpg-home <folder>: a GnuPG home of its own, for an export's key; gone when Keep exits.
+# new-gpg-home <folder>: a GnuPG home of its own, for an export's key; gone when EnvFolio exits.
 function new-gpg-home() {
     mkdir -m 700 "$1" || die "Cannot make a temporary folder."
     GPG_HOMES+=("$1")

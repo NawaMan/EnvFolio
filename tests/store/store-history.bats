@@ -9,13 +9,13 @@ setup() {
     export GIT_CONFIG_NOSYSTEM=1
     unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL EMAIL
     export GNUPGHOME="$SANDBOX/gnupg"
-    export KEEP_STORE_DIR="$SANDBOX/store"
+    export ENVFOLIO_STORE_DIR="$SANDBOX/store"
     export XDG_STATE_HOME="$SANDBOX/state"
     export USER=sb-test-nobody
     mkdir -p "$HOME" && mkdir -m 700 "$GNUPGHOME"
 
-    # shellcheck source=SCRIPTDIR/../../keep
-    source "$BATS_TEST_DIRNAME/../../keep"
+    # shellcheck source=SCRIPTDIR/../../envfolio
+    source "$BATS_TEST_DIRNAME/../../envfolio"
     [[ $STORE_PATH == "$SANDBOX"/* && $PASSWORD_STORE_DIR == "$SANDBOX"/* && $GNUPGHOME == "$SANDBOX"/* ]]
 
     gpg --batch --passphrase '' --quick-generate-key "Test User <test@example.com>" default default never 2>/dev/null
@@ -57,19 +57,19 @@ teardown() {
     [ "$status" -eq 0 ]
     store-exists
 
-    [ "$(git -C "$KEEP_STORE_DIR" log --format='%an <%ae>' | sort -u)" = "Test User <test@example.com>" ]
-    git -C "$KEEP_STORE_DIR" ls-files --error-unmatch .gpg-id .gitattributes
+    [ "$(git -C "$ENVFOLIO_STORE_DIR" log --format='%an <%ae>' | sort -u)" = "Test User <test@example.com>" ]
+    git -C "$ENVFOLIO_STORE_DIR" ls-files --error-unmatch .gpg-id .gitattributes
 }
 
-@test "store-init: a relative KEEP_STORE_DIR does not hang pass init" {
+@test "store-init: a relative ENVFOLIO_STORE_DIR does not hang pass init" {
     cd "$SANDBOX"
     # A fresh bash under a timeout, so a hang fails the test instead of stalling the suite.
-    run timeout 20 env KEEP_STORE_DIR=rel-store bash -c '
+    run timeout 20 env ENVFOLIO_STORE_DIR=rel-store bash -c '
         fpr=$2
         source "$1"
         select-key() { printf "%s\n" "$fpr"; }
         store-init
-    ' _ "$BATS_TEST_DIRNAME/../../keep" "$TEST_FPR"
+    ' _ "$BATS_TEST_DIRNAME/../../envfolio" "$TEST_FPR"
     [ "$status" -eq 0 ]
     [ -s "$SANDBOX/rel-store/.gpg-id" ]
 }
@@ -77,9 +77,9 @@ teardown() {
 @test "store-init: later pass changes are committed automatically" {
     store-init
     local before
-    before=$(git -C "$KEEP_STORE_DIR" rev-list --count HEAD)
+    before=$(git -C "$ENVFOLIO_STORE_DIR" rev-list --count HEAD)
     printf 'not-a-real-secret\n' | pass insert -e test/entry >/dev/null
 
-    [ "$(git -C "$KEEP_STORE_DIR" rev-list --count HEAD)" -eq $(( before + 1 )) ]
-    git -C "$KEEP_STORE_DIR" ls-files --error-unmatch test/entry.gpg
+    [ "$(git -C "$ENVFOLIO_STORE_DIR" rev-list --count HEAD)" -eq $(( before + 1 )) ]
+    git -C "$ENVFOLIO_STORE_DIR" ls-files --error-unmatch test/entry.gpg
 }

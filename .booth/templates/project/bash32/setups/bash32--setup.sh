@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# bash32: build bash 3.2.57 — the bash macOS still ships — so Keep's tests can run under it.
+# bash32: build bash 3.2.57 — the bash macOS still ships — so EnvFolio's tests can run under it.
 #
 # Installed to /opt/bash-3.2/bin, which is NOT on PATH: the booth's own bash stays the default.
 # `just test-bash32` puts it first on PATH for the test run only.

@@ -1,6 +1,6 @@
 # AGENTS.md — Working on this repository
 
-Guidance for an AI agent (Claude Code, or similar) helping develop **Keep**, a command-line app with
+Guidance for an AI agent (Claude Code, or similar) helping develop **EnvFolio**, a command-line app with
 interactive prompts, written in **bash**, for keeping texts and secrets.
 
 ---
@@ -110,8 +110,8 @@ green light** — it is a separate pre-edit check.
 
 
 ### Verification guidance
-- To see how a file Keep wrote is locked and what it holds — a store's `.gpg`/`.txt.sig`, a
-  backup, a `.keep` export — use `tools/x-ray.sh [--open] <file|folder>`. It never shows a secret
+- To see how a file EnvFolio wrote is locked and what it holds — a store's `.gpg`/`.txt.sig`, a
+  backup, a `.envfolio` export — use `tools/x-ray.sh [--open] <file|folder>`. It never shows a secret
   value, a text's contents or a key.
 - Prefer the smallest honest check: a `bats` test for a logic change, `shellcheck` always, a
   tmux-driven smoke test only when rendering, key handling or terminal state changed.
@@ -231,7 +231,7 @@ Starting style, not law — deviate explicitly (say so and why) rather than sile
 
 - **Must run on both Linux and macOS.** Every change is written for both; anything that differs
   (package manager, clipboard tool, GNU vs BSD flags) is handled explicitly, not assumed.
-- `#!/usr/bin/env bash`. **Minimum bash: 3.2**, the version macOS still ships, so Keep runs on a
+- `#!/usr/bin/env bash`. **Minimum bash: 3.2**, the version macOS still ships, so EnvFolio runs on a
   stock Mac. No bash 4+ features: no associative arrays (`declare -A`), `mapfile`/`readarray`,
   case changes (`${var,,}`, `${var^^}`), namerefs (`local -n`), `${var@Q}`, `;&`/`;;&`, `|&`,
   `coproc`, `wait -n` or negative array indexes. Also avoid `"${arr[@]}"` on an empty array
@@ -243,9 +243,9 @@ Starting style, not law — deviate explicitly (say so and why) rather than sile
   `pass init`, and texts are signed with it; `git` because the store is synced as a git repo;
   `tree` (already a dependency of `pass`) because `secret ls`/`find` run pass's own `tree` line
   with the texts left out; `tar` + `gzip` because
-  `keep store backup` packs everything into one file. Every prompt goes through the Input helpers
+  `envfolio store backup` packs everything into one file. Every prompt goes through the Input helpers
   (`ask-text`, `ask-choice`, `confirm`, `show-box`), in plain bash. Plus one clipboard tool — `pbcopy` /
-  `wl-copy` / `xclip`, whichever `pass` itself uses on the machine — for `keep text show -c`.
+  `wl-copy` / `xclip`, whichever `pass` itself uses on the machine — for `envfolio text show -c`.
   The script's `ensure-requirements` is the authoritative list. Anything
   beyond bash builtins and POSIX coreutils needs a stated reason and the user's OK — flag it with
   the **⚠ New dependency** line in the proposal (Rule 0), never slip it in. Dev-only tools (`shellcheck`, `bats`, `tmux`) are fine.
@@ -265,10 +265,10 @@ Starting style, not law — deviate explicitly (say so and why) rather than sile
 An agent cannot use the app interactively. Drive it headlessly in **tmux**:
 
 ```bash
-tmux new-session -d -s keep-check -x 100 -y 30 './keep'
-tmux send-keys -t keep-check 'j' 'j' Enter
-tmux capture-pane -t keep-check -p          # assert on the rendered screen
-tmux kill-session -t keep-check             # tear down your own session
+tmux new-session -d -s envfolio-check -x 100 -y 30 './envfolio'
+tmux send-keys -t envfolio-check 'j' 'j' Enter
+tmux capture-pane -t envfolio-check -p          # assert on the rendered screen
+tmux kill-session -t envfolio-check             # tear down your own session
 ```
 
 Use a session name that is clearly yours, and never kill one you did not create.
@@ -292,14 +292,14 @@ Use a session name that is clearly yours, and never kill one you did not create.
   `read -rs`, hand it to `pass insert` via stdin, keep it in a
   variable only as long as needed, and `unset` it after. Any unavoidable temp file goes under
   `umask 077` and is removed in the `EXIT` trap.
-- **One exception, by the user's decision: `keep exec` and `keep shell`.** Their whole purpose is
+- **One exception, by the user's decision: `envfolio exec` and `envfolio shell`.** Their whole purpose is
   to hand entries to a child process as environment variables (like `op run` / `aws-vault exec`),
   so there — and only there — secrets go into a child's environment. Only with `--secrets`
-  (texts load by default). Everything else still holds: values never go on a command line (Keep
+  (texts load by default). Everything else still holds: values never go on a command line (EnvFolio
   `export`s them and `exec`s — never `env VAR=value cmd`), into a file, or on the screen (the
   shell lists variable names only).
 - **Texts are not secrets** — they're stored plain, so they may come from argv
-  (`keep text insert -t <text>`). Never offer a way to put a *secret* on the command line.
+  (`envfolio text insert -t <text>`). Never offer a way to put a *secret* on the command line.
 - No `set -x` / debug tracing in any path that handles a secret.
 - Don't hand-roll crypto or clipboard clearing — use `pass` (`pass show -c` / `pass generate -c`
   already clear after `PASSWORD_STORE_CLIP_TIME`). Say in the UI that the clipboard will clear.
