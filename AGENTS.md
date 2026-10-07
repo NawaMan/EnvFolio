@@ -110,6 +110,9 @@ green light** — it is a separate pre-edit check.
 
 
 ### Verification guidance
+- To see how a file Keep wrote is locked and what it holds — a store's `.gpg`/`.txt.sig`, a
+  backup, a `.keep` export — use `tools/x-ray.sh [--open] <file|folder>`. It never shows a secret
+  value, a text's contents or a key.
 - Prefer the smallest honest check: a `bats` test for a logic change, `shellcheck` always, a
   tmux-driven smoke test only when rendering, key handling or terminal state changed.
 - Check what's already running before starting something long-lived (`tmux ls`). **Never stop or
