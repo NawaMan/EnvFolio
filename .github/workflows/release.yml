@@ -1,0 +1,102 @@
+# Release EnvFolio when a version tag is pushed: `git tag v0.1.0 && git push origin v0.1.0`.
+# Pushing the tag is the go-ahead; nothing here tags or releases on its own.
+#
+#   verify  the tag is v<major>.<minor>.<patch>, matches APP_VERSION in ./envfolio (no --rc),
+#           and CHANGELOG.md has a `## <version>` section
+#   check   shellcheck + every test on Linux (bash 5) and macOS (bash 3.2) — check.yml
+#   release a GitHub Release with envfolio and SHA256SUMS, notes from that CHANGELOG section
+#   bump    on main: APP_VERSION -> next minor with --rc (0.1.0 -> 0.2.0--rc), and a new
+#           `## Unreleased` in CHANGELOG.md, committed and pushed by github-actions[bot]
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          [[ $TAG =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]] \
+              || { echo "::error::Tag '$TAG' is not v<major>.<minor>.<patch>."; exit 1; }
+          version=${BASH_REMATCH[1]}
+          app=$(sed -n 's/^APP_VERSION=//p' envfolio)
+          [[ $app == "$version" ]] \
+              || { echo "::error::envfolio has APP_VERSION=$app, the tag is $TAG. Set APP_VERSION=$version (drop --rc), commit, and tag that commit."; exit 1; }
+          grep -q "^## $version\b" CHANGELOG.md \
+              || { echo "::error::CHANGELOG.md has no '## $version' section. Rename '## Unreleased' to '## $version — <date>'."; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  check:
+    uses: ./.github/workflows/check.yml
+
+  release:
+    needs: [verify, check]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.verify.outputs.version }}
+      TAG: ${{ github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Release notes from CHANGELOG.md
+        run: |
+          set -euo pipefail
+          awk -v v="$VERSION" '
+              /^## / { if (on) exit; on = ($2 == v); next }
+              on
+          ' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          [[ -s $RUNNER_TEMP/notes.md ]] || { echo "::error::The '## $VERSION' section is empty."; exit 1; }
+      - name: Checksums
+        run: sha256sum envfolio > SHA256SUMS
+      - name: Create the release
+        run: |
+          gh release create "$TAG" envfolio SHA256SUMS \
+              --verify-tag --title "EnvFolio $VERSION" --notes-file "$RUNNER_TEMP/notes.md"
+
+  bump:
+    needs: [verify, release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.verify.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+      - name: Bump main to the next minor --rc
+        run: |
+          set -euo pipefail
+          app=$(sed -n 's/^APP_VERSION=//p' envfolio)
+          if [[ $app != "$VERSION" ]]; then
+              echo "::notice::main has APP_VERSION=$app, not $VERSION; leaving it alone."
+              exit 0
+          fi
+          IFS=. read -r major minor _ <<< "$VERSION"
+          next="$major.$((minor + 1)).0--rc"
+          sed -i "s/^APP_VERSION=.*/APP_VERSION=$next/" envfolio
+          # A fresh `## Unreleased` above the first version section.
+          awk '!done && /^## / { print "## Unreleased\n"; done = 1 } { print }' CHANGELOG.md > CHANGELOG.new
+          mv CHANGELOG.new CHANGELOG.md
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -am "Start $next after releasing $VERSION"
+          git push origin HEAD:main

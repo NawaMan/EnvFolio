@@ -18,6 +18,10 @@
 
 #== Settings ===================================================================
 
+# Set by the release: `<major>.<minor>.<patch>` in a release, `<next>--rc` on main between releases.
+# The release workflow (.github/workflows/release.yml) reads and bumps this exact line.
+APP_VERSION=0.1.0
+
 STORE_PATH=${ENVFOLIO_STORE_DIR:-$HOME/.envfolio}
 # Always absolute: `pass` loops forever on a relative PASSWORD_STORE_DIR whose folder doesn't exist
 # yet (its set_git keeps stripping "/…" off a path that has none left).
@@ -56,7 +60,7 @@ function main() {
 }
 
 function version() {
-    echo "EnvFolio 0.1"
+    echo "EnvFolio $APP_VERSION"
 }
 
 # envfolio help [command...]

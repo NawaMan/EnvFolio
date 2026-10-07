@@ -207,6 +207,23 @@ Guardrails — these hold whether or not the `land` skill is loaded:
   discards work. If git refuses, that refusal is the point: stop and tell the user what is
   unmerged or uncommitted, and let them decide.
 
+### Releasing
+
+A release is made by pushing a version tag; `.github/workflows/release.yml` does the rest. Pushing
+the tag is the user's go-ahead (Rule 5) — an agent prepares the commit, the user tags and pushes.
+
+1. On `main`, set `APP_VERSION` in `envfolio` to the release (`0.2.0--rc` → `0.2.0`), and rename
+   `## Unreleased` in `CHANGELOG.md` to `## 0.2.0 — <date>`. Commit.
+2. `git tag v0.2.0 && git push origin main v0.2.0`
+3. The workflow checks the tag matches `APP_VERSION` and CHANGELOG, runs shellcheck and every test
+   on Linux (bash 5) and macOS (bash 3.2), then publishes a GitHub Release with `envfolio`,
+   `SHA256SUMS` and that CHANGELOG section as notes.
+4. It then commits to `main` (as github-actions[bot]): `APP_VERSION` → next minor with `--rc`
+   (`0.3.0--rc`) and a fresh `## Unreleased`. Pull it before further work.
+
+Between releases `main` always carries `<next>--rc`; a tag on such a commit is refused.
+`.github/workflows/check.yml` runs the same checks on every branch push and pull request.
+
 ### Already in a worktree → stay on the feature branch
 
 How to tell you are in a worktree (any one is enough):

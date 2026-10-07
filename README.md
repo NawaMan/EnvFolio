@@ -30,6 +30,18 @@ A command-line tool for password management. It is built heavily on top of [`pas
 
 Every command, with examples: [MANUAL.md](MANUAL.md).
 
+# Install
+
+EnvFolio is one bash script. Download `envfolio` from the
+[latest release](https://github.com/NawaMan/EnvFolio/releases/latest), check it against
+`SHA256SUMS` (`sha256sum -c SHA256SUMS`, or `shasum -a 256 -c SHA256SUMS` on macOS), make it
+executable and put it on your `PATH`:
+
+```bash
+chmod +x envfolio && mv envfolio ~/.local/bin/
+envfolio version
+```
+
 # Dependencies
 
 - `bash` 3.2 or newer (the one macOS ships is enough)
@@ -45,4 +57,3 @@ Every command, with examples: [MANUAL.md](MANUAL.md).
 
 - `ENVFOLIO_STORE_DIR` - the path to the EnvFolio store. Defaults to `$HOME/.envfolio`. The store has the same
   layout as a `pass` store, but is kept apart from your own `~/.password-store`.
-# EnvFolio
