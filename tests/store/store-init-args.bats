@@ -98,3 +98,65 @@ teardown() {
     [[ $output == *"No passphrase on stdin"* ]]
     [ ! -e "$ENVFOLIO_STORE_DIR/.gpg-id" ]
 }
+
+# The store folder's mode, on Linux and macOS.
+dir-mode() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
+
+@test "store-init: makes the store private (700), its git history too" {
+    umask 022
+    run store-init --key "$TEST_FPR"
+    [ "$status" -eq 0 ]
+    store-exists
+    [ "$(dir-mode "$ENVFOLIO_STORE_DIR")" = "700" ]
+    [ "$(dir-mode "$ENVFOLIO_STORE_DIR/.git")" = "700" ]
+}
+
+@test "store-init: an open existing empty folder is warned about and asked; no answer, nothing made" {
+    mkdir "$ENVFOLIO_STORE_DIR" && chmod 755 "$ENVFOLIO_STORE_DIR"
+    run store-init --key "$TEST_FPR" < /dev/null
+    [ "$status" -eq 1 ]
+    [[ $output == *"other users can get into $ENVFOLIO_STORE_DIR"*"anyway? [y/N]"*"Nothing changed"* ]]
+    [ -z "$(ls -A "$ENVFOLIO_STORE_DIR")" ]
+}
+
+@test "store-init: an open existing empty folder, yes: used as it is" {
+    mkdir "$ENVFOLIO_STORE_DIR" && chmod 755 "$ENVFOLIO_STORE_DIR"
+    run store-init --key "$TEST_FPR" < <(echo y)
+    [ "$status" -eq 0 ]
+    store-exists
+    [ "$(dir-mode "$ENVFOLIO_STORE_DIR")" = "755" ]
+}
+
+@test "store-init: --allow-unsafe-folder, not asked, still warned" {
+    mkdir "$ENVFOLIO_STORE_DIR" && chmod 755 "$ENVFOLIO_STORE_DIR"
+    run store-init --key "$TEST_FPR" --allow-unsafe-folder < /dev/null
+    [ "$status" -eq 0 ]
+    store-exists
+    [[ $output == *"other users can get into"* && $output != *"[y/N]"* ]]
+}
+
+@test "store-init: an empty folder of someone else's is warned about and asked" {
+    mkdir "$ENVFOLIO_STORE_DIR" && chmod 700 "$ENVFOLIO_STORE_DIR"
+    is-own-dir() { return 1; }
+    run store-init --key "$TEST_FPR" < /dev/null
+    [ "$status" -eq 1 ]
+    [[ $output == *"belongs to "*", not to you"*"anyway? [y/N]"* ]]
+    [ -z "$(ls -A "$ENVFOLIO_STORE_DIR")" ]
+}
+
+@test "store-init: an existing private empty folder of your own, nothing asked" {
+    mkdir "$ENVFOLIO_STORE_DIR" && chmod 700 "$ENVFOLIO_STORE_DIR"
+    run store-init --key "$TEST_FPR" < /dev/null
+    [ "$status" -eq 0 ]
+    store-exists
+    [[ $output != *warning* && $output != *"[y/N]"* ]]
+}
+
+@test "store-init: an empty folder reached through a link works too" {
+    mkdir -p "$SANDBOX/mnt" && chmod 700 "$SANDBOX/mnt"
+    ln -s "$SANDBOX/mnt" "$ENVFOLIO_STORE_DIR"
+    run store-init --key "$TEST_FPR" < /dev/null
+    [ "$status" -eq 0 ]
+    [ -L "$ENVFOLIO_STORE_DIR" ]
+    [ -s "$SANDBOX/mnt/.gpg-id" ]
+}

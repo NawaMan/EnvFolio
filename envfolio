@@ -137,7 +137,8 @@ Commands:
   version           Print EnvFolio's version
   help [command]    Show help, e.g. `envfolio help store init`
 
-The store is $ENVFOLIO_STORE_DIR, default ~/.envfolio.
+The store is $ENVFOLIO_STORE_DIR, default ~/.envfolio. EnvFolio warns when that folder is someone
+else's or open to other users.
 Details and examples: MANUAL.md
 EOF
 }
@@ -193,12 +194,75 @@ function store-exists() {
     return 0
 }
 
+# Whether $1 is a folder with nothing in it, dotfiles included. Such a folder is as good as none
+# for `store init` and `store restore`: the store is made inside it.
+function is-empty-dir() {
+    [[ -d $1 && -z $(ls -A "$1") ]]
+}
+
+# Whether only its owner can get into folder $1: no group or other bits in its `ls -ldL` mode,
+# which reads the same on Linux and macOS (stat's flags do not).
+function is-private-dir() {
+    local mode
+    mode=$(ls -ldL "$1" 2>/dev/null) || return 1
+    [[ ${mode:4:6} == ------ ]]
+}
+
+# Whether the user owns folder $1 (a function, so tests can stand in for another owner).
+function is-own-dir() {
+    [[ -O $1 ]]
+}
+
+# Whether the store's folder exists and is someone else's, or open to other users.
+function is-unsafe-store() {
+    [[ -d $STORE_PATH ]] || return 1
+    ! is-own-dir "$STORE_PATH" || ! is-private-dir "$STORE_PATH"
+}
+
+# Warn, as gpg does for its home, when the store's folder is someone else's or other users can get
+# into it. EnvFolio makes the folder private (700) when it creates it, but leaves one it was given
+# (a bind mount, say) as it is. There is no switch to hide this: it is the user's data.
+function warn-unsafe-store() {
+    [[ -d $STORE_PATH ]] || return 0
+    local owner
+    if ! is-own-dir "$STORE_PATH"; then
+        # shellcheck disable=SC2012  # one known folder's owner, not a listing of names
+        owner=$(ls -ldL "$STORE_PATH" | awk '{ print $3 }')
+        printf 'envfolio: warning: %s belongs to %s, not to you: they can read and change your store.\n' \
+               "$STORE_PATH" "$owner" >&2
+    fi
+    if ! is-private-dir "$STORE_PATH"; then
+        printf 'envfolio: warning: other users can get into %s. To make it private:\n    chmod 700 %s\n' \
+               "$STORE_PATH" "$STORE_PATH" >&2
+    fi
+}
+
+# For the commands that put items into the store (init, restore, import): with the store's folder
+# unsafe, warn, then go on only when the user says so — --allow-unsafe-folder, or yes when asked.
+# Once accepted, a later check in the same run (import making the store with init) passes quietly.
+# accept-unsafe-store <allowed> <stdin-taken: 1 when stdin carries a passphrase, so cannot answer>
+STORE_UNSAFE_ACCEPTED=0
+function accept-unsafe-store() {
+    local allowed=$1 stdin_taken=$2
+    (( ! STORE_UNSAFE_ACCEPTED )) && is-unsafe-store || return 0
+    warn-unsafe-store
+    STORE_MODE_CHECKED=1
+    if (( ! allowed )); then
+        (( ! stdin_taken )) \
+            || die "Not using $STORE_PATH: stdin carries the passphrase, so EnvFolio cannot ask. Nothing changed." \
+                   "Add --allow-unsafe-folder to use it anyway."
+        confirm "Use $STORE_PATH anyway?" \
+            || die "Not using $STORE_PATH. Nothing changed. Add --allow-unsafe-folder to use it anyway, or run with${EXTRA_LINE}    ENVFOLIO_STORE_DIR=<other-folder>"
+    fi
+    STORE_UNSAFE_ACCEPTED=1
+}
+
 # --- store init ---------------------------------------------------------------
 
 function store-init-usage() {
     cat <<'EOF'
-Usage: envfolio store init [--key <id>]
-       envfolio store init [--new-key] [--name <name>] [--email <email>] [--passphrase-stdin]
+Usage: envfolio store init [--key <id>] [--allow-unsafe-folder]
+       envfolio store init [--new-key] [--name <name>] [--email <email>] [--passphrase-stdin] [--allow-unsafe-folder]
 EOF
 }
 
@@ -207,8 +271,9 @@ function store-init-help() {
     cat <<'EOF'
 
 Create the EnvFolio store ($ENVFOLIO_STORE_DIR, default ~/.envfolio): pick or create the GPG key
-that encrypts it, run `pass init`, and start the store's git history. Anything not given is asked
-for.
+that encrypts it, run `pass init`, and start the store's git history. A folder made here is private
+(700); an existing empty folder is used as it is. When that folder is someone else's or other users
+can get in, EnvFolio warns and asks before using it. Anything not given is asked for.
 
 Options:
   --key <id>          Use an existing secret key: fingerprint, key id or email (must match one).
@@ -218,6 +283,9 @@ Options:
   --email <email>     The new key's email.
   --passphrase-stdin  Read the new key's passphrase from the first line of stdin.
                       Needs --name and --email. An empty passphrase is refused.
+  --allow-unsafe-folder
+                      Use an existing folder that is someone else's or open to other users without
+                      asking (still with the warning).
   -h, --help          Show this help.
 
 --opt=value works as well as --opt value.
@@ -226,10 +294,11 @@ EOF
 }
 
 # envfolio store init [--key <id>] | [--new-key] [--name <name>] [--email <email>] [--passphrase-stdin]
+#                     [--allow-unsafe-folder]
 # Anything not given is asked for. An existing key needs no passphrase: the store only encrypts to it.
 function store-init() {
     # Processs inputs
-    local key_id="" new_key=0 name="" email="" passphrase_stdin=0 arg
+    local key_id="" new_key=0 name="" email="" passphrase_stdin=0 allow_unsafe=0 arg
     while (( $# > 0 )); do
         arg=$1 ; shift
         # --opt=value is the same as --opt value
@@ -245,6 +314,7 @@ function store-init() {
                 shift ;;
             --new-key)          new_key=1          ;;
             --passphrase-stdin) passphrase_stdin=1 ;;
+            --allow-unsafe-folder) allow_unsafe=1 ;;
             -h|--help)          store-init-help ; return 0 ;;
             *) die "store init: unknown option: $arg${EXTRA_LINE}$(store-init-usage)" ;;
         esac
@@ -260,6 +330,11 @@ function store-init() {
 
     local status=0
     store-exists || status=$?
+    # An empty folder is as good as none: the store is made inside it, its mode left as it is.
+    if (( status == 2 )) && is-empty-dir "$STORE_PATH"; then
+        accept-unsafe-store "$allow_unsafe" "$passphrase_stdin"
+        status=1
+    fi
     if (( status == 0 )); then
         die "A EnvFolio store already exists at $STORE_PATH." \
             "To create another one, run with${EXTRA_LINE}    ENVFOLIO_STORE_DIR=<other-folder> $0 store init."
@@ -287,6 +362,8 @@ function store-init() {
     [[ -n $uid ]] || die "Cannot find the key $key."
     expiry=$(key-expiry "$key")
 
+    # A folder made here, and the git history, are for the owner only (700).
+    umask 077
     mkdir -p "$STORE_PATH"     || die "Cannot create $STORE_PATH."
 
     section "Create the password store"
@@ -345,8 +422,13 @@ function store-summary() {
 }
 
 # Die unless the store is ready; commands that read or write items call this first.
+# Warns (once) when the store's folder is someone else's or other users can get into it.
+STORE_MODE_CHECKED=0
 function require-store() {
     store-exists || die "No ready EnvFolio store at $STORE_PATH. Create one with: envfolio store init"
+    (( STORE_MODE_CHECKED )) && return 0
+    STORE_MODE_CHECKED=1
+    warn-unsafe-store
 }
 
 # --- store backup -------------------------------------------------------------
@@ -488,21 +570,27 @@ function store-restore-help() {
 
 Bring back an EnvFolio store from a file made by `envfolio store backup`: import its GPG key
 (trusted as your own), and put the store at $ENVFOLIO_STORE_DIR (default ~/.envfolio). A backup
-without its git history starts a new one. Refuses when anything is already at $ENVFOLIO_STORE_DIR.
+without its git history starts a new one. Refuses when $ENVFOLIO_STORE_DIR is a folder with anything
+in it. An existing empty folder is used as it is (a folder made here is private, 700); when it is
+someone else's or other users can get in, EnvFolio warns and asks before using it.
 
 Options:
   --passphrase-stdin  Read the passphrase of an encrypted backup (--envfolio.gpg) from the first
                       line of stdin, instead of gpg's prompt.
+  --allow-unsafe-folder
+                      Use an existing empty folder that is someone else's or open to other users
+                      without asking (still with the warning).
   -h, --help          Show this help.
 EOF
 }
 
 # envfolio store restore [--passphrase-stdin] <file>
 function store-restore() {
-    local passphrase_stdin=0 file=""
+    local passphrase_stdin=0 allow_unsafe=0 file=""
     while (( $# > 0 )); do
         case $1 in
             --passphrase-stdin) passphrase_stdin=1 ;;
+            --allow-unsafe-folder) allow_unsafe=1 ;;
             -h|--help)          store-restore-help ; return 0 ;;
             -*) die "store restore: unknown option: $1${EXTRA_LINE}$(store-restore-usage)" ;;
             *)  [[ -z $file ]] || die "store restore: one file only.${EXTRA_LINE}$(store-restore-usage)"
@@ -522,8 +610,15 @@ function store-restore() {
             (( ! passphrase_stdin )) || die "--passphrase-stdin is only for an encrypted backup ($ENCRYPTED_BACKUP_SUFFIX)." ;;
         *)  die "$file is not an EnvFolio backup: its name ends in neither $BACKUP_SUFFIX nor $ENCRYPTED_BACKUP_SUFFIX." ;;
     esac
-    [[ ! -e $STORE_PATH ]] \
-        || die "$STORE_PATH already exists. Move it away to restore there, or run with${EXTRA_LINE}    ENVFOLIO_STORE_DIR=<other-folder> $0 store restore $file"
+    # An empty folder is as good as none: the store is moved inside it (it may be a mount point),
+    # its mode left as it is.
+    local into=0
+    if [[ -e $STORE_PATH ]]; then
+        is-empty-dir "$STORE_PATH" \
+            || die "$STORE_PATH already exists. Move it away to restore there, or run with${EXTRA_LINE}    ENVFOLIO_STORE_DIR=<other-folder> $0 store restore $file"
+        accept-unsafe-store "$allow_unsafe" "$passphrase_stdin"
+        into=1
+    fi
 
     local passphrase=""
     if (( passphrase_stdin )); then
@@ -577,7 +672,14 @@ function store-restore() {
         history="new (the backup had none)"
     fi
 
-    mv "$stage/$name" "$target" || die "Cannot move the store to $target."
+    if (( into )); then
+        shopt -s dotglob
+        mv "$stage/$name"/* "$target/" || die "Cannot move the store to $target."
+        shopt -u dotglob
+    else
+        mv "$stage/$name" "$target" || die "Cannot move the store to $target."
+        chmod 700 "$target"         || die "Cannot make $target private."
+    fi
 
     section "Summary"
     show-box "Your EnvFolio store is restored." \
@@ -758,7 +860,7 @@ function store-export() {
 # --- store import -------------------------------------------------------------
 
 function store-import-usage() {
-    echo "Usage: envfolio store import [-a|--all] [--overwrite|--skip-existing] [--key <id>] [--passphrase-stdin] <file> [<name>...]"
+    echo "Usage: envfolio store import [-a|--all] [--overwrite|--skip-existing] [--key <id>] [--passphrase-stdin] [--allow-unsafe-folder] <file> [<name>...]"
 }
 
 function store-import-help() {
@@ -781,13 +883,17 @@ Options:
   --key <id>          With no store yet: make it with this key, as `envfolio store init --key`.
   --passphrase-stdin  Read the file's passphrase (or your key's, for a file locked to it) from the
                       first line of stdin. Needs --all or a <name>.
+  --allow-unsafe-folder
+                      Use a store folder that is someone else's or open to other users without
+                      asking (still with the warning).
   -h, --help          Show this help.
 EOF
 }
 
-# envfolio store import [-a|--all] [--overwrite|--skip-existing] [--key <id>] [--passphrase-stdin] <file> [<name>...]
+# envfolio store import [-a|--all] [--overwrite|--skip-existing] [--key <id>] [--passphrase-stdin]
+#                       [--allow-unsafe-folder] <file> [<name>...]
 function store-import() {
-    local all=0 clash="" key_id="" passphrase_stdin=0 file="" names=() arg
+    local all=0 clash="" key_id="" passphrase_stdin=0 allow_unsafe=0 file="" names=() arg
     while (( $# > 0 )); do
         arg=$1 ; shift
         case $arg in
@@ -797,6 +903,7 @@ function store-import() {
             --key)              [[ $# -gt 0 && -n $1 ]] || die "--key needs a value." ; key_id=$1 ; shift ;;
             --key=*)            key_id=${arg#*=} ;;
             --passphrase-stdin) passphrase_stdin=1 ;;
+            --allow-unsafe-folder) allow_unsafe=1 ;;
             -h|--help)          store-import-help ; return 0 ;;
             -*) die "store import: unknown option: $arg${EXTRA_LINE}$(store-import-usage)" ;;
             *)  if [[ -z $file ]]; then file=$arg ; else names+=("$arg") ; fi ;;
@@ -809,6 +916,10 @@ function store-import() {
     (( ! passphrase_stdin || all || ${#names[@]} > 0 )) \
         || die "--passphrase-stdin needs --all or the items named: stdin cannot also answer which ones."
     store-exists && [[ -n $key_id ]] && die "--key is only for making a new store, and $STORE_PATH is one already."
+    # Before anything is read or written: the store, or the empty folder it is to be made in.
+    if store-exists || is-empty-dir "$STORE_PATH"; then
+        accept-unsafe-store "$allow_unsafe" "$passphrase_stdin"
+    fi
 
     local passphrase=""
     if (( passphrase_stdin )); then

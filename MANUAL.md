@@ -35,8 +35,8 @@ Creates the EnvFolio store (`$ENVFOLIO_STORE_DIR`, default `~/.envfolio`): picks
 encrypts it, runs `pass init`, and starts the store's git history.
 
 ```
-envfolio store init [--key <id>]
-envfolio store init [--new-key] [--name <name>] [--email <email>] [--passphrase-stdin]
+envfolio store init [--key <id>] [--allow-unsafe-folder]
+envfolio store init [--new-key] [--name <name>] [--email <email>] [--passphrase-stdin] [--allow-unsafe-folder]
 ```
 
 | Option | Meaning |
@@ -46,10 +46,12 @@ envfolio store init [--new-key] [--name <name>] [--email <email>] [--passphrase-
 | `--name <name>` | The new key's name. |
 | `--email <email>` | The new key's email. |
 | `--passphrase-stdin` | Read the new key's passphrase from the first line of stdin instead of gpg's prompt. Needs `--name` and `--email`. An empty passphrase is refused. |
+| `--allow-unsafe-folder` | Use an existing empty folder that is someone else's or open to other users without asking. The warning still shows. See *The store folder is private*. |
 | `-h`, `--help` | Show the options and stop. Nothing is created. |
 
 `--opt=value` works as well as `--opt value`. Anything not given is asked for. `--key` cannot be
-combined with the new-key options. It fails if anything already exists at `$ENVFOLIO_STORE_DIR`.
+combined with the new-key options. It fails if `$ENVFOLIO_STORE_DIR` is a folder with anything in it;
+an empty folder is fine.
 
 ### Ask for everything
 
@@ -92,13 +94,42 @@ same `ENVFOLIO_STORE_DIR` to use it.
 
 ### When the store folder already exists
 
-`envfolio store init` refuses to run if the store folder already exists, and changes nothing:
+An **empty** folder is fine: the store is made inside it (it may be a mount point, such as an
+encrypted volume or a bind mount). Its mode and owner are left as they are — see *The store folder
+is private*.
+
+Otherwise `envfolio store init` refuses to run, and changes nothing:
 
 - **A ready EnvFolio store** (it has `.gpg-id` and a git history) — says the store already exists.
-- **Anything else**, even an empty folder — says it is not a ready EnvFolio store. This is what an
-  earlier `envfolio store init` leaves if it stopped partway (an error, Ctrl-C, a closed terminal):
-  remove the folder and run `envfolio store init` again. A key created by the earlier
-run is kept, and shows up in the key menu.
+- **Anything else** in the folder, even only hidden files — says it is not a ready EnvFolio store.
+  This is what an earlier `envfolio store init` leaves if it stopped partway (an error, Ctrl-C, a
+  closed terminal): remove the folder and run `envfolio store init` again. A key created by the
+  earlier run is kept, and shows up in the key menu.
+
+### The store folder is private
+
+When `envfolio store init` or `envfolio store restore` creates the store folder, only you can get
+into it (`700`): even encrypted, the names of your entries and the plain texts would show to other
+users. An existing empty folder you point them at (a bind mount, say) is used as it is — that is
+your call.
+
+Like gpg for its home folder, EnvFolio checks whether the store's folder belongs to someone else,
+or other users can get into it (as they can into a store made by EnvFolio 0.1.0):
+
+```
+envfolio: warning: /home/you/.envfolio belongs to root, not to you: they can read and change your store.
+envfolio: warning: other users can get into /home/you/.envfolio. To make it private:
+    chmod 700 /home/you/.envfolio
+```
+
+- **`store init`, `store restore`, `store import`** — the commands that put your items there —
+  warn, then ask `Use /home/you/.envfolio anyway? [y/N]`. Anything but yes stops them, and nothing
+  changes; so does nothing to answer with (stdin at its end, or carrying a passphrase).
+  `--allow-unsafe-folder` answers yes for them, in a script say; the warning still shows.
+- **Every other command** that uses the store warns, and carries on.
+
+There is no setting to hide the warning: whose folder holds your texts and secrets is worth seeing
+every time. Fix the folder instead, or keep the store somewhere else.
 
 ---
 
@@ -201,20 +232,26 @@ a file or another secret tool, not with `echo`.
 Brings back an EnvFolio store from a file made by `envfolio store backup`.
 
 ```
-envfolio store restore [--passphrase-stdin] <file>
+envfolio store restore [--passphrase-stdin] [--allow-unsafe-folder] <file>
 ```
 
 | Option | Meaning |
 | --- | --- |
 | `--passphrase-stdin` | Read the passphrase of an encrypted backup (`--envfolio.gpg`) from the first line of stdin instead of gpg's prompt. |
+| `--allow-unsafe-folder` | Use an existing empty folder that is someone else's or open to other users without asking. The warning still shows. |
 | `-h`, `--help` | Show the options and stop. |
 
 It imports the backup's key into your keyring and trusts it as your own (so `pass` can encrypt to
 it), then puts the store at `$ENVFOLIO_STORE_DIR` (default `~/.envfolio`). A key already in your keyring
 is fine. A backup without its git history gets a new one: one commit of everything restored.
 
-It refuses when anything is already at `$ENVFOLIO_STORE_DIR` and changes nothing: move that folder
-away first, or restore elsewhere with `ENVFOLIO_STORE_DIR=<other-folder> envfolio store restore <file>`.
+An empty folder at `$ENVFOLIO_STORE_DIR` is fine: the store is moved inside it (it may be a mount
+point, such as an encrypted volume or a bind mount), its mode and owner left as they are. A folder
+made by the restore is private (`700`) — see *The store folder is private* under
+`envfolio store init`.
+
+It refuses when the folder has anything in it, and changes nothing: move that folder away first, or
+restore elsewhere with `ENVFOLIO_STORE_DIR=<other-folder> envfolio store restore <file>`.
 A file whose name ends in neither `--envfolio.tar.gz` nor `--envfolio.gpg`, or that is not an EnvFolio backup,
 is refused too. Nothing is left behind when it fails.
 
@@ -287,7 +324,7 @@ Only the server's secret key can open the file, so it can travel through places 
 Brings items from a file made by `envfolio store export` into the EnvFolio store.
 
 ```
-envfolio store import [-a|--all] [--overwrite|--skip-existing] [--key <id>] [--passphrase-stdin] <file> [<name>...]
+envfolio store import [-a|--all] [--overwrite|--skip-existing] [--key <id>] [--passphrase-stdin] [--allow-unsafe-folder] <file> [<name>...]
 ```
 
 | Option | Meaning |
@@ -297,6 +334,7 @@ envfolio store import [-a|--all] [--overwrite|--skip-existing] [--key <id>] [--p
 | `--skip-existing` | Keep the items already in the store; take only the new ones. |
 | `--key <id>` | With no store yet: make it with this key, as `envfolio store init --key`. |
 | `--passphrase-stdin` | Read the file's passphrase (or your key's, for a file locked to it) from the first line of stdin. Needs `--all` or a `<name>`. |
+| `--allow-unsafe-folder` | Import into a store folder that is someone else's or open to other users without asking. The warning still shows. |
 | `-h`, `--help` | Show the options and stop. |
 
 A `<name>` is an item in the export, or a folder: every item under it. With neither `<name>` nor
