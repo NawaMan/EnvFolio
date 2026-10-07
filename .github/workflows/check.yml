@@ -37,8 +37,14 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
+      # coreutils for `timeout` only (some tests use it), linked alone so the tests still run
+      # against macOS's own BSD tools.
       - name: Install dependencies
-        run: brew install bats-core pass
+        run: |
+          brew install bats-core pass coreutils
+          mkdir -p "$RUNNER_TEMP/bin"
+          ln -s "$(brew --prefix)/bin/gtimeout" "$RUNNER_TEMP/bin/timeout"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
       # /bin/bash on macOS is 3.2; put it first so `env bash` (bats and envfolio) finds it,
       # not a Homebrew bash 5. test-all.sh fails if it is not 3.x.
       - run: PATH="/bin:$PATH" perl -e '$SIG{PIPE} = "DEFAULT"; exec @ARGV' /bin/bash tests/test-all.sh 3

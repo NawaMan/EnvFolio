@@ -18,8 +18,13 @@ setup() {
 }
 
 teardown() {
-    # pass's clear-the-clipboard sleeper, named after our own fake display only.
-    [[ -z ${CLIPBOARD:-} ]] || pkill -f "^password store sleep on display $DISPLAY" 2>/dev/null || true
+    # pass's clear-the-clipboard sleeper: on Linux named after our own fake display only; on macOS
+    # named per user, so it is stopped and given a moment to restore into the fake clipboard.
+    if [[ -n ${CLIPBOARD:-} && $(uname -s) == Darwin ]]; then
+        pkill -f "^password store sleep for user $(id -u)" 2>/dev/null && sleep 1 || true
+    elif [[ -n ${CLIPBOARD:-} ]]; then
+        pkill -f "^password store sleep on display $DISPLAY" 2>/dev/null || true
+    fi
     gpgconf --kill all 2>/dev/null || true
     rm -rf "$SANDBOX"
 }
@@ -32,7 +37,8 @@ make-store() {
     "$ENVFOLIO" secret insert -m mail/work  < <(printf 'other\n')              >/dev/null
 }
 
-# A stand-in xclip whose clipboard is a sandbox file, so -c never touches a real clipboard.
+# A stand-in xclip (Linux) and pbcopy/pbpaste (macOS) whose clipboard is a sandbox file, so -c
+# never touches a real clipboard.
 fake-clipboard() {
     CLIPBOARD="$SANDBOX/clipboard"
     mkdir -p "$SANDBOX/bin"
@@ -40,7 +46,9 @@ fake-clipboard() {
 #!/usr/bin/env bash
 if [[ " \$* " == *" -o "* ]]; then cat "$CLIPBOARD" 2>/dev/null; else cat > "$CLIPBOARD"; fi
 EOF
-    chmod +x "$SANDBOX/bin/xclip"
+    printf '#!/usr/bin/env bash\ncat > "%s"\n'             "$CLIPBOARD" > "$SANDBOX/bin/pbcopy"
+    printf '#!/usr/bin/env bash\ncat "%s" 2>/dev/null; :\n' "$CLIPBOARD" > "$SANDBOX/bin/pbpaste"
+    chmod +x "$SANDBOX/bin/xclip" "$SANDBOX/bin/pbcopy" "$SANDBOX/bin/pbpaste"
     export PATH="$SANDBOX/bin:$PATH"
     export DISPLAY=":envfolio-test-$$"
     unset WAYLAND_DISPLAY
