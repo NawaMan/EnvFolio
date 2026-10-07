@@ -209,19 +209,21 @@ Guardrails — these hold whether or not the `land` skill is loaded:
 
 ### Releasing
 
-A release is made by pushing a version tag; `.github/workflows/release.yml` does the rest. Pushing
-the tag is the user's go-ahead (Rule 5) — an agent prepares the commit, the user tags and pushes.
+A release is made by running the **Release** workflow (`.github/workflows/release.yml`) on `main`:
+Actions → Release → Run workflow, or `gh workflow run release.yml`. Running it is the user's
+go-ahead (Rule 5) — an agent never runs it unasked.
 
-1. On `main`, set `APP_VERSION` in `envfolio` to the release (`0.2.0--rc` → `0.2.0`), and rename
-   `## Unreleased` in `CHANGELOG.md` to `## 0.2.0 — <date>`. Commit.
-2. `git tag v0.2.0 && git push origin main v0.2.0`
-3. The workflow checks the tag matches `APP_VERSION` and CHANGELOG, runs shellcheck and every test
-   on Linux (bash 5) and macOS (bash 3.2), then publishes a GitHub Release with `envfolio`,
-   `SHA256SUMS` and that CHANGELOG section as notes.
-4. It then commits to `main` (as github-actions[bot]): `APP_VERSION` → next minor with `--rc`
-   (`0.3.0--rc`) and a fresh `## Unreleased`. Pull it before further work.
+1. Keep `## Unreleased` in `CHANGELOG.md` up to date as changes land; `main` carries
+   `APP_VERSION=<next>--rc` in `envfolio` between releases.
+2. Run the workflow. It releases `APP_VERSION` without `--rc` (`0.2.0--rc` → `0.2.0`), or the
+   `version` input if given (e.g. `1.0.0`).
+3. It runs shellcheck and every test on Linux (bash 5) and macOS (bash 3.2), then commits
+   `APP_VERSION=0.2.0` and `## 0.2.0 — <date>`, tags `v0.2.0`, pushes both, and publishes a GitHub
+   Release with `envfolio`, `SHA256SUMS` and that CHANGELOG section as notes.
+4. It then commits the next minor with `--rc` (`0.3.0--rc`) and a fresh `## Unreleased` to `main`.
+   Pull it before further work.
 
-Between releases `main` always carries `<next>--rc`; a tag on such a commit is refused.
+It refuses when not run on `main`, when the tag exists, or when `## Unreleased` is empty.
 `.github/workflows/check.yml` runs the same checks on every branch push and pull request.
 
 ### Already in a worktree → stay on the feature branch
