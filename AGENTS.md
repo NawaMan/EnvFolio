@@ -276,8 +276,12 @@ Starting style, not law — deviate explicitly (say so and why) rather than sile
 - Keep **logic** (parsing, state, data transforms) in functions that don't touch the terminal, and
   **rendering / input** in a thin layer on top. Logic is tested with `bats` directly; the thin
   layer is what needs a TTY.
-- A script that can be `source`d without running `main` (guard with
-  `[[ ${BASH_SOURCE[0]} == "$0" ]] && main "$@"`) lets tests call its functions.
+- A script that can be `source`d without running `Main` (guard with
+  `[[ ${BASH_SOURCE[0]} == "$0" ]] && Main "$@"`) lets tests call its functions.
+- A function that **is a command** — `Main`, a group dispatcher (`Store`, `Text`, `Secret`) or a
+  command (`StoreInit`, `TextShow`, `Ls`, `Exec`, …) — is named in TitleCase from the command
+  words and written `Name() {`. Everything else, its `*-help` text included, is
+  `function kebab-name() {`. So a command stands out from its helpers.
 
 ### Verifying interactive prompts (you have no real keyboard)
 

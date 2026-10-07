@@ -40,31 +40,31 @@ export PASSWORD_STORE_DIR="$STORE_PATH"
 
 #== Main =======================================================================
 
-function main() {
+Main() {
     # Quiet when all is there; otherwise show the table and stop.
     if ! ensure-requirements "$@" >/dev/null; then ensure-requirements "$@" ; return 1 ; fi
 
     local category="${1:-}" ; (( $# > 0 )) && shift
     case "$category" in
-        store)   store  "$@" ;;
-        text)    text   "$@" ;;
-        secret)  secret "$@" ;;
-        ls)      list   "$@" ;;
-        exec)    run-exec  "$@" ;;
-        shell)   run-shell "$@" ;;
-        version) version "$@" ;;
-        help)    help   "$@" ;;
+        store)   Store  "$@" ;;
+        text)    Text   "$@" ;;
+        secret)  Secret "$@" ;;
+        ls)      Ls     "$@" ;;
+        exec)    Exec   "$@" ;;
+        shell)   Shell  "$@" ;;
+        version) Version "$@" ;;
+        help)    Help   "$@" ;;
         "")      echo   "Usage: envfolio <version|help|store|text|secret|ls|exec|shell> [args...]" >&2 ; return 1 ;;
         *)       echo   "envfolio: unknown command: $category"                        >&2 ; return 1 ;;
     esac
 }
 
-function version() {
+Version() {
     echo "EnvFolio $APP_VERSION"
 }
 
 # envfolio help [command...]
-function help() {
+Help() {
     case "$*" in
         "")                envfolio-help            ;;
         "store init")      store-init-help      ;;
@@ -149,15 +149,15 @@ EXTRA_LINE=$'\n'
 
 #== Command: Store =============================================================
 
-function store() {
+Store() {
     local category="${1:-}" ; (( $# > 0 )) && shift
     case "$category" in
-        path)    store-path    "$@" ;;
-        init)    store-init    "$@" ;;
-        backup)  store-backup  "$@" ;;
-        restore) store-restore "$@" ;;
-        export)  store-export  "$@" ;;
-        import)  store-import  "$@" ;;
+        path)    StorePath     "$@" ;;
+        init)    StoreInit     "$@" ;;
+        backup)  StoreBackup   "$@" ;;
+        restore) StoreRestore  "$@" ;;
+        export)  StoreExport   "$@" ;;
+        import)  StoreImport   "$@" ;;
         "")      echo "Usage: envfolio store <init|path|backup|restore|export|import> [args...]" >&2 ; return 1 ;;
         *)       echo "envfolio store: unknown command: $category"                               >&2 ; return 1 ;;
     esac
@@ -177,7 +177,7 @@ EOF
 }
 
 # envfolio store path
-function store-path() {
+StorePath() {
     case ${1:-} in -h|--help) store-path-help ; return 0 ;; esac
     (( $# == 0 )) || die "Usage: envfolio store path"
     echo "${STORE_PATH}"
@@ -296,7 +296,7 @@ EOF
 # envfolio store init [--key <id>] | [--new-key] [--name <name>] [--email <email>] [--passphrase-stdin]
 #                     [--allow-unsafe-folder]
 # Anything not given is asked for. An existing key needs no passphrase: the store only encrypts to it.
-function store-init() {
+StoreInit() {
     # Processs inputs
     local key_id="" new_key=0 name="" email="" passphrase_stdin=0 allow_unsafe=0 arg
     while (( $# > 0 )); do
@@ -398,7 +398,7 @@ function store-summary() {
     lines=(
         "Your pass store is ready."
         ""
-        "Store:   $(tilde-path "$(store-path)")"
+        "Store:   $(tilde-path "$(StorePath)")"
         "Key:     $key"
         "         $uid"
         "Expires: ${expiry:-never}"
@@ -466,7 +466,7 @@ EOF
 }
 
 # envfolio store backup [--history] [--encrypt [--passphrase-stdin]] [<file>|<folder>]
-function store-backup() {
+StoreBackup() {
     local history=0 encrypt=0 passphrase_stdin=0 target=""
     while (( $# > 0 )); do
         case $1 in
@@ -585,7 +585,7 @@ EOF
 }
 
 # envfolio store restore [--passphrase-stdin] <file>
-function store-restore() {
+StoreRestore() {
     local passphrase_stdin=0 allow_unsafe=0 file=""
     while (( $# > 0 )); do
         case $1 in
@@ -732,7 +732,7 @@ EOF
 }
 
 # envfolio store export [-s|--secrets] [--to <key>] [--passphrase-stdin] [-o|--output <file>|<folder>] [<name>...]
-function store-export() {
+StoreExport() {
     local secrets=0 to="" passphrase_stdin=0 target="" names=() arg
     while (( $# > 0 )); do
         arg=$1 ; shift
@@ -892,7 +892,7 @@ EOF
 
 # envfolio store import [-a|--all] [--overwrite|--skip-existing] [--key <id>] [--passphrase-stdin]
 #                       [--allow-unsafe-folder] <file> [<name>...]
-function store-import() {
+StoreImport() {
     local all=0 clash="" key_id="" passphrase_stdin=0 allow_unsafe=0 file="" names=() arg
     while (( $# > 0 )); do
         arg=$1 ; shift
@@ -970,7 +970,7 @@ function store-import() {
 
     if ! store-exists; then
         section "No EnvFolio store yet: make one"
-        if [[ -n $key_id ]]; then store-init --key "$key_id" ; else store-init ; fi
+        if [[ -n $key_id ]]; then StoreInit --key "$key_id" ; else StoreInit ; fi
     fi
     require-store
 
@@ -1097,19 +1097,19 @@ function item-label() {
 
 #== Command: Text ==============================================================
 
-function text() {
+Text() {
     local category="${1:-}" ; (( $# > 0 )) && shift
     case "$category" in
-        ls)       text-ls       "$@" ;;
-        find)     text-find     "$@" ;;
-        grep)     text-grep     "$@" ;;
-        show)     text-show     "$@" ;;
-        insert)   text-insert   "$@" ;;
-        edit)     text-edit     "$@" ;;
-        generate) text-generate "$@" ;;
-        rm)       text-rm       "$@" ;;
-        mv)       text-mv       "$@" ;;
-        cp)       text-cp       "$@" ;;
+        ls)       TextLs        "$@" ;;
+        find)     TextFind      "$@" ;;
+        grep)     TextGrep      "$@" ;;
+        show)     TextShow      "$@" ;;
+        insert)   TextInsert    "$@" ;;
+        edit)     TextEdit      "$@" ;;
+        generate) TextGenerate  "$@" ;;
+        rm)       TextRm        "$@" ;;
+        mv)       TextMv        "$@" ;;
+        cp)       TextCp        "$@" ;;
         "")       echo "Usage: envfolio text <ls|find|grep|show|insert|edit|generate|rm|mv|cp> [args...]" >&2 ; return 1 ;;
         *)        echo "envfolio text: unknown command: $category"                                        >&2 ; return 1 ;;
     esac
@@ -1170,7 +1170,7 @@ EOF
 
 # envfolio text ls [<subfolder>]
 # As `secret ls`: `pass ls`, for the texts. Only a folder; a text is shown by `text show`.
-function text-ls() {
+TextLs() {
     case ${1:-} in -h|--help) text-ls-help ; return 0 ;; esac
     require-store
     list-store txt "Text Store" "text ls" "$@"
@@ -1191,7 +1191,7 @@ EOF
 
 # envfolio text find <part>...
 # As `secret find`: `pass find`, for the texts.
-function text-find() {
+TextFind() {
     local arg terms
     for arg in "$@"; do case $arg in -h|--help) text-find-help ; return 0 ;; esac ; done
     (( $# > 0 )) || die "Usage: envfolio text find <part>..."
@@ -1217,7 +1217,7 @@ EOF
 
 # envfolio text grep [<grep-option>...] <pattern>
 # As `pass grep`, over the texts: the same loop, reading each .txt instead of decrypting a .gpg.
-function text-grep() {
+TextGrep() {
     local arg file found dir
     for arg in "$@"; do case $arg in --) break ;; -h|--help) text-grep-help ; return 0 ;; esac ; done
     (( $# > 0 )) || die "Usage: envfolio text grep [<grep-option>...] <pattern>"
@@ -1251,7 +1251,7 @@ EOF
 # envfolio text show [-c|--clip[=<line>]] <name>
 # Only a text that verifies is shown: signed (<name>.txt.sig) by the store's key, unchanged since.
 # --clip picks a line as `pass show --clip` does.
-function text-show() {
+TextShow() {
     local clip="" names=() arg
     while (( $# > 0 )); do
         arg=$1 ; shift
@@ -1308,7 +1308,7 @@ EOF
 
 # envfolio text insert [-m|--multiline] [-f|--force] [-t|--text <text>] <name>
 # Like `pass insert`, but the text is written plain and signed, not encrypted.
-function text-insert() {
+TextInsert() {
     local multiline=0 force=0 given=0 text="" names=() arg
     while (( $# > 0 )); do
         arg=$1 ; shift
@@ -1365,7 +1365,7 @@ EOF
 # envfolio text edit <name>
 # As `pass edit`: edit a copy, keep it only if it changed. A text is checked first, so editing never
 # signs a text that was changed outside EnvFolio.
-function text-edit() {
+TextEdit() {
     case ${1:-} in -h|--help) text-edit-help ; return 0 ;; esac
     (( $# == 1 )) || die "Usage: envfolio text edit <name>"
     local name=${1%/} file tmp_dir tmp_file action=Add editor=${EDITOR:-vi}
@@ -1408,7 +1408,7 @@ EOF
 
 # envfolio text generate [-n|--no-symbols] [-i|--in-place|-f|--force] <name> [<length>]
 # As `pass generate`, for a text: the same characters and length, then saved and signed.
-function text-generate() {
+TextGenerate() {
     local chars=${PASSWORD_STORE_CHARACTER_SET:-[:punct:][:alnum:]} inplace=0 force=0 args=() arg
     while (( $# > 0 )); do
         arg=$1 ; shift
@@ -1466,7 +1466,7 @@ EOF
 
 # envfolio text rm [-r|--recursive] [-f|--force] <name>
 # As `pass rm`, for texts: <name> is a text, or — ending in / or not a text — a folder.
-function text-rm() {
+TextRm() {
     local recursive=0 force=0 names=() arg
     while (( $# > 0 )); do
         arg=$1 ; shift
@@ -1535,8 +1535,8 @@ Options:
 EOF
 }
 
-function text-mv() { text-copy-move mv "$@" ; }
-function text-cp() { text-copy-move cp "$@" ; }
+TextMv() { text-copy-move mv "$@" ; }
+TextCp() { text-copy-move cp "$@" ; }
 
 # text-copy-move <mv|cp> [-f|--force] <old-name> <new-name>
 # As `pass mv` / `pass cp`, for texts. A signature covers the text, not its name, so it moves with
@@ -1601,7 +1601,7 @@ function text-copy-move() {
 
 #== Command: Secret ============================================================
 
-function secret() {
+Secret() {
     local category="${1:-}" ; (( $# > 0 )) && shift
     # Every secret command needs a ready store — except asking for its help.
     case " $* " in
@@ -1609,16 +1609,16 @@ function secret() {
         *) [[ -z $category ]] || require-store ;;
     esac
     case "$category" in
-        ls)       secret-ls       "$@" ;;
-        find)     secret-find     "$@" ;;
-        grep)     secret-grep     "$@" ;;
-        show)     secret-show     "$@" ;;
-        insert)   secret-insert   "$@" ;;
-        edit)     secret-edit     "$@" ;;
-        generate) secret-generate "$@" ;;
-        rm)       secret-rm       "$@" ;;
-        mv)       secret-mv       "$@" ;;
-        cp)       secret-cp       "$@" ;;
+        ls)       SecretLs        "$@" ;;
+        find)     SecretFind      "$@" ;;
+        grep)     SecretGrep      "$@" ;;
+        show)     SecretShow      "$@" ;;
+        insert)   SecretInsert    "$@" ;;
+        edit)     SecretEdit      "$@" ;;
+        generate) SecretGenerate  "$@" ;;
+        rm)       SecretRm        "$@" ;;
+        mv)       SecretMv        "$@" ;;
+        cp)       SecretCp        "$@" ;;
         "")       echo "Usage: envfolio secret <ls|find|grep|show|insert|edit|generate|rm|mv|cp> [args...]" >&2 ; return 1 ;;
         *)        echo "envfolio secret: unknown command: $category"                                        >&2 ; return 1 ;;
     esac
@@ -1641,7 +1641,7 @@ EOF
 
 # envfolio secret ls [<subfolder>]
 # `pass ls`, minus the texts. Only a folder: given an entry, `pass ls` would print the secret.
-function secret-ls() {
+SecretLs() {
     case ${1:-} in -h|--help) secret-ls-help ; return 0 ;; esac
     list-store gpg "Secret Store" "secret ls" "$@"
 }
@@ -1662,7 +1662,7 @@ EOF
 
 # envfolio secret find <part>...
 # `pass find`, minus the texts.
-function secret-find() {
+SecretFind() {
     local arg terms
     for arg in "$@"; do case $arg in -h|--help) secret-find-help ; return 0 ;; esac ; done
     (( $# > 0 )) || die "Usage: envfolio secret find <part>..."
@@ -1687,7 +1687,7 @@ EOF
 }
 
 # envfolio secret grep [<grep-option>...] <pattern>
-function secret-grep() { call-pass secret-grep-help grep "$@" ; }
+SecretGrep() { call-pass secret-grep-help grep "$@" ; }
 
 # --- secret show --------------------------------------------------------------
 
@@ -1706,7 +1706,7 @@ EOF
 
 # envfolio secret show [-c|--clip[=<line>]] <name>
 # Only an entry goes through: given a folder, `pass show` would list it.
-function secret-show() {
+SecretShow() {
     local clip=() names=() arg
     while (( $# > 0 )); do
         arg=$1 ; shift
@@ -1742,7 +1742,7 @@ EOF
 
 # envfolio secret insert [-m|--multiline] [-f|--force] <name>
 # Everything goes to `pass insert` — except --help, and --echo, which would show the secret.
-function secret-insert() {
+SecretInsert() {
     local arg
     for arg in "$@"; do
         case $arg in
@@ -1769,7 +1769,7 @@ EOF
 }
 
 # envfolio secret edit <name>
-function secret-edit() { call-pass secret-edit-help edit "$@" ; }
+SecretEdit() { call-pass secret-edit-help edit "$@" ; }
 
 # --- secret generate ----------------------------------------------------------
 
@@ -1792,7 +1792,7 @@ EOF
 
 # envfolio secret generate [-n|--no-symbols] [-c|--clip] [-i|--in-place|-f|--force] <name> [<length>]
 # Everything goes to `pass generate` — except --help, and --qrcode (it needs qrencode).
-function secret-generate() {
+SecretGenerate() {
     local arg
     for arg in "$@"; do
         case $arg in
@@ -1822,7 +1822,7 @@ EOF
 }
 
 # envfolio secret rm [-r|--recursive] [-f|--force] <name>
-function secret-rm() { call-pass secret-rm-help rm "$@" ; }
+SecretRm() { call-pass secret-rm-help rm "$@" ; }
 
 # --- secret mv ----------------------------------------------------------------
 
@@ -1840,7 +1840,7 @@ EOF
 }
 
 # envfolio secret mv [-f|--force] <old-name> <new-name>
-function secret-mv() { call-pass secret-mv-help mv "$@" ; }
+SecretMv() { call-pass secret-mv-help mv "$@" ; }
 
 # --- secret cp ----------------------------------------------------------------
 
@@ -1858,7 +1858,7 @@ EOF
 }
 
 # envfolio secret cp [-f|--force] <old-name> <new-name>
-function secret-cp() { call-pass secret-cp-help cp "$@" ; }
+SecretCp() { call-pass secret-cp-help cp "$@" ; }
 
 #== Command: List ==============================================================
 
@@ -1878,7 +1878,7 @@ EOF
 
 # envfolio ls [<subfolder>]
 # `secret ls` and `text ls` in one tree. Only a folder, as they are.
-function list() {
+Ls() {
     case ${1:-} in -h|--help) list-help ; return 0 ;; esac
     require-store
     list-store all "EnvFolio Store" "ls" "$@"
@@ -1924,8 +1924,8 @@ Options:
 HELP
 }
 
-function run-exec()  { exec-with-entries exec  "$@" ; }
-function run-shell() { exec-with-entries shell "$@" ; }
+Exec()  { exec-with-entries exec  "$@" ; }
+Shell() { exec-with-entries shell "$@" ; }
 
 VAR_NAME_PATTERN='^[A-Za-z_][A-Za-z0-9_]*$'
 
@@ -2497,5 +2497,5 @@ function key-expiry() {
 
 # Run only when executed, so tests can `source` this file for its functions.
 if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
-    main "$@";
+    Main "$@";
 fi
