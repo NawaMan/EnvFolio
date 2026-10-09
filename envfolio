@@ -398,17 +398,19 @@ EOF
         [[ -n $email ]] || die "An email is needed to create a key."
         show-answer "Email" "$email"
         # Input: the new key's passphrase — the first line of stdin with --passphrase-stdin, or of
-        # fd <n> with --passphrase-fd <n>; otherwise asked twice.
+        # fd <n> with --passphrase-fd <n>; otherwise gpg asks for it when it makes the key.
         if (( passphrase_stdin )); then
             IFS= read -rs passphrase || true
             [[ -n $passphrase ]] || die "No passphrase on stdin."
         elif [[ -n $passphrase_fd ]]; then
             IFS= read -rs -u "$passphrase_fd" passphrase || true
             [[ -n $passphrase ]] || die "No passphrase on file descriptor $passphrase_fd."
-        else
-            passphrase=$(ask-passphrase "Passphrase for the new key") || exit 1
         fi
-        show-answer "Passphrase" "************"
+        if [[ -n $passphrase ]]; then
+            show-answer "Passphrase" "************"
+        else
+            show-answer "Passphrase" "gpg asks for it when it makes the key"
+        fi
     else
         show-answer "Key" "$key"
     fi
@@ -418,9 +420,13 @@ EOF
 
     if (( new_key )); then
         section "Generating the key."
-        # printf is a builtin: the passphrase reaches gpg through a pipe, never through argv.
-        key=$(printf '%s\n' "$passphrase" | generate-key "$name" "$email") || exit 1
-        unset passphrase
+        if [[ -n $passphrase ]]; then
+            # printf is a builtin: the passphrase reaches gpg through a pipe, never through argv.
+            key=$(printf '%s\n' "$passphrase" | generate-key "$name" "$email" 1) || exit 1
+            unset passphrase
+        else
+            key=$(generate-key "$name" "$email" 0) || exit 1
+        fi
         section-end
         show-answer "Key" "$key"
     fi
@@ -2406,20 +2412,6 @@ function confirm() {
     [[ $answer == [yY]* ]]
 }
 
-# ask-passphrase <header>: asks twice, hidden; prints the passphrase. Dies on cancel, an empty one,
-# or when the two differ.
-function ask-passphrase() {
-    local header=$1 first second
-    printf '\n%s: ' "$header" >&2
-    IFS= read -rs first   || { echo >&2 ; die "Cancelled." ; }
-    printf '\n%s (again): ' "$header" >&2
-    IFS= read -rs second  || { echo >&2 ; die "Cancelled." ; }
-    echo >&2
-    [[ -n $first ]]            || die "An empty passphrase is refused."
-    [[ $first == "$second" ]]  || die "The two passphrases differ."
-    printf '%s\n' "$first"
-}
-
 # show-box <line>...: the lines in a rounded box.
 function show-box() {
     local line width=0 border
@@ -2483,19 +2475,27 @@ function find-key() {
     printf '%s\n' "${matches%%$'\t'*}"
 }
 
-# generate-key <name> <email>: a new key with gpg's defaults, protected by the passphrase on the first
-# line of stdin. Prints the new key's fingerprint.
+# generate-key <name> <email> <passphrase-on-stdin>: a new key with gpg's defaults. Its passphrase is
+# the first line of stdin when <passphrase-on-stdin> is 1; otherwise gpg's own prompt (pinentry) asks.
+# Prints the new key's fingerprint.
 function generate-key() {
-    local uid="$1 <$2>" status finger_print
+    local uid="$1 <$2>" passphrase_on_stdin=$3 status finger_print
 
+    (( passphrase_on_stdin )) || info "GPG will ask you for a passphrase to protect the key." >&2
     info "Generating key ..." >&2
     # gpg's normal output goes to the terminal (stderr); its machine-readable status lines (fd 3)
     # are captured so we get the fingerprint without guessing which key is new.
-    status=$(gpg --batch --pinentry-mode loopback --passphrase-fd 0 \
-                 --status-fd 3 --quick-generate-key --yes "$uid" 3>&1 1>&2) \
-        || die "Creating the key failed."
+    if (( passphrase_on_stdin )); then
+        status=$(gpg --batch --pinentry-mode loopback --passphrase-fd 0 \
+                     --status-fd 3 --quick-generate-key --yes "$uid" 3>&1 1>&2) \
+            || die "Creating the key failed."
+    else
+        status=$(gpg --batch --status-fd 3 --quick-generate-key --yes "$uid" 3>&1 1>&2) \
+            || die "Creating the key failed."
+    fi
     finger_print=$(printf '%s\n' "$status" | awk '$2 == "KEY_CREATED" { print $4 }')
-    [[ -n $finger_print ]] || die "Creating the key failed."
+    # gpg exits 0 when the user answers No to its own "Continue?", and simply makes no key.
+    [[ -n $finger_print ]] || die "Cancelled — no key was created."
 
     printf '%s\n' "$finger_print"
 }
