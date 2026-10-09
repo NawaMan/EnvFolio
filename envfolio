@@ -262,7 +262,8 @@ function accept-unsafe-store() {
 function store-init-usage() {
     cat <<'EOF'
 Usage: envfolio store init [--key <id>] [--allow-unsafe-folder]
-       envfolio store init [--new-key] [--name <name>] [--email <email>] [--passphrase-stdin] [--allow-unsafe-folder]
+       envfolio store init [--new-key] [--name <name>] [--email <email>] [--passphrase-stdin|--passphrase-fd <n>]
+                           [--allow-unsafe-folder]
 EOF
 }
 
@@ -283,6 +284,9 @@ Options:
   --email <email>     The new key's email.
   --passphrase-stdin  Read the new key's passphrase from the first line of stdin.
                       Needs --name and --email. An empty passphrase is refused.
+  --passphrase-fd <n> Read the new key's passphrase from the first line of file descriptor <n>,
+                      e.g. --passphrase-fd 3 3< pass.txt. stdin stays free, so anything not given
+                      is still asked for. An empty passphrase is refused.
   --allow-unsafe-folder
                       Use an existing folder that is someone else's or open to other users without
                       asking (still with the warning).
@@ -293,23 +297,26 @@ Examples: MANUAL.md, section `envfolio store init`.
 EOF
 }
 
-# envfolio store init [--key <id>] | [--new-key] [--name <name>] [--email <email>] [--passphrase-stdin]
-#                     [--allow-unsafe-folder]
+# envfolio store init [--key <id>] | [--new-key] [--name <name>] [--email <email>]
+#                     [--passphrase-stdin|--passphrase-fd <n>] [--allow-unsafe-folder]
 # Anything not given is asked for. An existing key needs no passphrase: the store only encrypts to it.
 StoreInit() {
-    # Processs inputs
-    local key_id="" new_key=0 name="" email="" passphrase_stdin=0 allow_unsafe=0 arg
+    # Process the command-line options
+    local key_id="" new_key=0 name="" email="" passphrase_stdin=0 passphrase_fd="" allow_unsafe=0 arg
     while (( $# > 0 )); do
         arg=$1 ; shift
         # --opt=value is the same as --opt value
         if [[ $arg == --*=* ]]; then set -- "${arg#*=}" "$@" ; arg=${arg%%=*} ; fi
         case $arg in
-            --key|--name|--email)
+            --key|--name|--email|--passphrase-fd)
                 [[ $# -gt 0 && -n $1 ]] || die "$arg needs a value."
                 case $arg in
                     --key)   key_id=$1 ;;
                     --name)  name=$1   ;;
                     --email) email=$1  ;;
+                    --passphrase-fd)
+                        [[ $1 =~ ^[0-9]+$ ]] || die "--passphrase-fd needs a file descriptor number, not '$1'."
+                        passphrase_fd=$1 ;;
                 esac
                 shift ;;
             --new-key)          new_key=1          ;;
@@ -319,19 +326,26 @@ StoreInit() {
             *) die "store init: unknown option: $arg${EXTRA_LINE}$(store-init-usage)" ;;
         esac
     done
-    [[ -n $name || -n $email ]] || (( passphrase_stdin )) && new_key=1
-    if [[ -n $key_id ]] && (( new_key )); then
-        die "--key cannot be used with --new-key, --name, --email or --passphrase-stdin."
-    fi
-    # stdin carries the passphrase, so nothing else can be asked for.
-    if (( passphrase_stdin )) && [[ -z $name || -z $email ]]; then
-        die "--passphrase-stdin needs --name and --email too."
-    fi
+
+    section "Overview"
+    cat >&2 <<'EOF'
+This creates your EnvFolio store, where your texts and secrets are kept. It needs:
+  - A folder for the store.
+  - A GPG key to protect it: an existing one, or a new one made from your name and email.
+A new key also needs a passphrase. An existing key needs none: the store is only encrypted to it.
+EOF
+
+    section "Parameters"
+
+    # Input: the store path — ENVFOLIO_STORE_DIR, default ~/.envfolio (see STORE_PATH at the top)
+    show-answer "Store path" "$(tilde-path "$STORE_PATH")"
 
     local status=0
+    # Input: the state of the store folder (ENVFOLIO_STORE_DIR, default ~/.envfolio)
     store-exists || status=$?
     # An empty folder is as good as none: the store is made inside it, its mode left as it is.
     if (( status == 2 )) && is-empty-dir "$STORE_PATH"; then
+        # Input: the folder's owner and mode; --allow-unsafe-folder, or a y/N answer on stdin
         accept-unsafe-store "$allow_unsafe" "$passphrase_stdin"
         status=1
     fi
@@ -344,30 +358,84 @@ StoreInit() {
             "(maybe an earlier \`envfolio store init\` did not finish)." \
             "Remove it and run again, or run with${EXTRA_LINE}    ENVFOLIO_STORE_DIR=<other-folder> $0 store init."
     fi
+    if [[ -d $STORE_PATH ]]; then
+        info "The store path is available: an empty folder, used as it is." >&2
+    else
+        info "The store path is available: the folder will be made (private, 700)." >&2
+    fi
 
-    local key uid expiry
-    section "Select key to protect the envfolio store."
+    # --name / --email / --passphrase-stdin / --passphrase-fd imply --new-key
+    [[ -n $name || -n $email || -n $passphrase_fd ]] || (( passphrase_stdin )) && new_key=1
+    if [[ -n $key_id ]] && (( new_key )); then
+        die "--key cannot be used with --new-key, --name, --email, --passphrase-stdin or --passphrase-fd."
+    fi
+    if (( passphrase_stdin )) && [[ -n $passphrase_fd ]]; then
+        die "--passphrase-stdin and --passphrase-fd cannot be used together."
+    fi
+    if [[ -n $passphrase_fd ]] && ! { : <&"$passphrase_fd" ; } 2>/dev/null; then
+        die "--passphrase-fd $passphrase_fd: no such file descriptor is open."
+    fi
+    # stdin carries the passphrase, so nothing else can be asked for.
+    if (( passphrase_stdin )) && [[ -z $name || -z $email ]]; then
+        die "--passphrase-stdin needs --name and --email too."
+    fi
+
+    # Input: the key — --key; otherwise picked from the keyring's secret keys, or a new one.
+    local key="" passphrase="" uid expiry
     if [[ -n $key_id ]]; then
         key=$(find-key "$key_id") || exit 1
+    elif (( ! new_key )); then
+        key=$(select-key) || exit 1
+        [[ -n $key ]] || new_key=1
+    fi
+    if (( new_key )); then
+        # Input: the new key's name and email — --name / --email, or asked with a guess
+        # (git, passwd, EMAIL).
+        [[ -n $name  ]] || name=$( ask-text "Your name"  "e.g. Jane Doe"         "$(guess-name)")  || exit 1
+        [[ -n $name  ]] || die "A name is needed to create a key."
+        show-answer "Name" "$name"
+        [[ -n $email ]] || email=$(ask-text "Your email" "e.g. jane@example.com" "$(guess-email)") || exit 1
+        [[ -n $email ]] || die "An email is needed to create a key."
+        show-answer "Email" "$email"
+        # Input: the new key's passphrase — the first line of stdin with --passphrase-stdin, or of
+        # fd <n> with --passphrase-fd <n>; otherwise asked twice.
+        if (( passphrase_stdin )); then
+            IFS= read -rs passphrase || true
+            [[ -n $passphrase ]] || die "No passphrase on stdin."
+        elif [[ -n $passphrase_fd ]]; then
+            IFS= read -rs -u "$passphrase_fd" passphrase || true
+            [[ -n $passphrase ]] || die "No passphrase on file descriptor $passphrase_fd."
+        else
+            passphrase=$(ask-passphrase "Passphrase for the new key") || exit 1
+        fi
+        show-answer "Passphrase" "************"
+    else
         show-answer "Key" "$key"
-    elif (( new_key )); then
+    fi
+
+    section "Creating"
+    info "That is everything needed. Creating the store now." >&2
+
+    if (( new_key )); then
         section "Generating the key."
-        key=$(generate-key "$name" "$email" "$passphrase_stdin") || exit 1
+        # printf is a builtin: the passphrase reaches gpg through a pipe, never through argv.
+        key=$(printf '%s\n' "$passphrase" | generate-key "$name" "$email") || exit 1
+        unset passphrase
         section-end
         show-answer "Key" "$key"
-    else
-        key=$(select-key) || exit 1
     fi
+    # Input: the key's user id (it becomes the git author) and its expiry, from the keyring
     uid=$(key-uid "$key")
     [[ -n $uid ]] || die "Cannot find the key $key."
     expiry=$(key-expiry "$key")
 
     # A folder made here, and the git history, are for the owner only (700).
     umask 077
-    mkdir -p "$STORE_PATH"     || die "Cannot create $STORE_PATH."
+    mkdir -p "$STORE_PATH" || die "Cannot create $STORE_PATH."
 
     section "Create the password store"
-    pass init "$key"           || die "pass init failed."
+    # Input: PASSWORD_STORE_DIR, set to the store's folder at startup
+    pass init "$key" || die "pass init failed."
 
     section "Start the store's git history"
     start-store-history "$uid"
@@ -2338,6 +2406,20 @@ function confirm() {
     [[ $answer == [yY]* ]]
 }
 
+# ask-passphrase <header>: asks twice, hidden; prints the passphrase. Dies on cancel, an empty one,
+# or when the two differ.
+function ask-passphrase() {
+    local header=$1 first second
+    printf '\n%s: ' "$header" >&2
+    IFS= read -rs first   || { echo >&2 ; die "Cancelled." ; }
+    printf '\n%s (again): ' "$header" >&2
+    IFS= read -rs second  || { echo >&2 ; die "Cancelled." ; }
+    echo >&2
+    [[ -n $first ]]            || die "An empty passphrase is refused."
+    [[ $first == "$second" ]]  || die "The two passphrases differ."
+    printf '%s\n' "$first"
+}
+
 # show-box <line>...: the lines in a rounded box.
 function show-box() {
     local line width=0 border
@@ -2401,56 +2483,26 @@ function find-key() {
     printf '%s\n' "${matches%%$'\t'*}"
 }
 
-# generate-key [name] [email] [passphrase_stdin]
-# Generate a new key with gpg's defaults. A missing name or email is asked for (pre-filled with our
-# best guess). The passphrase comes from gpg's own prompt, or — when passphrase_stdin is 1 — from
-# the first line of stdin. Prints the new key's fingerprint.
+# generate-key <name> <email>: a new key with gpg's defaults, protected by the passphrase on the first
+# line of stdin. Prints the new key's fingerprint.
 function generate-key() {
-    local name=${1:-} email=${2:-} passphrase_stdin=${3:-0} uid status finger_print passphrase
-
-    [[ -n $name && -n $email ]] \
-        || info "You will be asked for the name and email needed to generate a key." >&2
-    (( passphrase_stdin )) \
-        || info "GPG will ask you to enter a passphrase used to protect the key." >&2
-
-    [[ -n $name  ]] || name=$( ask-text "Your name"  "e.g. Jane Doe"         "$(guess-name)")  || exit 1
-    [[ -n $email ]] || email=$(ask-text "Your email" "e.g. jane@example.com" "$(guess-email)") || exit 1
-    show-answer "Name"  "${name}"  "      "
-    show-answer "Email" "${email}" "     "
-    [[ -n $name && -n $email ]] || die "A name and an email are needed to create a key."
-    uid="$name <$email>"
-
-    if (( passphrase_stdin )); then
-        IFS= read -rs passphrase || true
-        # gpg would take an empty one and leave the key unprotected.
-        [[ -n $passphrase ]] || die "No passphrase on stdin."
-    fi
-    show-answer "Passphrase" "************"
+    local uid="$1 <$2>" status finger_print
 
     info "Generating key ..." >&2
     # gpg's normal output goes to the terminal (stderr); its machine-readable status lines (fd 3)
     # are captured so we get the fingerprint without guessing which key is new.
-    if (( passphrase_stdin )); then
-        # printf is a builtin: the passphrase reaches gpg through a pipe, never through argv.
-        status=$(printf '%s\n' "$passphrase" \
-            | gpg --batch --pinentry-mode loopback --passphrase-fd 0 \
-                  --status-fd 3 --quick-generate-key --yes "$uid" 3>&1 1>&2) \
-            || die "Creating the key failed."
-        unset passphrase
-    else
-        status=$(gpg --batch --status-fd 3 --quick-generate-key --yes "$uid" 3>&1 1>&2) \
-            || die "Creating the key failed."
-    fi
+    status=$(gpg --batch --pinentry-mode loopback --passphrase-fd 0 \
+                 --status-fd 3 --quick-generate-key --yes "$uid" 3>&1 1>&2) \
+        || die "Creating the key failed."
     finger_print=$(printf '%s\n' "$status" | awk '$2 == "KEY_CREATED" { print $4 }')
-    # gpg exits 0 when the user answers No to its own "Continue?", and simply makes no key.
-    [[ -n $finger_print ]] || die "Cancelled — no key was created."
+    [[ -n $finger_print ]] || die "Creating the key failed."
 
     printf '%s\n' "$finger_print"
 }
 
-# Pick the key for the store: reuse an existing one if the user wants, otherwise create one.
-# Prints the fingerprint. Always a list, even for one key: confirm reports cancel the same as No,
-# which would turn a cancel into "create a new key".
+# Pick the key for the store: an existing one, or a new one. Prints the fingerprint, or nothing for
+# a new key. Always a list, even for one key: confirm reports cancel the same as No, which would
+# turn a cancel into "create a new key".
 function select-key() {
     local create_new_key="Create a new key" line choices=() choice key
     # Shown as "<user id>  [<fingerprint>]"; the fingerprint is read back from the brackets.
@@ -2459,24 +2511,13 @@ function select-key() {
     done < <(list-secret-keys)
     choices+=("${create_new_key}")
 
-    # No existing keys: nothing to choose, go straight to generating a new key.
-    if (( ${#choices[@]} == 1 )); then
-        choice=${create_new_key}
-    else
-        choice=$(ask-choice "Which GPG key should encrypt the store?" "${choices[@]}") \
-            || die "Cancelled."
-    fi
-
-    if [[ $choice == "${create_new_key}" ]]; then
-        section "Generating the key."
-        key=$(generate-key) || exit 1
-        section-end
-    else
-        key=${choice##*[}
-        key=${key%]}
-    fi
-    show-answer "Key" "$key"
-    printf '%s\n' "$key"
+    # No existing keys: nothing to choose, a new key it is.
+    (( ${#choices[@]} > 1 )) || return 0
+    choice=$(ask-choice "Which GPG key should encrypt the store?" "${choices[@]}") \
+        || die "Cancelled."
+    [[ $choice != "${create_new_key}" ]] || return 0
+    key=${choice##*[}
+    printf '%s\n' "${key%]}"
 }
 
 # The first user id ("Name <email>") of the key with fingerprint <fpr>.
