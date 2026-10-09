@@ -263,7 +263,7 @@ Starting style, not law — deviate explicitly (say so and why) rather than sile
   `tree` (already a dependency of `pass`) because `secret ls`/`find` run pass's own `tree` line
   with the texts left out; `tar` + `gzip` because
   `envfolio store backup` packs everything into one file. Every prompt goes through the Input helpers
-  (`ask-text`, `ask-choice`, `confirm`, `show-box`), in plain bash. Plus one clipboard tool — `pbcopy` /
+  (`ask-text`, `ask-passphrase`, `ask-choice`, `confirm`, `show-box`), in plain bash. Plus one clipboard tool — `pbcopy` /
   `wl-copy` / `xclip`, whichever `pass` itself uses on the machine — for `envfolio text show -c`.
   The script's `ensure-requirements` is the authoritative list. Anything
   beyond bash builtins and POSIX coreutils needs a stated reason and the user's OK — flag it with
