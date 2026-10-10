@@ -36,7 +36,7 @@ encrypts it, runs `pass init`, and starts the store's git history.
 
 ```
 envfolio store init [--key <id>] [--allow-unsafe-folder]
-envfolio store init [--new-key] [--name <name>] [--email <email>] [--passphrase-stdin] [--allow-unsafe-folder]
+envfolio store init [--new-key] [--name <name>] [--email <email>] [--passphrase-stdin|--passphrase-fd <n>] [--allow-unsafe-folder]
 ```
 
 | Option | Meaning |
@@ -46,11 +46,14 @@ envfolio store init [--new-key] [--name <name>] [--email <email>] [--passphrase-
 | `--name <name>` | The new key's name. |
 | `--email <email>` | The new key's email. |
 | `--passphrase-stdin` | Read the new key's passphrase from the first line of stdin instead of gpg's prompt. Needs `--name` and `--email`. An empty passphrase is refused. |
+| `--passphrase-fd <n>` | Read the new key's passphrase from the first line of file descriptor `<n>` (e.g. `--passphrase-fd 3 3< pass.txt`). stdin stays free, so anything not given is still asked for. An empty passphrase is refused. |
 | `--allow-unsafe-folder` | Use an existing empty folder that is someone else's or open to other users without asking. The warning still shows. See *The store folder is private*. |
 | `-h`, `--help` | Show the options and stop. Nothing is created. |
 
-`--opt=value` works as well as `--opt value`. Anything not given is asked for. `--key` cannot be
-combined with the new-key options. It fails if `$ENVFOLIO_STORE_DIR` is a folder with anything in it;
+`--opt=value` works as well as `--opt value`. EnvFolio first says what it needs, then confirms each
+input given and asks for the ones that are not; only then is anything made. Before gpg asks you to
+choose a new key's passphrase, EnvFolio says so and waits for Enter. `--key` cannot be combined
+with the new-key options. It fails if `$ENVFOLIO_STORE_DIR` is a folder with anything in it;
 an empty folder is fine.
 
 ### Ask for everything
@@ -265,7 +268,7 @@ Copies some items into one file, to bring them into another store with `envfolio
 a server, in a booth, or on another machine. Your store's key never leaves this machine.
 
 ```
-envfolio store export [-s|--secrets] [--to <key>] [--passphrase-stdin] [-o|--output <file>|<folder>] [<name>...]
+envfolio store export [-s|--secrets] [--to <key>|--passphrase-stdin|--passphrase-fd <n>] [-o|--output <file>|<folder>] [<name>...]
 ```
 
 | Option | Meaning |
@@ -273,15 +276,21 @@ envfolio store export [-s|--secrets] [--to <key>] [--passphrase-stdin] [-o|--out
 | `-s`, `--secrets` | Take the secrets in a folder too. A secret named on its own always goes. |
 | `--to <key>` | Lock the file to this public key — a key file (`.asc`) or a key in your keyring (fingerprint, key id or email) — instead of a passphrase. Only its secret key can open the file. A key file is never added to your keyring. |
 | `--passphrase-stdin` | Read the file's passphrase from the first line of stdin instead of gpg's prompt. Not with `--to`. Needs a `<name>`. An empty passphrase is refused. |
-| `-o`, `--output <file>\|<folder>` | Where to write the file. |
+| `--passphrase-fd <n>` | Read the file's passphrase from the first line of file descriptor `<n>`. Not with `--to`. stdin stays free, so the items can still be picked. An empty passphrase is refused. |
+| `-o`, `--output <file>\|<folder>` | Where to write the file. With no `-o`, EnvFolio asks. |
 | `-h`, `--help` | Show the options and stop. |
 
 A `<name>` is a text or a secret, or a folder: every text under it, and its secrets with
 `--secrets`. With no `<name>`, EnvFolio lists every item, numbered, and asks which ones
 (`1 3 5-7`, or `all`).
 
+With neither `--to` nor a passphrase option, EnvFolio asks how to lock the file: with a passphrase
+(gpg asks for it, after EnvFolio says so and waits for Enter), or to a public key — picked from the
+usable keys in your keyring, or given as a key file.
+
 The file is `<file>` (`.envfolio` added when missing), or `store-<date>.envfolio` in `<folder>` —
-default the current folder, never inside the store. An existing file is never replaced. The file
+never inside the store. With no `-o`, EnvFolio asks, offering `store-<date>.envfolio` in the current
+folder (Tab completes names). An existing file is never replaced. The file
 is readable by you only.
 
 How it works:
@@ -325,7 +334,7 @@ Only the server's secret key can open the file, so it can travel through places 
 Brings items from a file made by `envfolio store export` into the EnvFolio store.
 
 ```
-envfolio store import [-a|--all] [--overwrite|--skip-existing] [--key <id>] [--passphrase-stdin] [--allow-unsafe-folder] <file> [<name>...]
+envfolio store import [-a|--all] [--overwrite|--skip-existing] [--key <id>] [--passphrase-stdin|--passphrase-fd <n>] [--allow-unsafe-folder] [<file> [<name>...]]
 ```
 
 | Option | Meaning |
@@ -334,12 +343,15 @@ envfolio store import [-a|--all] [--overwrite|--skip-existing] [--key <id>] [--p
 | `--overwrite` | Replace the items already in the store. |
 | `--skip-existing` | Keep the items already in the store; take only the new ones. |
 | `--key <id>` | With no store yet: make it with this key, as `envfolio store init --key`. |
-| `--passphrase-stdin` | Read the file's passphrase (or your key's, for a file locked to it) from the first line of stdin. Needs `--all` or a `<name>`. |
+| `--passphrase-stdin` | Read the file's passphrase (or your key's, for a file locked to it) from the first line of stdin. Needs `<file>`, and `--all` or a `<name>`; with no store yet, `--key` too. |
+| `--passphrase-fd <n>` | The same, from the first line of file descriptor `<n>`. stdin stays free, so anything not given is still asked for. |
 | `--allow-unsafe-folder` | Import into a store folder that is someone else's or open to other users without asking. The warning still shows. |
 | `-h`, `--help` | Show the options and stop. |
 
-A `<name>` is an item in the export, or a folder: every item under it. With neither `<name>` nor
-`--all`, EnvFolio lists the export's items and asks which ones.
+With no `<file>`, EnvFolio asks for it (Tab completes names). A `<name>` is an item in the export,
+or a folder: every item under it. With neither `<name>` nor `--all`, EnvFolio lists the export's
+items and asks which ones. Before gpg asks for the passphrase of a file locked with one, EnvFolio
+says so and waits for Enter.
 
 Every text is checked against the export's signature first; one that does not verify stops the
 import before anything is written. Then each secret is encrypted to the store's key (by
@@ -347,8 +359,9 @@ import before anything is written. Then each secret is encrypted to the store's 
 one commit in the store's history, as when you add it by hand. The export's key is used in a
 keyring of its own and never added to yours.
 
-With no store yet, one is made first, as `envfolio store init` does (`--key` picks its key without
-asking). An item already in the store is overwritten or skipped as `--overwrite` or
+With no store yet, one is made first, as `envfolio store init` does: its key — `--key`, or picked,
+or a new one from your name and email — is asked for before anything is made. An item already in
+the store is overwritten or skipped as `--overwrite` or
 `--skip-existing` says; with neither, EnvFolio lists them and asks.
 
 ### Into a new store
