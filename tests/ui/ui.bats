@@ -58,6 +58,30 @@ teardown() {
     [[ $stderr == *"Cancelled"* ]]
 }
 
+@test "ask-path: piped, prints the answer; an empty answer keeps the guess" {
+    run --separate-stderr ask-path "Export file" "a .envfolio file" <<< "out/x.envfolio"
+    [ "$status" -eq 0 ]
+    [ "$output" = "out/x.envfolio" ]
+    [[ $stderr == *"Export file [a .envfolio file]:"* ]]
+    run --separate-stderr ask-path "File" "" "./store-1.envfolio" <<< ""
+    [ "$output" = "./store-1.envfolio" ]
+}
+
+@test "ask-path: a leading ~ is the home folder" {
+    run --separate-stderr ask-path "File" <<< "~/out/x.envfolio"
+    [ "$output" = "$HOME/out/x.envfolio" ]
+    run --separate-stderr ask-path "File" <<< "~"
+    [ "$output" = "$HOME" ]
+    run --separate-stderr ask-path "File" <<< "a~/b"
+    [ "$output" = "a~/b" ]
+}
+
+@test "ask-path: end of input cancels" {
+    run --separate-stderr ask-path "Export file" < /dev/null
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"Cancelled"* ]]
+}
+
 @test "confirm: y is yes; empty, n and end of input are no" {
     run confirm "Sure?" <<< "y"   ; [ "$status" -eq 0 ]
     run confirm "Sure?" <<< "Yes" ; [ "$status" -eq 0 ]

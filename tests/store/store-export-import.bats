@@ -225,7 +225,7 @@ left-clean() {
     make-store
     "$ENVFOLIO" store export -o "$SANDBOX/out" --passphrase-stdin web < <(printf 'p\n') >/dev/null 2>&1
     go-there
-    run "$ENVFOLIO" store import --all --passphrase-stdin "$(export-file)" < <(printf 'wrong\n')
+    run "$ENVFOLIO" store import --all --key server@example.com --passphrase-stdin "$(export-file)" < <(printf 'wrong\n')
     [ "$status" -eq 1 ]
     [ ! -e "$ENVFOLIO_STORE_DIR" ]
     echo hi > "$SANDBOX/x.tgz"
@@ -235,9 +235,10 @@ left-clean() {
     run "$ENVFOLIO" store import --all "$(export-file)" web
     [ "$status" -eq 1 ]
     [[ $output == *"give no <name> with it"* ]]
-    run "$ENVFOLIO" store import
+    # No file, and no input to answer the questions (the new store's key, then the file).
+    run "$ENVFOLIO" store import < /dev/null
     [ "$status" -eq 1 ]
-    [[ $output == *"Usage: envfolio store import"* ]]
+    [[ $output == *"Cancelled"* ]]
     [ ! -e "$ENVFOLIO_STORE_DIR" ]
     left-clean
 }
