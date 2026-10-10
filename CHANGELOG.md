@@ -4,6 +4,29 @@ User-visible changes to EnvFolio. Newest first.
 
 ## Unreleased
 
+### Changed
+
+- `envfolio store init`, `store export` and `store import` now walk you through what they need:
+  an overview first, then each input either confirmed ("✓ …") or asked for when it is missing,
+  then "That is everything needed" — and only then is anything made. Anything given as an option
+  is not asked.
+- `store export` asks where to write the file when there is no `-o`, offering
+  `store-<date>.envfolio` in the current folder (the default name was `export-<date>-<time>.envfolio`),
+  and how to lock it when neither `--to` nor a passphrase option is given: with a passphrase, or
+  to a public key picked from your keyring or given as a key file. A `--to` key is checked before
+  anything is made.
+- `store import` asks for the export file when none is given. With no store yet, it asks for the
+  new store's key (as `store init` does) before anything is made, instead of in the middle of the
+  import. `--passphrase-stdin` now also needs the file given, and `--key` when there is no store yet.
+- Before gpg asks for a passphrase that EnvFolio knows it will ask for — a new key's, an export
+  file's — EnvFolio says which one it is and waits for Enter.
+- At a file question, Tab completes file and folder names, and a leading `~` is your home folder.
+
+### Added
+
+- `--passphrase-fd <n>` for `store init`, `store export` and `store import`: the passphrase from the
+  first line of file descriptor `<n>`, leaving stdin free for the other questions.
+
 ## 0.2.0 — 2026-10-07
 
 ### Changed
