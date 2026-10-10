@@ -110,7 +110,7 @@ ALL=(aws/key.gpg web/github.gpg web/home.txt web/user.txt)
 @test "store export flow 1: nothing given — picks items, asks the file and the lock; gpg asks the passphrase" {
     use-pinentry pw-one
     cd "$SANDBOX/out"
-    export-answering all "" 1 --
+    export-answering all "" 1 "" --
     [[ $output == *"Which items?"* && $output == *"File (or a folder)"* && $output == *"How should the file be locked?"* ]]
     [[ $output == *"gpg asks for it when it locks the file"* ]]
     assert-export "$(export-file-in "$SANDBOX/out")" pw-one "${ALL[@]}"
@@ -119,7 +119,7 @@ ALL=(aws/key.gpg web/github.gpg web/home.txt web/user.txt)
 @test "store export flow 2: <name> — asks the file and the lock" {
     use-pinentry pw-two
     cd "$SANDBOX/out"
-    export-answering "" 1 -- web
+    export-answering "" 1 "" -- web
     [[ $output != *"Which items?"* && $output == *"File (or a folder)"* && $output == *"How should the file be locked?"* ]]
     [[ $output == *"left out 1 secret(s) under 'web'"* ]]
     assert-export "$(export-file-in "$SANDBOX/out")" pw-two web/home.txt web/user.txt
@@ -128,21 +128,21 @@ ALL=(aws/key.gpg web/github.gpg web/home.txt web/user.txt)
 @test "store export flow 3: <name> --secrets — the folder's secrets too" {
     use-pinentry pw-three
     cd "$SANDBOX/out"
-    export-answering "" 1 -- --secrets web
+    export-answering "" 1 "" -- --secrets web
     [[ $output != *"Which items?"* ]]
     assert-export "$(export-file-in "$SANDBOX/out")" pw-three web/github.gpg web/home.txt web/user.txt
 }
 
 @test "store export flow 3b: the file typed at the prompt — written there, .envfolio added" {
     use-pinentry pw-three-b
-    export-answering "$SANDBOX/out/typed" 1 -- --secrets web
+    export-answering "$SANDBOX/out/typed" 1 "" -- --secrets web
     [[ $output == *"File (or a folder)"* ]]
     assert-export "$SANDBOX/out/typed.envfolio" pw-three-b web/github.gpg web/home.txt web/user.txt
 }
 
 @test "store export flow 4: + -o <file> — written there, .envfolio added, not asked" {
     use-pinentry pw-four
-    export-answering 1 -- --secrets -o "$SANDBOX/out/to-server" web
+    export-answering 1 "" -- --secrets -o "$SANDBOX/out/to-server" web
     [[ $output != *"Which items?"* && $output != *"File (or a folder)"* ]]
     assert-export "$SANDBOX/out/to-server.envfolio" pw-four web/github.gpg web/home.txt web/user.txt
 }
@@ -223,7 +223,7 @@ ALL=(aws/key.gpg web/github.gpg web/home.txt web/user.txt)
 
 @test "store export flow: gpg's passphrase prompt cancelled — nothing made" {
     use-pinentry --cancel
-    export-answering 1 -- -o "$SANDBOX/out" web
+    export-answering 1 "" -- -o "$SANDBOX/out" web
     [[ $output == *"Packing the export failed"* ]]
     assert-nothing-made
 }
@@ -239,4 +239,17 @@ ALL=(aws/key.gpg web/github.gpg web/home.txt web/user.txt)
     export-answering -- -o "$SANDBOX/out" --passphrase-fd 7 web
     [[ $output == *"no such file descriptor"* ]]
     assert-nothing-made
+}
+
+@test "store export flow: told before gpg asks the file's passphrase; input ends there — nothing made" {
+    use-pinentry pw
+    export-answering 1 -- -o "$SANDBOX/out" web
+    [[ $output == *"Next, gpg asks you to choose a passphrase for the export file"* && $output == *"Cancelled"* ]]
+    assert-nothing-made
+}
+
+@test "store export flow: locked to a key — no word about a passphrase" {
+    export-answering -- -o "$SANDBOX/out" --to "$SANDBOX/server.asc" web
+    [ "$status" -eq 0 ]
+    [[ $output != *"Next, gpg asks"* ]]
 }

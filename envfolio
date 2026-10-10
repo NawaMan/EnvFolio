@@ -425,6 +425,9 @@ EOF
             key=$(printf '%s\n' "$passphrase" | generate-key "$name" "$email" 1) || exit 1
             unset passphrase
         else
+            acknowledge "Next, gpg asks you to choose the new key's passphrase (twice)." \
+                        "It protects the key: you need it to read your secrets and to add texts." \
+                        "It cannot be reset, so keep it safe."
             key=$(generate-key "$name" "$email" 0) || exit 1
         fi
         section-end
@@ -885,7 +888,7 @@ EOF
     if [[ -z $file ]]; then
         file=./store-$(date +%Y%m%d)$EXPORT_SUFFIX
         if (( ! passphrase_stdin )); then
-            file=$(ask-text "File (or a folder)" "" "$file") || exit 1
+            file=$(ask-path "File (or a folder)" "" "$file") || exit 1
         fi
     fi
     [[ -d $file ]] && file=${file%/}/store-$(date +%Y%m%d)$EXPORT_SUFFIX
@@ -906,7 +909,7 @@ EOF
         if [[ $choice == "$to_key" ]]; then
             to=$(pick-public-key) || exit 1
             [[ -n $to ]] \
-                || to=$(ask-text "Public key" "a .asc file, or a fingerprint, key id or email") || exit 1
+                || to=$(ask-path "Public key" "a .asc file, or a fingerprint, key id or email") || exit 1
             [[ -n $to ]] || die "A public key is needed to lock the file to it."
         fi
     fi
@@ -982,6 +985,10 @@ EOF
     } > "$pack/envfolio-export.txt"
 
     section "Pack and lock the file"
+    if [[ -z $recipient && -z $passphrase ]]; then
+        acknowledge "Next, gpg asks you to choose a passphrase for the export file (twice)." \
+                    "Whoever imports the file needs it: tell them another way than the file itself."
+    fi
     local seal=(gpg --symmetric --compress-algo none --output -)
     [[ -n $passphrase ]] && seal=(gpg --batch --pinentry-mode loopback --passphrase-fd 3 "${seal[@]:1}")
     [[ -n $recipient ]] && seal=(env GNUPGHOME="$home" gpg --batch --trust-model always --compress-algo none
@@ -1014,7 +1021,11 @@ EOF
 # --- store import -------------------------------------------------------------
 
 function store-import-usage() {
-    echo "Usage: envfolio store import [-a|--all] [--overwrite|--skip-existing] [--key <id>] [--passphrase-stdin] [--allow-unsafe-folder] <file> [<name>...]"
+    cat <<'EOF'
+Usage: envfolio store import [-a|--all] [--overwrite|--skip-existing] [--key <id>]
+                             [--passphrase-stdin|--passphrase-fd <n>] [--allow-unsafe-folder]
+                             [<file> [<name>...]]
+EOF
 }
 
 function store-import-help() {
@@ -1024,11 +1035,12 @@ function store-import-help() {
 Bring items from a file made by `envfolio store export` into the EnvFolio store
 ($ENVFOLIO_STORE_DIR, default ~/.envfolio): the secrets are encrypted to the store's key, the texts
 checked and signed with it (gpg may ask for its passphrase). With no store yet, one is made first,
-as `envfolio store init` does. The export's key is used here only, never added to your keyring.
+as `envfolio store init` does: its key is asked for here, before anything is made. The export's key
+is used here only, never added to your keyring.
 
-A <name> is an item in the export, or a folder: every item under it. With neither <name> nor
---all, EnvFolio lists the export's items and asks which ones. An item already in the store is
-overwritten or skipped, as the options say; otherwise EnvFolio asks.
+With no <file>, EnvFolio asks for it. A <name> is an item in the export, or a folder: every item
+under it. With neither <name> nor --all, EnvFolio lists the export's items and asks which ones. An
+item already in the store is overwritten or skipped, as the options say; otherwise EnvFolio asks.
 
 Options:
   -a, --all           Take every item in the export.
@@ -1036,7 +1048,11 @@ Options:
   --skip-existing     Keep the items already in the store; take only the new ones.
   --key <id>          With no store yet: make it with this key, as `envfolio store init --key`.
   --passphrase-stdin  Read the file's passphrase (or your key's, for a file locked to it) from the
-                      first line of stdin. Needs --all or a <name>.
+                      first line of stdin. Needs <file>, and --all or a <name>; with no store
+                      yet, --key too.
+  --passphrase-fd <n> The same, from the first line of file descriptor <n>, e.g.
+                      --passphrase-fd 3 3< pass.txt. stdin stays free, so anything not given is
+                      still asked for.
   --allow-unsafe-folder
                       Use a store folder that is someone else's or open to other users without
                       asking (still with the warning).
@@ -1044,18 +1060,24 @@ Options:
 EOF
 }
 
-# envfolio store import [-a|--all] [--overwrite|--skip-existing] [--key <id>] [--passphrase-stdin]
-#                       [--allow-unsafe-folder] <file> [<name>...]
+# envfolio store import [-a|--all] [--overwrite|--skip-existing] [--key <id>]
+#                       [--passphrase-stdin|--passphrase-fd <n>] [--allow-unsafe-folder] [<file> [<name>...]]
+# Anything not given is asked for: the file, a new store's key, the items, what to do with clashes.
 StoreImport() {
-    local all=0 clash="" key_id="" passphrase_stdin=0 allow_unsafe=0 file="" names=() arg
+    # Process the command-line options
+    local all=0 clash="" key_id="" passphrase_stdin=0 passphrase_fd="" allow_unsafe=0 file="" names=() arg
     while (( $# > 0 )); do
         arg=$1 ; shift
         case $arg in
             -a|--all)           all=1 ;;
             --overwrite)        clash=overwrite ;;
             --skip-existing)    clash=skip ;;
-            --key)              [[ $# -gt 0 && -n $1 ]] || die "--key needs a value." ; key_id=$1 ; shift ;;
+            --key|--passphrase-fd)
+                                [[ $# -gt 0 && -n $1 ]] || die "$arg needs a value."
+                                if [[ $arg == --key ]]; then key_id=$1 ; else passphrase_fd=$1 ; fi
+                                shift ;;
             --key=*)            key_id=${arg#*=} ;;
+            --passphrase-fd=*)  passphrase_fd=${arg#*=} ;;
             --passphrase-stdin) passphrase_stdin=1 ;;
             --allow-unsafe-folder) allow_unsafe=1 ;;
             -h|--help)          store-import-help ; return 0 ;;
@@ -1063,22 +1085,65 @@ StoreImport() {
             *)  if [[ -z $file ]]; then file=$arg ; else names+=("$arg") ; fi ;;
         esac
     done
-    [[ -n $file ]] || die "$(store-import-usage)"
-    [[ -f $file ]] || die "There is no file $file."
-    [[ $file == *"$EXPORT_SUFFIX" ]] || die "$file is not an EnvFolio export: its name does not end in $EXPORT_SUFFIX."
     (( ! all || ${#names[@]} == 0 )) || die "--all takes every item; give no <name> with it."
-    (( ! passphrase_stdin || all || ${#names[@]} > 0 )) \
-        || die "--passphrase-stdin needs --all or the items named: stdin cannot also answer which ones."
-    store-exists && [[ -n $key_id ]] && die "--key is only for making a new store, and $STORE_PATH is one already."
-    # Before anything is read or written: the store, or the empty folder it is to be made in.
-    if store-exists || is-empty-dir "$STORE_PATH"; then
-        accept-unsafe-store "$allow_unsafe" "$passphrase_stdin"
+    if (( passphrase_stdin )) && [[ -n $passphrase_fd ]]; then
+        die "--passphrase-stdin and --passphrase-fd cannot be used together."
+    fi
+    # stdin carries the passphrase, so it cannot also answer the questions.
+    if (( passphrase_stdin )); then
+        [[ -n $file ]] || die "--passphrase-stdin needs the file given: stdin cannot also answer which one."
+        (( all || ${#names[@]} > 0 )) \
+            || die "--passphrase-stdin needs --all or the items named: stdin cannot also answer which ones."
+    fi
+    if [[ -n $passphrase_fd ]]; then
+        [[ $passphrase_fd =~ ^[0-9]+$ ]] \
+            || die "--passphrase-fd needs a file descriptor number, not '$passphrase_fd'."
+        { : <&"$passphrase_fd" ; } 2>/dev/null \
+            || die "--passphrase-fd $passphrase_fd: no such file descriptor is open."
+    fi
+    [[ -z $file ]] || check-export-file "$file"
+    # The store's folder: one there is, or none yet (missing, or an empty folder) to make one in.
+    local status=0 new_store=0
+    store-exists || status=$?
+    if (( status == 2 )) && ! is-empty-dir "$STORE_PATH"; then
+        die "$STORE_PATH exists but is not a ready EnvFolio store" \
+            "(maybe an earlier \`envfolio store init\` did not finish)." \
+            "Remove it and run again, or run with${EXTRA_LINE}    ENVFOLIO_STORE_DIR=<other-folder>"
+    fi
+    (( status == 0 )) || new_store=1
+    (( new_store )) || [[ -z $key_id ]] || die "--key is only for making a new store, and $STORE_PATH is one already."
+    if (( new_store && passphrase_stdin )) && [[ -z $key_id ]]; then
+        die "--passphrase-stdin with no store yet needs --key: stdin cannot also answer which key."
     fi
 
+    section "Overview"
+    cat >&2 <<'EOF'
+This brings items from a file made by `envfolio store export` into your EnvFolio store. With no
+store yet, one is made first. It needs:
+  - The export file, and what opens it: its passphrase, or your key it is locked to.
+  - The items to take.
+  - The store: the one there is, or the key for a new one.
+  - What to do with the items already in the store.
+gpg may ask for your store key's passphrase to sign the texts.
+EOF
+
+    section "Parameters"
+
+    # Input: the export file — <file>, or asked.
+    [[ -n $file ]] || file=$(ask-path "Export file" "a .envfolio file") || exit 1
+    [[ -n $file ]] || die "An export file is needed."
+    check-export-file "$file"
+    show-answer "File" "$(tilde-path "$file")"
+
+    # Input: what opens the file — its passphrase (--passphrase-stdin / --passphrase-fd, or gpg
+    # asks), or your key it is locked to (gpg may ask for that key's passphrase).
     local passphrase=""
     if (( passphrase_stdin )); then
         IFS= read -rs passphrase || true
         [[ -n $passphrase ]] || die "No passphrase on stdin."
+    elif [[ -n $passphrase_fd ]]; then
+        IFS= read -rs -u "$passphrase_fd" passphrase || true
+        [[ -n $passphrase ]] || die "No passphrase on file descriptor $passphrase_fd."
     fi
 
     umask 077
@@ -1089,9 +1154,11 @@ StoreImport() {
     new-gpg-home "$home"
     mkdir "$stage/unpack"
 
-    section "Open the export"
+    if [[ -z $passphrase ]] && is-passphrase-locked "$file"; then
+        acknowledge "Next, gpg asks for the export file's passphrase: the one chosen when it was exported."
+    fi
     local open=(gpg --decrypt --output -)
-    (( passphrase_stdin )) && open=(gpg --batch --pinentry-mode loopback --passphrase-fd 3 "${open[@]:1}")
+    [[ -n $passphrase ]] && open=(gpg --batch --pinentry-mode loopback --passphrase-fd 3 "${open[@]:1}")
     "${open[@]}" < "$file" 3< <(printf '%s\n' "$passphrase") | tar -xzf - -C "$stage/unpack"
     [[ ${PIPESTATUS[*]} == "0 0" ]] || die "Opening $file failed."
     unset passphrase
@@ -1109,12 +1176,16 @@ StoreImport() {
     [[ -s $stage/unpack/key.asc && -d $root ]] || die "$file has no key or no items in it."
     GNUPGHOME=$home gpg --batch --quiet --import "$stage/unpack/key.asc" 2>/dev/null
     GNUPGHOME=$home gpg --list-secret-keys "$key" >/dev/null 2>&1 || die "$file has no secret key $key."
-    show-answer "Key" "$key"
+    show-answer "Opened" "the export's key is $key"
 
+    # Input: the items — --all, the <name>s, or picked from a list
     select-items import "$root" 1 "$all" "${names[@]}"
+    local item name signer texts=0
+    for item in "${SELECTED[@]}"; do [[ $item == *.gpg ]] || texts=$(( texts + 1 )) ; done
+    show-answer "Items" "${#SELECTED[@]} (texts: $texts, secrets: $(( ${#SELECTED[@]} - texts )))"
+    for item in "${SELECTED[@]}"; do printf '    %s\n' "$(item-label "$item")" >&2 ; done
 
     # Every text must be the one the export signed, before anything is written.
-    local item name signer
     for item in "${SELECTED[@]}"; do
         [[ $item == *.txt ]] || continue
         signer=$(GNUPGHOME=$home gpg --status-fd 1 --verify "$root/$item.sig" "$root/$item" 2>/dev/null \
@@ -1122,26 +1193,66 @@ StoreImport() {
         [[ $signer == "$key" ]] || die "import: the signature of '${item%.txt}' in the export does not verify."
     done
 
-    if ! store-exists; then
-        section "No EnvFolio store yet: make one"
-        if [[ -n $key_id ]]; then StoreInit --key "$key_id" ; else StoreInit ; fi
+    # Input: the store — ENVFOLIO_STORE_DIR, default ~/.envfolio (see STORE_PATH at the top). Before
+    # anything is written: the store, or the empty folder it is to be made in, must be safe.
+    (( status == 1 )) || accept-unsafe-store "$allow_unsafe" "$passphrase_stdin"
+    if (( new_store )); then
+        show-answer "Store path" "$(tilde-path "$STORE_PATH") — no store yet: one is made first"
+    else
+        show-answer "Store path" "$(tilde-path "$STORE_PATH")"
+    fi
+
+    # Input: a new store's key — --key; otherwise picked from the keyring's secret keys, or a new
+    # one from a name and email (asked with a guess). gpg asks a new key's passphrase when it makes it.
+    local init_args=() name email
+    if (( new_store )); then
+        if [[ -n $key_id ]]; then
+            key_id=$(find-key "$key_id") || exit 1
+        else
+            key_id=$(select-key) || exit 1
+        fi
+        if [[ -n $key_id ]]; then
+            show-answer "Store key" "$key_id"
+            init_args=(--key "$key_id")
+        else
+            name=$( ask-text "Your name"  "e.g. Jane Doe"         "$(guess-name)")  || exit 1
+            [[ -n $name  ]] || die "A name is needed to create a key."
+            email=$(ask-text "Your email" "e.g. jane@example.com" "$(guess-email)") || exit 1
+            [[ -n $email ]] || die "An email is needed to create a key."
+            show-answer "Store key" "a new one for $name <$email> — gpg asks for its passphrase"
+            init_args=(--name "$name" --email "$email")
+        fi
+    fi
+
+    # Input: what to do with the items already in the store — --overwrite / --skip-existing, or asked.
+    local clashes=()
+    for item in "${SELECTED[@]}"; do [[ -f $STORE_PATH/$item ]] && clashes+=("$item") ; done
+    if (( ${#clashes[@]} > 0 )); then
+        if [[ -z $clash ]]; then
+            echo >&2
+            echo "Already in the store:" >&2
+            for item in "${clashes[@]}"; do printf '    %s\n' "$(item-label "$item")" >&2 ; done
+            case $(ask-choice "What to do with these ${#clashes[@]}?" "Overwrite them" "Skip them") in
+                Overwrite*) clash=overwrite ;;
+                Skip*)      clash=skip ;;
+                *)          die "Cancelled." ;;
+            esac
+        fi
+        show-answer "Already in the store" "${#clashes[@]}: $( [[ $clash == skip ]] && echo "skipped" || echo "overwritten" )"
+    fi
+
+    section "Importing"
+    info "That is everything needed. Importing now." >&2
+
+    if (( new_store )); then
+        section "Make the store"
+        StoreInit "${init_args[@]}"
     fi
     require-store
 
-    local clashes=()
-    for item in "${SELECTED[@]}"; do [[ -f $STORE_PATH/$item ]] && clashes+=("$item") ; done
-    if (( ${#clashes[@]} > 0 )) && [[ -z $clash ]]; then
-        section "Already in the store"
-        for item in "${clashes[@]}"; do item-label "$item" >&2 ; done
-        case $(ask-choice "What to do with these ${#clashes[@]}?" "Overwrite them" "Skip them") in
-            Overwrite*) clash=overwrite ;;
-            Skip*)      clash=skip ;;
-            *)          die "Cancelled." ;;
-        esac
-    fi
-
     section "Import the items (gpg may ask for your store key's passphrase)"
-    local texts=0 secrets=0 skipped=0
+    local secrets=0 skipped=0
+    texts=0
     for item in "${SELECTED[@]}"; do
         name=${item%.*}
         if [[ -f $STORE_PATH/$item && $clash == skip ]]; then
@@ -1168,6 +1279,21 @@ StoreImport() {
              "Texts:   $texts" \
              "Secrets: $secrets" \
              "Skipped: $skipped (already in the store)"
+}
+
+# check-export-file <file>: die unless <file> is there and named as an export.
+function check-export-file() {
+    [[ -f $1 ]] || die "There is no file $1."
+    [[ $1 == *"$EXPORT_SUFFIX" ]] || die "$1 is not an EnvFolio export: its name does not end in $EXPORT_SUFFIX."
+}
+
+# is-passphrase-locked <file>: whether an export is locked with a passphrase, not to a key — its first
+# OpenPGP packet is a symmetric-key session key (tag 3: 0x8c-0x8f old format, 0xc3 new).
+function is-passphrase-locked() {
+    case $(od -An -tx1 -N1 "$1" | tr -d ' \n') in
+        8c|8d|8e|8f|c3) return 0 ;;
+        *)              return 1 ;;
+    esac
 }
 
 # --- Items: choose some -------------------------------------------------------
@@ -2472,6 +2598,33 @@ function ask-text() {
     printf '%s\n' "$value"
 }
 
+# ask-path <header> [placeholder] [guess]: as ask-text, for a file or folder. At a terminal, Tab
+# completes names (readline: `read -e`, which draws the prompt itself). A leading ~ is the home folder.
+function ask-path() {
+    local header="$1"
+    local placeholder="${2:-}"
+    local guess_value="${3:-}"
+    local value hint prompt
+    hint=${guess_value:-$placeholder}
+    prompt="$header${hint:+ [$hint]}: "
+    if [[ -t 0 ]]; then
+        printf '\n' >&2
+        IFS= read -e -r -p "$prompt" value || { echo >&2 ; die "Cancelled." ; }
+    else
+        printf '\n%s' "$prompt" >&2
+        IFS= read -r value || die "Cancelled."
+    fi
+    # readline puts a space after a name it completes.
+    while [[ $value == *" " ]]; do value=${value% } ; done
+    [[ -n $value ]] || value=$guess_value
+    # shellcheck disable=SC2088  # a literal ~ typed in is matched here, and made $HOME
+    case $value in
+        "~")   value=$HOME ;;
+        "~/"*) value=$HOME/${value#"~/"} ;;
+    esac
+    printf '%s\n' "$value"
+}
+
 # ask-choice <header> <option>...: prints the chosen option; fails on cancel (Ctrl-D).
 function ask-choice() {
     local header=$1 choice ; shift
@@ -2490,6 +2643,15 @@ function confirm() {
     printf '%s [y/N] ' "$1" >&2
     IFS= read -r answer || { echo >&2; return 1; }
     [[ $answer == [yY]* ]]
+}
+
+# acknowledge <line>...: tell the user what comes next, and wait for Enter. Dies on cancel (Ctrl-D).
+function acknowledge() {
+    local answer
+    printf '\n' >&2
+    printf '%s\n' "$@" >&2
+    printf 'Press Enter to continue (Ctrl-D cancels): ' >&2
+    IFS= read -r answer || { echo >&2 ; die "Cancelled." ; }
 }
 
 # show-box <line>...: the lines in a rounded box.
@@ -2561,7 +2723,6 @@ function find-key() {
 function generate-key() {
     local uid="$1 <$2>" passphrase_on_stdin=$3 status finger_print
 
-    (( passphrase_on_stdin )) || info "GPG will ask you for a passphrase to protect the key." >&2
     info "Generating key ..." >&2
     # gpg's normal output goes to the terminal (stderr); its machine-readable status lines (fd 3)
     # are captured so we get the fingerprint without guessing which key is new.
@@ -2581,9 +2742,9 @@ function generate-key() {
 }
 
 # One line per public key that can encrypt — not expired, revoked, disabled or invalid:
-# "<fingerprint><TAB><first user id>". [<id>] limits the list as in list-secret-keys.
+# "<fingerprint><TAB><first user id>".
 function list-public-keys() {
-    gpg --list-keys --with-colons "$@" 2>/dev/null | awk -F: '
+    gpg --list-keys --with-colons 2>/dev/null | awk -F: '
         $1 == "pub"             { ok = ($2 !~ /[eridn]/ && $12 ~ /E/ && $12 !~ /D/)
                                   want_fpr = ok; want_uid = ok; fpr = ""; next }
         $1 == "fpr" && want_fpr { fpr = $10; want_fpr = 0; next }
@@ -2620,6 +2781,7 @@ function select-key() {
 
     # No existing keys: nothing to choose, a new key it is.
     (( ${#choices[@]} > 1 )) || return 0
+    echo >&2
     choice=$(ask-choice "Which GPG key should encrypt the store?" "${choices[@]}") \
         || die "Cancelled."
     [[ $choice != "${create_new_key}" ]] || return 0
