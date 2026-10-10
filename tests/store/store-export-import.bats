@@ -66,7 +66,7 @@ left-clean() {
     [[ $output == *"Items:  2 (texts: 2, secrets: 0)"* ]]
     [[ $output == *"left out 1 secret(s) under 'web'"* ]]
     local file ; file=$(export-file)
-    [[ ${file##*/} =~ ^export-[0-9]{8}-[0-9]{6}\.envfolio$ ]]
+    [[ ${file##*/} =~ ^store-[0-9]{8}\.envfolio$ ]]
     [ "$(stat -c %a "$file" 2>/dev/null || stat -f %Lp "$file")" = "600" ]
     # Locked: not a readable tar.
     run tar -tzf "$file"

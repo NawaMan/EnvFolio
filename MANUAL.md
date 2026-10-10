@@ -280,7 +280,7 @@ A `<name>` is a text or a secret, or a folder: every text under it, and its secr
 `--secrets`. With no `<name>`, EnvFolio lists every item, numbered, and asks which ones
 (`1 3 5-7`, or `all`).
 
-The file is `<file>` (`.envfolio` added when missing), or `export-<date>-<time>.envfolio` in `<folder>` —
+The file is `<file>` (`.envfolio` added when missing), or `store-<date>.envfolio` in `<folder>` —
 default the current folder, never inside the store. An existing file is never replaced. The file
 is readable by you only.
 
@@ -302,8 +302,9 @@ How it works:
 envfolio store export web
 ```
 
-Takes the texts under `web/` (its secrets need `--secrets`); gpg asks for a passphrase for the
-file (twice) and writes `export-20261006-120000.envfolio` here.
+Takes the texts under `web/` (its secrets need `--secrets`). EnvFolio asks where to write the file
+(Enter takes `store-20261006.envfolio` here) and how to lock it; pick the passphrase, and
+gpg asks for one for the file (twice).
 
 ### Lock it to the server's public key
 
@@ -353,7 +354,7 @@ asking). An item already in the store is overwritten or skipped as `--overwrite`
 ### Into a new store
 
 ```bash
-envfolio store import --all --key server@example.com export-20261006-120000.envfolio
+envfolio store import --all --key server@example.com store-20261006.envfolio
 ```
 
 Makes the store with the server's key, then imports every item.
@@ -361,7 +362,7 @@ Makes the store with the server's key, then imports every item.
 ### Merge into a store, keeping what is there
 
 ```bash
-envfolio store import --skip-existing export-20261006-120000.envfolio aws/key web/user
+envfolio store import --skip-existing store-20261006.envfolio aws/key web/user
 ```
 
 Takes `aws/key` and `web/user`; one already in the store stays as it is.
