@@ -774,7 +774,10 @@ StoreRestore() {
 EXPORT_SUFFIX=.envfolio
 
 function store-export-usage() {
-    echo "Usage: envfolio store export [-s|--secrets] [--to <key>] [--passphrase-stdin] [-o|--output <file>|<folder>] [<name>...]"
+    cat <<'EOF'
+Usage: envfolio store export [-s|--secrets] [--to <key>|--passphrase-stdin|--passphrase-fd <n>]
+                             [-o|--output <file>|<folder>] [<name>...]
+EOF
 }
 
 function store-export-help() {
@@ -784,14 +787,15 @@ function store-export-help() {
 Copy some items into one file, to bring them into another store with `envfolio store import` — on
 a server, in a booth, or on another machine. Your store's key stays here: the items are encrypted
 and signed with a new key made for this export only, and the file is locked — with a passphrase,
-or with --to, to the public key of where it is going. gpg may ask for your store key's passphrase
-to read the secrets.
+or with --to, to the public key of where it is going. With neither given, EnvFolio asks which.
+gpg may ask for your store key's passphrase to read the secrets.
 
 A <name> is a text or secret, or a folder: every text under it, and its secrets with --secrets.
 With no <name>, EnvFolio lists every item and asks which ones.
 
-The file is <file> (.envfolio added when missing), or export-<date>-<time>.envfolio in <folder>,
-default the current one — never inside the store. An existing file is never replaced.
+The file is <file> (.envfolio added when missing), or store-<date>.envfolio in <folder> —
+never inside the store. An existing file is never replaced. With no -o, EnvFolio asks, offering
+store-<date>.envfolio in the current folder (taken as it is with --passphrase-stdin).
 
 Options:
   -s, --secrets       Take the secrets in a folder too. A secret named on its own always goes.
@@ -799,24 +803,36 @@ Options:
                       keyring (fingerprint, key id or email). Only its secret key can open it.
   --passphrase-stdin  Read the file's passphrase from the first line of stdin, instead of gpg's
                       prompt. Not with --to. Needs a <name>. An empty passphrase is refused.
+  --passphrase-fd <n> Read the file's passphrase from the first line of file descriptor <n>,
+                      e.g. --passphrase-fd 3 3< pass.txt. Not with --to. stdin stays free, so the
+                      items can still be picked. An empty passphrase is refused.
   -o, --output <file>|<folder>
                       Where to write the file.
   -h, --help          Show this help.
 EOF
 }
 
-# envfolio store export [-s|--secrets] [--to <key>] [--passphrase-stdin] [-o|--output <file>|<folder>] [<name>...]
+# envfolio store export [-s|--secrets] [--to <key>|--passphrase-stdin|--passphrase-fd <n>]
+#                       [-o|--output <file>|<folder>] [<name>...]
+# Anything not given is asked for: the items, and how to lock the file.
 StoreExport() {
-    local secrets=0 to="" passphrase_stdin=0 target="" names=() arg
+    # Process the command-line options
+    local secrets=0 to="" passphrase_stdin=0 passphrase_fd="" target="" names=() arg
     while (( $# > 0 )); do
         arg=$1 ; shift
         case $arg in
             -s|--secrets)       secrets=1 ;;
-            --to|-o|--output)   [[ $# -gt 0 && -n $1 ]] || die "$arg needs a value."
-                                if [[ $arg == --to ]]; then to=$1 ; else target=$1 ; fi
+            --to|-o|--output|--passphrase-fd)
+                                [[ $# -gt 0 && -n $1 ]] || die "$arg needs a value."
+                                case $arg in
+                                    --to)            to=$1 ;;
+                                    --passphrase-fd) passphrase_fd=$1 ;;
+                                    *)               target=$1 ;;
+                                esac
                                 shift ;;
             --to=*)             to=${arg#*=} ;;
             --output=*)         target=${arg#*=} ;;
+            --passphrase-fd=*)  passphrase_fd=${arg#*=} ;;
             --passphrase-stdin) passphrase_stdin=1 ;;
             -h|--help)          store-export-help ; return 0 ;;
             --)                 names+=("$@") ; break ;;
@@ -824,34 +840,112 @@ StoreExport() {
             *)                  names+=("$arg") ;;
         esac
     done
-    [[ -z $to ]] || (( ! passphrase_stdin )) || die "--passphrase-stdin is for a passphrase; a file locked --to needs none."
+    if (( passphrase_stdin )) && [[ -n $passphrase_fd ]]; then
+        die "--passphrase-stdin and --passphrase-fd cannot be used together."
+    fi
+    [[ -z $to ]] || { (( ! passphrase_stdin )) && [[ -z $passphrase_fd ]] ; } \
+        || die "--passphrase-stdin and --passphrase-fd are for a passphrase; a file locked --to needs none."
     (( ! passphrase_stdin || ${#names[@]} > 0 )) \
         || die "--passphrase-stdin needs the items named: stdin cannot also answer which ones."
+    if [[ -n $passphrase_fd ]]; then
+        [[ $passphrase_fd =~ ^[0-9]+$ ]] \
+            || die "--passphrase-fd needs a file descriptor number, not '$passphrase_fd'."
+        { : <&"$passphrase_fd" ; } 2>/dev/null \
+            || die "--passphrase-fd $passphrase_fd: no such file descriptor is open."
+    fi
     require-store
 
-    local file=${target:-.}
-    [[ -d $file ]] && file=${file%/}/export-$(date +%Y%m%d-%H%M%S)$EXPORT_SUFFIX
+    section "Overview"
+    cat >&2 <<'EOF'
+This copies some items into one file, to bring them into another store with `envfolio store import`.
+The items are encrypted and signed with a new key made for this export only; your store's key
+stays here. The file is locked with a passphrase, or to the public key of where it is going.
+It needs:
+  - The items to export.
+  - Where to write the file.
+  - How to lock it.
+gpg may ask for your store key's passphrase to read the secrets.
+EOF
+
+    section "Parameters"
+
+    # Input: the store — ENVFOLIO_STORE_DIR, default ~/.envfolio (see STORE_PATH at the top)
+    show-answer "Store path" "$(tilde-path "$STORE_PATH")"
+
+    # Input: the items — the <name>s (a folder's secrets too with --secrets), or picked from a list
+    select-items export "$STORE_PATH" "$secrets" 0 "${names[@]}"
+    local item texts=0
+    for item in "${SELECTED[@]}"; do [[ $item == *.gpg ]] || texts=$(( texts + 1 )) ; done
+    show-answer "Items" "${#SELECTED[@]} (texts: $texts, secrets: $(( ${#SELECTED[@]} - texts )))"
+    for item in "${SELECTED[@]}"; do printf '    %s\n' "$(item-label "$item")" >&2 ; done
+
+    # Input: the file — -o <file>|<folder>; otherwise asked, offering a new file in the current
+    # folder (taken as it is when stdin carries the passphrase, so cannot answer).
+    local file=$target
+    if [[ -z $file ]]; then
+        file=./store-$(date +%Y%m%d)$EXPORT_SUFFIX
+        if (( ! passphrase_stdin )); then
+            file=$(ask-text "File (or a folder)" "" "$file") || exit 1
+        fi
+    fi
+    [[ -d $file ]] && file=${file%/}/store-$(date +%Y%m%d)$EXPORT_SUFFIX
     [[ $file == *"$EXPORT_SUFFIX" ]] || file+=$EXPORT_SUFFIX
     [[ ! -e $file ]]            || die "$file already exists."
     [[ -d $(dirname "$file") ]] || die "There is no folder $(dirname "$file")."
     [[ $(cd "$(dirname "$file")" && pwd -P)/ != "$(cd "$STORE_PATH" && pwd -P)"/* ]] \
         || die "$file is inside the store; write the export somewhere else."
+    show-answer "File" "$(tilde-path "$file")"
 
-    select-items export "$STORE_PATH" "$secrets" 0 "${names[@]}"
-
-    local passphrase=""
-    if (( passphrase_stdin )); then
-        IFS= read -rs passphrase || true
-        [[ -n $passphrase ]] || die "No passphrase on stdin."
+    # Input: the lock — --to <key>, or a passphrase (--passphrase-stdin / --passphrase-fd);
+    # with neither, asked: a passphrase (gpg asks for it later), or a public key.
+    local choice to_key="To a public key"
+    if [[ -z $to && -z $passphrase_fd ]] && (( ! passphrase_stdin )); then
+        echo >&2
+        choice=$(ask-choice "How should the file be locked?" "With a passphrase" "$to_key") \
+            || die "Cancelled."
+        if [[ $choice == "$to_key" ]]; then
+            to=$(pick-public-key) || exit 1
+            [[ -n $to ]] \
+                || to=$(ask-text "Public key" "a .asc file, or a fingerprint, key id or email") || exit 1
+            [[ -n $to ]] || die "A public key is needed to lock the file to it."
+        fi
     fi
 
     umask 077
-    local stage home pack status key recipient=""
+    local stage home pack status key recipient="" passphrase=""
     stage=$(mktemp -d) || die "Cannot make a temporary folder."
     remove-on-exit "$stage" "$file.partial"
     home=$stage/home pack=$stage/pack
     new-gpg-home "$home"
     mkdir -p "$pack/store"
+
+    if [[ -n $to ]]; then
+        # Into the export's own keyring only: a key file never lands in yours.
+        if [[ -f $to ]]; then GNUPGHOME=$home gpg --batch --quiet --import "$to"
+        else gpg --export -- "$to" | GNUPGHOME=$home gpg --batch --quiet --import
+        fi 2>/dev/null
+        recipient=$(GNUPGHOME=$home gpg --list-keys --with-colons 2>/dev/null \
+            | awk -F: '$1 == "pub" { p = 1 } $1 == "fpr" && p { p = 0 ; print $10 }')
+        [[ -n $recipient ]]                || die "No public key found in or for '$to'."
+        [[ $recipient != *$'\n'* ]]        || die "'$to' holds or matches more than one key; give one by its fingerprint."
+        show-answer "Lock" "to $recipient $(GNUPGHOME=$home key-uid "$recipient")"
+    else
+        if (( passphrase_stdin )); then
+            IFS= read -rs passphrase || true
+            [[ -n $passphrase ]] || die "No passphrase on stdin."
+        elif [[ -n $passphrase_fd ]]; then
+            IFS= read -rs -u "$passphrase_fd" passphrase || true
+            [[ -n $passphrase ]] || die "No passphrase on file descriptor $passphrase_fd."
+        fi
+        if [[ -n $passphrase ]]; then
+            show-answer "Lock" "a passphrase: ************"
+        else
+            show-answer "Lock" "a passphrase: gpg asks for it when it locks the file"
+        fi
+    fi
+
+    section "Exporting"
+    info "That is everything needed. Exporting now." >&2
 
     section "Make the export's own key"
     status=$(GNUPGHOME=$home gpg --batch --passphrase '' --status-fd 3 \
@@ -861,21 +955,8 @@ StoreExport() {
     echo "$key" > "$pack/store/.gpg-id"
     show-answer "Key" "$key"
 
-    if [[ -n $to ]]; then
-        section "Find the key to lock the file to"
-        # Into the export's own keyring only: a key file never lands in yours.
-        if [[ -f $to ]]; then GNUPGHOME=$home gpg --batch --quiet --import "$to"
-        else gpg --export -- "$to" | GNUPGHOME=$home gpg --batch --quiet --import
-        fi 2>/dev/null
-        recipient=$(GNUPGHOME=$home gpg --list-keys --with-colons 2>/dev/null \
-            | awk -F: -v own="$key" '$1 == "pub" { p = 1 } $1 == "fpr" && p { p = 0 ; if ($10 != own) print $10 }')
-        [[ -n $recipient ]]                || die "No public key found in or for '$to'."
-        [[ $recipient != *$'\n'* ]]        || die "'$to' holds or matches more than one key; give one by its fingerprint."
-        show-answer "To" "$recipient $(GNUPGHOME=$home key-uid "$recipient")"
-    fi
-
     section "Copy the items (gpg may ask for your store key's passphrase)"
-    local item name out texts=0
+    local name out
     for item in "${SELECTED[@]}"; do
         name=${item%.*} out=$pack/store/$item
         mkdir -p "$(dirname "$out")"
@@ -889,7 +970,6 @@ StoreExport() {
             cp "$STORE_PATH/$item" "$out"
             GNUPGHOME=$home gpg --batch --quiet --local-user "$key" --detach-sign --output "$out.sig" "$out" \
                 || die "export: could not sign '$name'."
-            texts=$(( texts + 1 ))
         fi
         show-answer "Copied" "$(item-label "$item")"
     done
@@ -903,7 +983,7 @@ StoreExport() {
 
     section "Pack and lock the file"
     local seal=(gpg --symmetric --compress-algo none --output -)
-    (( passphrase_stdin )) && seal=(gpg --batch --pinentry-mode loopback --passphrase-fd 3 "${seal[@]:1}")
+    [[ -n $passphrase ]] && seal=(gpg --batch --pinentry-mode loopback --passphrase-fd 3 "${seal[@]:1}")
     [[ -n $recipient ]] && seal=(env GNUPGHOME="$home" gpg --batch --trust-model always --compress-algo none
                                  --encrypt --recipient "$recipient" --output -)
     # As in store backup: the passphrase reaches gpg on fd 3, never in argv.
@@ -2498,6 +2578,33 @@ function generate-key() {
     [[ -n $finger_print ]] || die "Cancelled — no key was created."
 
     printf '%s\n' "$finger_print"
+}
+
+# One line per public key that can encrypt — not expired, revoked, disabled or invalid:
+# "<fingerprint><TAB><first user id>". [<id>] limits the list as in list-secret-keys.
+function list-public-keys() {
+    gpg --list-keys --with-colons "$@" 2>/dev/null | awk -F: '
+        $1 == "pub"             { ok = ($2 !~ /[eridn]/ && $12 ~ /E/ && $12 !~ /D/)
+                                  want_fpr = ok; want_uid = ok; fpr = ""; next }
+        $1 == "fpr" && want_fpr { fpr = $10; want_fpr = 0; next }
+        $1 == "uid" && want_uid { print fpr "\t" $10; want_uid = 0 }
+    '
+}
+
+# Pick a public key from the keyring to lock a file to. Prints its fingerprint, or nothing for
+# "A key file (.asc), or another key id" — and when the keyring has none to offer.
+function pick-public-key() {
+    local other="A key file (.asc), or another key id" line choices=() choice
+    # Shown as "<user id>  [<fingerprint>]"; the fingerprint is read back from the brackets.
+    while IFS= read -r line; do
+        choices+=("${line#*$'\t'}  [${line%%$'\t'*}]")
+    done < <(list-public-keys)
+    (( ${#choices[@]} > 0 )) || return 0
+    echo >&2
+    choice=$(ask-choice "Which public key?" "${choices[@]}" "$other") || die "Cancelled."
+    [[ $choice != "$other" ]] || return 0
+    choice=${choice##*[}
+    printf '%s\n' "${choice%]}"
 }
 
 # Pick the key for the store: an existing one, or a new one. Prints the fingerprint, or nothing for
