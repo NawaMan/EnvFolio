@@ -15,6 +15,11 @@
 .claude/scheduled_tasks.lock
 
 # Backups and exports hold a secret key — never commit one by accident.
+*--folio.tar.gz*
+*--folio.gpg*
+*.folio
+*.folio.partial
+# Made before 0.4.0, under the old names.
 *--envfolio.tar.gz*
 *--envfolio.gpg*
 *.envfolio

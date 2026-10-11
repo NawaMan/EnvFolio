@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 
-# envfolio secret generate, through the real ./envfolio, against a throwaway GPG home and store.
+# folio secret generate, through the real ./folio, against a throwaway GPG home and store.
 
 setup() {
     SANDBOX=$(mktemp -d)
@@ -8,13 +8,13 @@ setup() {
     export GIT_CONFIG_GLOBAL="$SANDBOX/no-gitconfig"
     export GIT_CONFIG_NOSYSTEM=1
     export GNUPGHOME="$SANDBOX/gnupg"
-    export ENVFOLIO_STORE_DIR="$SANDBOX/store"
-    export PASSWORD_STORE_DIR="$ENVFOLIO_STORE_DIR"
+    export FOLIO_STORE_DIR="$SANDBOX/store"
+    export PASSWORD_STORE_DIR="$FOLIO_STORE_DIR"
     export XDG_STATE_HOME="$SANDBOX/state"
     export USER=sb-test-nobody
     mkdir -p "$HOME" && mkdir -m 700 "$GNUPGHOME"
-    [[ $ENVFOLIO_STORE_DIR == "$SANDBOX"/* && $GNUPGHOME == "$SANDBOX"/* ]]
-    ENVFOLIO="$BATS_TEST_DIRNAME/../../envfolio"
+    [[ $FOLIO_STORE_DIR == "$SANDBOX"/* && $GNUPGHOME == "$SANDBOX"/* ]]
+    FOLIO="$BATS_TEST_DIRNAME/../../folio"
 }
 
 teardown() {
@@ -32,9 +32,9 @@ teardown() {
 # A ready store, encrypted to a throwaway no-passphrase key, holding web/github and mail/work.
 make-store() {
     gpg --batch --passphrase '' --quick-generate-key "Test User <test@example.com>" default default never 2>/dev/null
-    "$ENVFOLIO" store init --key test@example.com < /dev/null >/dev/null 2>&1
-    "$ENVFOLIO" secret insert -m web/github < <(printf 's3cr3t\nuser: jane\n') >/dev/null
-    "$ENVFOLIO" secret insert -m mail/work  < <(printf 'other\n')              >/dev/null
+    "$FOLIO" store init --key test@example.com < /dev/null >/dev/null 2>&1
+    "$FOLIO" secret insert -m web/github < <(printf 's3cr3t\nuser: jane\n') >/dev/null
+    "$FOLIO" secret insert -m mail/work  < <(printf 'other\n')              >/dev/null
 }
 
 # A stand-in xclip (Linux) and pbcopy/pbpaste (macOS) whose clipboard is a sandbox file, so -c
@@ -50,14 +50,14 @@ EOF
     printf '#!/usr/bin/env bash\ncat "%s" 2>/dev/null; :\n' "$CLIPBOARD" > "$SANDBOX/bin/pbpaste"
     chmod +x "$SANDBOX/bin/xclip" "$SANDBOX/bin/pbcopy" "$SANDBOX/bin/pbpaste"
     export PATH="$SANDBOX/bin:$PATH"
-    export DISPLAY=":envfolio-test-$$"
+    export DISPLAY=":folio-test-$$"
     unset WAYLAND_DISPLAY
     export PASSWORD_STORE_CLIP_TIME=60
 }
 
 @test "MANUAL: secret generate — generate a secret" {
     make-store
-    run "$ENVFOLIO" secret generate -n api 12 < /dev/null
+    run "$FOLIO" secret generate -n api 12 < /dev/null
     [ "$status" -eq 0 ]
     local value ; value=$(pass show api)
     [[ $value =~ ^[A-Za-z0-9]{12}$ ]]
@@ -66,14 +66,14 @@ EOF
 
 @test "secret generate: 25 characters by default" {
     make-store
-    "$ENVFOLIO" secret generate api < /dev/null >/dev/null
+    "$FOLIO" secret generate api < /dev/null >/dev/null
     [ "$(pass show api | wc -c | tr -d ' ')" -eq 26 ]
 }
 
 @test "MANUAL: secret generate — copy to the clipboard" {
     make-store
     fake-clipboard
-    run "$ENVFOLIO" secret generate -c api < /dev/null
+    run "$FOLIO" secret generate -c api < /dev/null
     [ "$status" -eq 0 ]
     [[ $output == *"Copied api to clipboard"* ]]
     [[ $output != *"$(pass show api)"* ]]
@@ -82,7 +82,7 @@ EOF
 
 @test "secret generate: --in-place keeps the other lines" {
     make-store
-    run "$ENVFOLIO" secret generate -i web/github < /dev/null
+    run "$FOLIO" secret generate -i web/github < /dev/null
     [ "$status" -eq 0 ]
     [ "$(pass show web/github | head -1)" != "s3cr3t" ]
     [ "$(pass show web/github | tail -1)" = "user: jane" ]
@@ -92,26 +92,26 @@ EOF
     make-store
     local arg
     for arg in -q --qrcode -nq; do
-        run "$ENVFOLIO" secret generate "$arg" api < /dev/null
+        run "$FOLIO" secret generate "$arg" api < /dev/null
         [ "$status" -eq 1 ]
         [[ $output == *"--qrcode is not offered"* ]]
     done
-    [ ! -e "$ENVFOLIO_STORE_DIR/api.gpg" ]
+    [ ! -e "$FOLIO_STORE_DIR/api.gpg" ]
 }
 
 @test "secret generate --help: works without a store" {
-    run "$ENVFOLIO" secret generate --help
+    run "$FOLIO" secret generate --help
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: envfolio secret generate"* ]]
-    [ ! -e "$ENVFOLIO_STORE_DIR" ]
-    run "$ENVFOLIO" help secret generate
+    [[ $output == *"Usage: folio secret generate"* ]]
+    [ ! -e "$FOLIO_STORE_DIR" ]
+    run "$FOLIO" help secret generate
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: envfolio secret generate"* ]]
+    [[ $output == *"Usage: folio secret generate"* ]]
 }
 
 @test "secret generate: no store fails and creates nothing" {
-    run "$ENVFOLIO" secret generate web/github x < /dev/null
+    run "$FOLIO" secret generate web/github x < /dev/null
     [ "$status" -eq 1 ]
-    [[ $output == *"No ready EnvFolio store"*"envfolio store init"* ]]
-    [ ! -e "$ENVFOLIO_STORE_DIR" ]
+    [[ $output == *"No ready EnvFolio store"*"folio store init"* ]]
+    [ ! -e "$FOLIO_STORE_DIR" ]
 }

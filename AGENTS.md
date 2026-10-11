@@ -111,7 +111,7 @@ green light** — it is a separate pre-edit check.
 
 ### Verification guidance
 - To see how a file EnvFolio wrote is locked and what it holds — a store's `.gpg`/`.txt.sig`, a
-  backup, a `.envfolio` export — use `tools/x-ray.sh [--open] <file|folder>`. It never shows a secret
+  backup, a `.folio` export — use `tools/x-ray.sh [--open] <file|folder>`. It never shows a secret
   value, a text's contents or a key.
 - Prefer the smallest honest check: a `bats` test for a logic change, `shellcheck` always, a
   tmux-driven smoke test only when rendering, key handling or terminal state changed.
@@ -214,12 +214,12 @@ Actions → Release → Run workflow, or `gh workflow run release.yml`. Running 
 go-ahead (Rule 5) — an agent never runs it unasked.
 
 1. Keep `## Unreleased` in `CHANGELOG.md` up to date as changes land; `main` carries
-   `APP_VERSION=<next>--rc` in `envfolio` between releases.
+   `APP_VERSION=<next>--rc` in `folio` between releases.
 2. Run the workflow. It releases `APP_VERSION` without `--rc` (`0.2.0--rc` → `0.2.0`), or the
    `version` input if given (e.g. `1.0.0`).
 3. It runs shellcheck and every test on Linux (bash 5) and macOS (bash 3.2), then commits
    `APP_VERSION=0.2.0` and `## 0.2.0 — <date>`, tags `v0.2.0`, pushes both, and publishes a GitHub
-   Release with `envfolio`, `SHA256SUMS` and that CHANGELOG section as notes.
+   Release with `folio`, `SHA256SUMS` and that CHANGELOG section as notes.
 4. It then commits the next minor with `--rc` (`0.3.0--rc`) and a fresh `## Unreleased` to `main`.
    Pull it before further work.
 
@@ -262,9 +262,9 @@ Starting style, not law — deviate explicitly (say so and why) rather than sile
   `pass init`, and texts are signed with it; `git` because the store is synced as a git repo;
   `tree` (already a dependency of `pass`) because `secret ls`/`find` run pass's own `tree` line
   with the texts left out; `tar` + `gzip` because
-  `envfolio store backup` packs everything into one file. Every prompt goes through the Input helpers
+  `folio store backup` packs everything into one file. Every prompt goes through the Input helpers
   (`ask-text`, `ask-choice`, `confirm`, `show-box`), in plain bash. Plus one clipboard tool — `pbcopy` /
-  `wl-copy` / `xclip`, whichever `pass` itself uses on the machine — for `envfolio text show -c`.
+  `wl-copy` / `xclip`, whichever `pass` itself uses on the machine — for `folio text show -c`.
   The script's `ensure-requirements` is the authoritative list. Anything
   beyond bash builtins and POSIX coreutils needs a stated reason and the user's OK — flag it with
   the **⚠ New dependency** line in the proposal (Rule 0), never slip it in. Dev-only tools (`shellcheck`, `bats`, `tmux`) are fine.
@@ -288,10 +288,10 @@ Starting style, not law — deviate explicitly (say so and why) rather than sile
 An agent cannot use the app interactively. Drive it headlessly in **tmux**:
 
 ```bash
-tmux new-session -d -s envfolio-check -x 100 -y 30 './envfolio'
-tmux send-keys -t envfolio-check 'j' 'j' Enter
-tmux capture-pane -t envfolio-check -p          # assert on the rendered screen
-tmux kill-session -t envfolio-check             # tear down your own session
+tmux new-session -d -s folio-check -x 100 -y 30 './folio'
+tmux send-keys -t folio-check 'j' 'j' Enter
+tmux capture-pane -t folio-check -p          # assert on the rendered screen
+tmux kill-session -t folio-check             # tear down your own session
 ```
 
 Use a session name that is clearly yours, and never kill one you did not create.
@@ -315,14 +315,14 @@ Use a session name that is clearly yours, and never kill one you did not create.
   `read -rs`, hand it to `pass insert` via stdin, keep it in a
   variable only as long as needed, and `unset` it after. Any unavoidable temp file goes under
   `umask 077` and is removed in the `EXIT` trap.
-- **One exception, by the user's decision: `envfolio exec` and `envfolio shell`.** Their whole purpose is
+- **One exception, by the user's decision: `folio exec` and `folio shell`.** Their whole purpose is
   to hand entries to a child process as environment variables (like `op run` / `aws-vault exec`),
   so there — and only there — secrets go into a child's environment. Only with `--secrets`
   (texts load by default). Everything else still holds: values never go on a command line (EnvFolio
   `export`s them and `exec`s — never `env VAR=value cmd`), into a file, or on the screen (the
   shell lists variable names only).
 - **Texts are not secrets** — they're stored plain, so they may come from argv
-  (`envfolio text insert -t <text>`). Never offer a way to put a *secret* on the command line.
+  (`folio text insert -t <text>`). Never offer a way to put a *secret* on the command line.
 - No `set -x` / debug tracing in any path that handles a secret.
 - Don't hand-roll crypto or clipboard clearing — use `pass` (`pass show -c` / `pass generate -c`
   already clear after `PASSWORD_STORE_CLIP_TIME`). Say in the UI that the clipboard will clear.

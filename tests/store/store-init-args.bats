@@ -10,13 +10,13 @@ setup() {
     export GIT_CONFIG_NOSYSTEM=1
     unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL EMAIL
     export GNUPGHOME="$SANDBOX/gnupg"
-    export ENVFOLIO_STORE_DIR="$SANDBOX/store"
+    export FOLIO_STORE_DIR="$SANDBOX/store"
     export XDG_STATE_HOME="$SANDBOX/state"
     export USER=sb-test-nobody
     mkdir -p "$HOME" && mkdir -m 700 "$GNUPGHOME"
 
-    # shellcheck source=SCRIPTDIR/../../envfolio
-    source "$BATS_TEST_DIRNAME/../../envfolio"
+    # shellcheck source=SCRIPTDIR/../../folio
+    source "$BATS_TEST_DIRNAME/../../folio"
     [[ $STORE_PATH == "$SANDBOX"/* && $PASSWORD_STORE_DIR == "$SANDBOX"/* && $GNUPGHOME == "$SANDBOX"/* ]]
 
     gpg --batch --passphrase '' --quick-generate-key "Test User <test@example.com>" default default never 2>/dev/null
@@ -49,7 +49,7 @@ teardown() {
     run StoreInit --key "$TEST_FPR" --name Someone
     [ "$status" -eq 1 ]
     [[ $output == *"--key cannot be used"* ]]
-    [ ! -e "$ENVFOLIO_STORE_DIR" ]
+    [ ! -e "$FOLIO_STORE_DIR" ]
 }
 
 @test "store-init: --passphrase-stdin needs --name and --email" {
@@ -62,7 +62,7 @@ teardown() {
     run StoreInit --key nobody@nowhere.invalid
     [ "$status" -eq 1 ]
     [[ $output == *"No secret key matches"* ]]
-    [ ! -e "$ENVFOLIO_STORE_DIR" ]
+    [ ! -e "$FOLIO_STORE_DIR" ]
 }
 
 @test "store-init: --key matching several keys fails" {
@@ -75,14 +75,14 @@ teardown() {
 @test "store-init: --key=<email> uses that key without asking" {
     run StoreInit --key=test@example.com
     [ "$status" -eq 0 ]
-    [ "$(cat "$ENVFOLIO_STORE_DIR/.gpg-id")" = "$TEST_FPR" ]
+    [ "$(cat "$FOLIO_STORE_DIR/.gpg-id")" = "$TEST_FPR" ]
 }
 
 @test "store-init: a new key from --name, --email and --passphrase-stdin" {
     run StoreInit --name "New User" --email new@example.com --passphrase-stdin <<< "correct horse"
     [ "$status" -eq 0 ]
     local fpr
-    fpr=$(cat "$ENVFOLIO_STORE_DIR/.gpg-id")
+    fpr=$(cat "$FOLIO_STORE_DIR/.gpg-id")
     [ "$fpr" != "$TEST_FPR" ]
     [ "$(key-uid "$fpr")" = "New User <new@example.com>" ]
     # The key is protected: a wrong passphrase cannot sign with it.
@@ -96,7 +96,7 @@ teardown() {
     run StoreInit --name "New User" --email new@example.com --passphrase-stdin < /dev/null
     [ "$status" -eq 1 ]
     [[ $output == *"No passphrase on stdin"* ]]
-    [ ! -e "$ENVFOLIO_STORE_DIR/.gpg-id" ]
+    [ ! -e "$FOLIO_STORE_DIR/.gpg-id" ]
 }
 
 # The store folder's mode, on Linux and macOS.
@@ -107,28 +107,28 @@ dir-mode() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
     run StoreInit --key "$TEST_FPR"
     [ "$status" -eq 0 ]
     store-exists
-    [ "$(dir-mode "$ENVFOLIO_STORE_DIR")" = "700" ]
-    [ "$(dir-mode "$ENVFOLIO_STORE_DIR/.git")" = "700" ]
+    [ "$(dir-mode "$FOLIO_STORE_DIR")" = "700" ]
+    [ "$(dir-mode "$FOLIO_STORE_DIR/.git")" = "700" ]
 }
 
 @test "store-init: an open existing empty folder is warned about and asked; no answer, nothing made" {
-    mkdir "$ENVFOLIO_STORE_DIR" && chmod 755 "$ENVFOLIO_STORE_DIR"
+    mkdir "$FOLIO_STORE_DIR" && chmod 755 "$FOLIO_STORE_DIR"
     run StoreInit --key "$TEST_FPR" < /dev/null
     [ "$status" -eq 1 ]
-    [[ $output == *"other users can get into $ENVFOLIO_STORE_DIR"*"anyway? [y/N]"*"Nothing changed"* ]]
-    [ -z "$(ls -A "$ENVFOLIO_STORE_DIR")" ]
+    [[ $output == *"other users can get into $FOLIO_STORE_DIR"*"anyway? [y/N]"*"Nothing changed"* ]]
+    [ -z "$(ls -A "$FOLIO_STORE_DIR")" ]
 }
 
 @test "store-init: an open existing empty folder, yes: used as it is" {
-    mkdir "$ENVFOLIO_STORE_DIR" && chmod 755 "$ENVFOLIO_STORE_DIR"
+    mkdir "$FOLIO_STORE_DIR" && chmod 755 "$FOLIO_STORE_DIR"
     run StoreInit --key "$TEST_FPR" < <(echo y)
     [ "$status" -eq 0 ]
     store-exists
-    [ "$(dir-mode "$ENVFOLIO_STORE_DIR")" = "755" ]
+    [ "$(dir-mode "$FOLIO_STORE_DIR")" = "755" ]
 }
 
 @test "store-init: --allow-unsafe-folder, not asked, still warned" {
-    mkdir "$ENVFOLIO_STORE_DIR" && chmod 755 "$ENVFOLIO_STORE_DIR"
+    mkdir "$FOLIO_STORE_DIR" && chmod 755 "$FOLIO_STORE_DIR"
     run StoreInit --key "$TEST_FPR" --allow-unsafe-folder < /dev/null
     [ "$status" -eq 0 ]
     store-exists
@@ -136,16 +136,16 @@ dir-mode() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
 }
 
 @test "store-init: an empty folder of someone else's is warned about and asked" {
-    mkdir "$ENVFOLIO_STORE_DIR" && chmod 700 "$ENVFOLIO_STORE_DIR"
+    mkdir "$FOLIO_STORE_DIR" && chmod 700 "$FOLIO_STORE_DIR"
     is-own-dir() { return 1; }
     run StoreInit --key "$TEST_FPR" < /dev/null
     [ "$status" -eq 1 ]
     [[ $output == *"belongs to "*", not to you"*"anyway? [y/N]"* ]]
-    [ -z "$(ls -A "$ENVFOLIO_STORE_DIR")" ]
+    [ -z "$(ls -A "$FOLIO_STORE_DIR")" ]
 }
 
 @test "store-init: an existing private empty folder of your own, nothing asked" {
-    mkdir "$ENVFOLIO_STORE_DIR" && chmod 700 "$ENVFOLIO_STORE_DIR"
+    mkdir "$FOLIO_STORE_DIR" && chmod 700 "$FOLIO_STORE_DIR"
     run StoreInit --key "$TEST_FPR" < /dev/null
     [ "$status" -eq 0 ]
     store-exists
@@ -154,9 +154,9 @@ dir-mode() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
 
 @test "store-init: an empty folder reached through a link works too" {
     mkdir -p "$SANDBOX/mnt" && chmod 700 "$SANDBOX/mnt"
-    ln -s "$SANDBOX/mnt" "$ENVFOLIO_STORE_DIR"
+    ln -s "$SANDBOX/mnt" "$FOLIO_STORE_DIR"
     run StoreInit --key "$TEST_FPR" < /dev/null
     [ "$status" -eq 0 ]
-    [ -L "$ENVFOLIO_STORE_DIR" ]
+    [ -L "$FOLIO_STORE_DIR" ]
     [ -s "$SANDBOX/mnt/.gpg-id" ]
 }

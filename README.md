@@ -21,25 +21,25 @@ A command-line tool for password management. It is built heavily on top of [`pas
 
 # High-Level CLI Design
 
-- `envfolio store ...`  to deal with store-related actions like: init, backup, restore, import and export.
-- `envfolio text ...`   to deal with text-related actions like: show, insert, generate, edit, find, ...
-- `envfolio secret ...` to deal with secret-related actions like: show, insert, generate, edit, find, ...
-- `envfolio ls`         to list both types of items (texts/secrets) together, as a tree or flat.
-- `envfolio exec ...`   to run a command with items as environment variables (secrets only with `--secrets`).
-- `envfolio shell ...`  to start a shell with items as environment variables.
+- `folio store ...`  to deal with store-related actions like: init, backup, restore, import and export.
+- `folio text ...`   to deal with text-related actions like: show, insert, generate, edit, find, ...
+- `folio secret ...` to deal with secret-related actions like: show, insert, generate, edit, find, ...
+- `folio ls`         to list both types of items (texts/secrets) together, as a tree or flat.
+- `folio exec ...`   to run a command with items as environment variables (secrets only with `--secrets`).
+- `folio shell ...`  to start a shell with items as environment variables.
 
 Every command, with examples: [MANUAL.md](MANUAL.md).
 
 # Install
 
-EnvFolio is one bash script. Download `envfolio` from the
+EnvFolio is one bash script. Download `folio` from the
 [latest release](https://github.com/NawaMan/EnvFolio/releases/latest), check it against
 `SHA256SUMS` (`sha256sum -c SHA256SUMS`, or `shasum -a 256 -c SHA256SUMS` on macOS), make it
 executable and put it on your `PATH`:
 
 ```bash
-chmod +x envfolio && mv envfolio ~/.local/bin/
-envfolio version
+chmod +x folio && mv folio ~/.local/bin/
+folio version
 ```
 
 # Dependencies
@@ -55,5 +55,5 @@ envfolio version
 
 # Common Environment Variables
 
-- `ENVFOLIO_STORE_DIR` - the path to the EnvFolio store. Defaults to `$HOME/.envfolio`. The store has the same
+- `FOLIO_STORE_DIR` - the path to the EnvFolio store. Defaults to `$HOME/.folio`. The store has the same
   layout as a `pass` store, but is kept apart from your own `~/.password-store`.

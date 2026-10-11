@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 
-# envfolio text grep, through the real ./envfolio, against a throwaway GPG home and store.
+# folio text grep, through the real ./folio, against a throwaway GPG home and store.
 
 setup() {
     SANDBOX=$(mktemp -d)
@@ -8,13 +8,13 @@ setup() {
     export GIT_CONFIG_GLOBAL="$SANDBOX/no-gitconfig"
     export GIT_CONFIG_NOSYSTEM=1
     export GNUPGHOME="$SANDBOX/gnupg"
-    export ENVFOLIO_STORE_DIR="$SANDBOX/store"
-    export PASSWORD_STORE_DIR="$ENVFOLIO_STORE_DIR"
+    export FOLIO_STORE_DIR="$SANDBOX/store"
+    export PASSWORD_STORE_DIR="$FOLIO_STORE_DIR"
     export XDG_STATE_HOME="$SANDBOX/state"
     export USER=sb-test-nobody
     mkdir -p "$HOME" && mkdir -m 700 "$GNUPGHOME"
-    [[ $ENVFOLIO_STORE_DIR == "$SANDBOX"/* && $GNUPGHOME == "$SANDBOX"/* ]]
-    ENVFOLIO="$BATS_TEST_DIRNAME/../../envfolio"
+    [[ $FOLIO_STORE_DIR == "$SANDBOX"/* && $GNUPGHOME == "$SANDBOX"/* ]]
+    FOLIO="$BATS_TEST_DIRNAME/../../folio"
 }
 
 teardown() {
@@ -26,11 +26,11 @@ teardown() {
 # whose value also says "jane".
 make-store() {
     gpg --batch --passphrase '' --quick-generate-key "Test User <test@example.com>" default default never 2>/dev/null
-    "$ENVFOLIO" store init --key test@example.com < /dev/null >/dev/null 2>&1
-    "$ENVFOLIO" text insert -t jane                  web/user < /dev/null
-    "$ENVFOLIO" text insert -m                       note     < <(printf 'call Jane\nbuy milk\n')
-    "$ENVFOLIO" text insert -t "https://example.com" web/home < /dev/null
-    "$ENVFOLIO" secret insert -m web/github < <(printf 'jane-s3cr3t\n') >/dev/null
+    "$FOLIO" store init --key test@example.com < /dev/null >/dev/null 2>&1
+    "$FOLIO" text insert -t jane                  web/user < /dev/null
+    "$FOLIO" text insert -m                       note     < <(printf 'call Jane\nbuy milk\n')
+    "$FOLIO" text insert -t "https://example.com" web/home < /dev/null
+    "$FOLIO" secret insert -m web/github < <(printf 'jane-s3cr3t\n') >/dev/null
 }
 
 # The output with the colours taken out (grep also writes \e[K next to them).
@@ -38,7 +38,7 @@ plain() { printf '%s\n' "$output" | sed -E $'s/\e\\[[0-9;]*[mK]//g' ; }
 
 @test "MANUAL: text grep — find by value" {
     make-store
-    run "$ENVFOLIO" text grep jane
+    run "$FOLIO" text grep jane
     [ "$status" -eq 0 ]
     [ "$(plain)" = "web/user:
 jane" ]
@@ -46,7 +46,7 @@ jane" ]
 
 @test "text grep: grep options go through, matching lines only" {
     make-store
-    run "$ENVFOLIO" text grep -i jane
+    run "$FOLIO" text grep -i jane
     [ "$status" -eq 0 ]
     [[ $(plain) == *"web/user:"$'\n'"jane"* ]]
     [[ $(plain) == *"note:"$'\n'"call Jane"* ]]
@@ -55,7 +55,7 @@ jane" ]
 
 @test "text grep: texts without a match are left out" {
     make-store
-    run "$ENVFOLIO" text grep milk
+    run "$FOLIO" text grep milk
     [ "$status" -eq 0 ]
     [ "$(plain)" = "note:
 buy milk" ]
@@ -63,38 +63,38 @@ buy milk" ]
 
 @test "text grep: secrets and signatures are never searched" {
     make-store
-    run "$ENVFOLIO" text grep -i -e s3cr3t -e github -e PGP -e sig
+    run "$FOLIO" text grep -i -e s3cr3t -e github -e PGP -e sig
     [ "$status" -eq 0 ]
     [ -z "$output" ]
 }
 
 @test "text grep: no match is not an error" {
     make-store
-    run "$ENVFOLIO" text grep nothing-like-this
+    run "$FOLIO" text grep nothing-like-this
     [ "$status" -eq 0 ]
     [ -z "$output" ]
 }
 
 @test "text grep: no pattern gets the usage" {
     make-store
-    run "$ENVFOLIO" text grep
+    run "$FOLIO" text grep
     [ "$status" -eq 1 ]
-    [[ $output == *"Usage: envfolio text grep"* ]]
+    [[ $output == *"Usage: folio text grep"* ]]
 }
 
 @test "text grep: no store fails and creates nothing" {
-    run "$ENVFOLIO" text grep jane
+    run "$FOLIO" text grep jane
     [ "$status" -eq 1 ]
-    [[ $output == *"No ready EnvFolio store"*"envfolio store init"* ]]
-    [ ! -e "$ENVFOLIO_STORE_DIR" ]
+    [[ $output == *"No ready EnvFolio store"*"folio store init"* ]]
+    [ ! -e "$FOLIO_STORE_DIR" ]
 }
 
 @test "text grep --help: works without a store" {
-    run "$ENVFOLIO" text grep --help
+    run "$FOLIO" text grep --help
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: envfolio text grep"* ]]
-    run "$ENVFOLIO" help text grep
+    [[ $output == *"Usage: folio text grep"* ]]
+    run "$FOLIO" help text grep
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: envfolio text grep"* ]]
-    [ ! -e "$ENVFOLIO_STORE_DIR" ]
+    [[ $output == *"Usage: folio text grep"* ]]
+    [ ! -e "$FOLIO_STORE_DIR" ]
 }
