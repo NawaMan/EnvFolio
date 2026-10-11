@@ -4,6 +4,16 @@ User-visible changes to EnvFolio. Newest first.
 
 ## Unreleased
 
+### Changed
+
+- The store commands are one level up: `folio init`, `folio path`, `folio backup`, `folio restore`,
+  `folio export` and `folio import` (were `folio store init` and so on). `folio store …` now stops
+  and says which command to run instead.
+- `export` asks "How should the file be locked?" with "With a public key" (was "To a public key").
+- Before gpg asks for a new export file's passphrase, `export` now also says to be ready to give it.
+- At "Press Enter to continue", what you type is not shown and is dropped, so a passphrase typed there
+  too early never appears on screen.
+
 ## 0.4.0 — 2026-10-11
 
 ### Changed

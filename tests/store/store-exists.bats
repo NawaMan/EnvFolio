@@ -20,7 +20,7 @@ teardown() {
     FOLIO_STORE_DIR=rel/store source "$BATS_TEST_DIRNAME/../../folio"
     [ "$STORE_PATH" = "$SANDBOX/rel/store" ]
     [ "$PASSWORD_STORE_DIR" = "$SANDBOX/rel/store" ]
-    [ "$(StorePath)" = "$SANDBOX/rel/store" ]
+    [ "$(Path)" = "$SANDBOX/rel/store" ]
 }
 
 @test "store-exists: no folder returns 1" {
@@ -59,7 +59,7 @@ teardown() {
 @test "store-init: refuses when the store already exists" {
     mkdir -p "$FOLIO_STORE_DIR/.git"
     echo "0123456789ABCDEF" > "$FOLIO_STORE_DIR/.gpg-id"
-    run StoreInit
+    run Init
     [ "$status" -eq 1 ]
     [[ $output == *"already exists"* ]]
 }
@@ -67,7 +67,7 @@ teardown() {
 @test "store-init: refuses a non-empty folder that is not a store" {
     mkdir -p "$FOLIO_STORE_DIR"
     echo "someone else's file" > "$FOLIO_STORE_DIR/notes.txt"
-    run StoreInit
+    run Init
     [ "$status" -eq 1 ]
     [[ $output == *"not a ready EnvFolio store"* ]]
 }
@@ -75,7 +75,7 @@ teardown() {
 @test "store-init: refuses an unfinished store (no git history)" {
     mkdir -p "$FOLIO_STORE_DIR"
     echo "0123456789ABCDEF" > "$FOLIO_STORE_DIR/.gpg-id"
-    run StoreInit
+    run Init
     [ "$status" -eq 1 ]
     [[ $output == *"not a ready EnvFolio store"* ]]
 }
@@ -83,7 +83,7 @@ teardown() {
 @test "store-init: refuses a folder with only a hidden file" {
     mkdir -p "$FOLIO_STORE_DIR"
     : > "$FOLIO_STORE_DIR/.keep"
-    run StoreInit
+    run Init
     [ "$status" -eq 1 ]
     [[ $output == *"not a ready EnvFolio store"* ]]
     [ "$(ls -A "$FOLIO_STORE_DIR")" = ".keep" ]

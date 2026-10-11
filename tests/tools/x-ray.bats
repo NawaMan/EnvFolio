@@ -21,7 +21,7 @@ setup() {
     XRAY="$BATS_TEST_DIRNAME/../../tools/x-ray.sh"
 
     gpg --batch --passphrase '' --quick-generate-key "Test User <test@example.com>" default default never 2>/dev/null
-    "$FOLIO" store init --key test@example.com < /dev/null >/dev/null 2>&1
+    "$FOLIO" init --key test@example.com < /dev/null >/dev/null 2>&1
     "$FOLIO" text insert -t "VISIBLE-TEXT" web/home < /dev/null >/dev/null
     "$FOLIO" secret insert web/github < <(printf 'TOPSECRET\nTOPSECRET\n') >/dev/null
 }
@@ -54,7 +54,7 @@ shows-nothing-secret() {
 }
 
 @test "x-ray: a backup — manifest, key, store" {
-    "$FOLIO" store backup "$SANDBOX/out" >/dev/null 2>&1
+    "$FOLIO" backup "$SANDBOX/out" >/dev/null 2>&1
     run "$XRAY" "$SANDBOX"/out/*--folio.tar.gz
     [ "$status" -eq 0 ]
     [[ $output == *"folio-backup 1"* && $output == *"key.asc (a secret key; not shown)"* ]]
@@ -64,7 +64,7 @@ shows-nothing-secret() {
 }
 
 @test "x-ray: an export with a passphrase — locked, not opened without --open" {
-    "$FOLIO" store export -o "$SANDBOX/out/pw" --passphrase-stdin web < <(printf 'p\n') >/dev/null 2>&1
+    "$FOLIO" export -o "$SANDBOX/out/pw" --passphrase-stdin web < <(printf 'p\n') >/dev/null 2>&1
     run "$XRAY" "$SANDBOX/out/pw.folio"
     [ "$status" -eq 0 ]
     [[ $output == *"locked with a passphrase (AES256)"* && $output == *"--open to unlock it"* ]]
@@ -76,7 +76,7 @@ shows-nothing-secret() {
     GNUPGHOME="$SANDBOX/there" gpg --batch --passphrase '' \
         --quick-generate-key "Server <server@example.com>" default default never 2>/dev/null
     GNUPGHOME="$SANDBOX/there" gpg --armor --export server@example.com > "$SANDBOX/server.asc"
-    "$FOLIO" store export -o "$SANDBOX/out/to" --secrets --to "$SANDBOX/server.asc" web < /dev/null >/dev/null 2>&1
+    "$FOLIO" export -o "$SANDBOX/out/to" --secrets --to "$SANDBOX/server.asc" web < /dev/null >/dev/null 2>&1
     GNUPGHOME="$SANDBOX/there" run "$XRAY" --open "$SANDBOX/out/to.folio"
     [ "$status" -eq 0 ]
     [[ $output == *"encrypted to "*"Server <server@example.com>"* && $output == *"folio-export 1"* ]]

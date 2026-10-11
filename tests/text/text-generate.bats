@@ -25,7 +25,7 @@ teardown() {
 # A ready store holding a two-line text note.
 make-store() {
     gpg --batch --passphrase '' --quick-generate-key "Test User <test@example.com>" default default never 2>/dev/null
-    "$FOLIO" store init --key test@example.com < /dev/null >/dev/null 2>&1
+    "$FOLIO" init --key test@example.com < /dev/null >/dev/null 2>&1
     "$FOLIO" text insert -m note < <(printf 'old first\nkept second\n')
 }
 

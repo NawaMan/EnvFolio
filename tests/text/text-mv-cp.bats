@@ -25,7 +25,7 @@ teardown() {
 # A ready store: texts web/user, web/home, web/deep/x, mail/work; secret web/github.
 make-store() {
     gpg --batch --passphrase '' --quick-generate-key "Test User <test@example.com>" default default never 2>/dev/null
-    "$FOLIO" store init --key test@example.com < /dev/null >/dev/null 2>&1
+    "$FOLIO" init --key test@example.com < /dev/null >/dev/null 2>&1
     local name
     for name in web/user web/home web/deep/x mail/work; do
         "$FOLIO" text insert -t "$name value" "$name" < /dev/null

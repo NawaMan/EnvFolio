@@ -5,14 +5,14 @@
 # EnvFolio — a command-line tool for keeping texts and secrets, built on `pass`.
 #
 # Usage: folio <command> [args...]        (`folio help` lists the commands)
-#   folio store  init | path | backup | restore | export | import
+#   folio init | path | backup | restore | export | import
 #   folio text   ls | find | grep | show | insert | edit | generate | rm | mv | cp
 #   folio secret ls | find | grep | show | insert | edit | generate | rm | mv | cp
 #   folio ls | exec | shell | version | help [command]
 #
 # Environment:
 #   FOLIO_STORE_DIR  The EnvFolio store (default ~/.folio). Laid out like a pass store, but
-#                       kept apart from your own ~/.password-store.
+#                    kept apart from your own ~/.password-store.
 #
 # Every command, with examples: MANUAL.md
 
@@ -46,16 +46,22 @@ Main() {
 
     local category="${1:-}" ; (( $# > 0 )) && shift
     case "$category" in
-        store)   Store  "$@" ;;
-        text)    Text   "$@" ;;
-        secret)  Secret "$@" ;;
-        ls)      Ls     "$@" ;;
-        exec)    Exec   "$@" ;;
-        shell)   Shell  "$@" ;;
+        init)    Init    "$@" ;;
+        path)    Path    "$@" ;;
+        backup)  Backup  "$@" ;;
+        restore) Restore "$@" ;;
+        export)  Export  "$@" ;;
+        import)  Import  "$@" ;;
+        text)    Text    "$@" ;;
+        secret)  Secret  "$@" ;;
+        ls)      Ls      "$@" ;;
+        exec)    Exec    "$@" ;;
+        shell)   Shell   "$@" ;;
         version) Version "$@" ;;
-        help)    Help   "$@" ;;
-        "")      echo   "Usage: folio <version|help|store|text|secret|ls|exec|shell> [args...]" >&2 ; return 1 ;;
-        *)       echo   "folio: unknown command: $category"                        >&2 ; return 1 ;;
+        help)    Help    "$@" ;;
+        store)   store-is-gone "$@" ;;
+        "")      echo    "Usage: folio <init|path|backup|restore|export|import|text|secret|ls|exec|shell|version|help> [args...]" >&2 ; return 1 ;;
+        *)       echo    "folio: unknown command: $category" >&2 ; return 1 ;;
     esac
 }
 
@@ -67,12 +73,12 @@ Version() {
 Help() {
     case "$*" in
         "")                folio-help            ;;
-        "store init")      store-init-help      ;;
-        "store path")      store-path-help      ;;
-        "store backup")    store-backup-help    ;;
-        "store restore")   store-restore-help   ;;
-        "store export")    store-export-help    ;;
-        "store import")    store-import-help    ;;
+        "init")      init-help      ;;
+        "path")      path-help      ;;
+        "backup")    backup-help    ;;
+        "restore")   restore-help   ;;
+        "export")    export-help    ;;
+        "import")    import-help    ;;
         "ls")              list-help            ;;
         "exec")            run-exec-help        ;;
         "shell")           run-shell-help       ;;
@@ -105,12 +111,12 @@ function folio-help() {
 Usage: folio <command> [args...]
 
 Commands:
-  store init        Create the EnvFolio store
-  store path        Print the store's folder
-  store backup      Save the store and its key into one file
-  store restore     Bring the store and its key back from a backup
-  store export      Copy some items into one locked file, with a key of its own
-  store import      Bring items from an export into the store (made if missing)
+  init              Create the EnvFolio store
+  path              Print the store's folder
+  backup            Save the store and its key into one file
+  restore           Bring the store and its key back from a backup
+  export            Copy some items into one locked file, with a key of its own
+  import            Bring items from an export into the store (made if missing)
   text ls           List texts
   text find         Find texts by name
   text grep         Find texts by value
@@ -135,7 +141,7 @@ Commands:
   exec              Run a command with entries as environment variables
   shell             Start a shell with entries as environment variables
   version           Print EnvFolio's version
-  help [command]    Show help, e.g. `folio help store init`
+  help [command]    Show help, e.g. `folio help init`
 
 The store is $FOLIO_STORE_DIR, default ~/.folio. EnvFolio warns when that folder is someone
 else's or open to other users.
@@ -147,27 +153,24 @@ EOF
 
 EXTRA_LINE=$'\n'
 
-#== Command: Store =============================================================
+#== Old commands ===============================================================
 
-Store() {
-    local category="${1:-}" ; (( $# > 0 )) && shift
-    case "$category" in
-        path)    StorePath     "$@" ;;
-        init)    StoreInit     "$@" ;;
-        backup)  StoreBackup   "$@" ;;
-        restore) StoreRestore  "$@" ;;
-        export)  StoreExport   "$@" ;;
-        import)  StoreImport   "$@" ;;
-        "")      echo "Usage: folio store <init|path|backup|restore|export|import> [args...]" >&2 ; return 1 ;;
-        *)       echo "folio store: unknown command: $category"                               >&2 ; return 1 ;;
+# folio store <command>: the store commands were moved up a level in 0.5.0 (`folio store init` is
+# now `folio init`). Not an alias: it says what to run instead.
+function store-is-gone() {
+    case ${1:-} in
+        init|path|backup|restore|export|import)
+            die "there is no \`folio store\` any more: run \`folio $1\`." ;;
+        *)  die "there is no \`folio store\` any more: its commands are \`folio init\`, \`path\`, \`backup\`," \
+                "\`restore\`, \`export\` and \`import\`." ;;
     esac
 }
 
-# --- store path ---------------------------------------------------------------
+# --- path ---------------------------------------------------------------------
 
-function store-path-help() {
+function path-help() {
     cat <<'EOF'
-Usage: folio store path
+Usage: folio path
 
 Print the EnvFolio store's folder: $FOLIO_STORE_DIR, default ~/.folio. Works without a store.
 
@@ -176,10 +179,10 @@ Options:
 EOF
 }
 
-# folio store path
-StorePath() {
-    case ${1:-} in -h|--help) store-path-help ; return 0 ;; esac
-    (( $# == 0 )) || die "Usage: folio store path"
+# folio path
+Path() {
+    case ${1:-} in -h|--help) path-help ; return 0 ;; esac
+    (( $# == 0 )) || die "Usage: folio path"
     echo "${STORE_PATH}"
 }
 
@@ -195,7 +198,7 @@ function store-exists() {
 }
 
 # Whether $1 is a folder with nothing in it, dotfiles included. Such a folder is as good as none
-# for `store init` and `store restore`: the store is made inside it.
+# for `folio init` and `folio restore`: the store is made inside it.
 function is-empty-dir() {
     [[ -d $1 && -z $(ls -A "$1") ]]
 }
@@ -257,17 +260,17 @@ function accept-unsafe-store() {
     STORE_UNSAFE_ACCEPTED=1
 }
 
-# --- store init ---------------------------------------------------------------
+# --- init ---------------------------------------------------------------------
 
 function store-init-usage() {
     cat <<'EOF'
-Usage: folio store init [--key <id>] [--allow-unsafe-folder]
-       folio store init [--new-key] [--name <name>] [--email <email>] [--passphrase-stdin|--passphrase-fd <n>]
+Usage: folio init [--key <id>] [--allow-unsafe-folder]
+       folio init [--new-key] [--name <name>] [--email <email>] [--passphrase-stdin|--passphrase-fd <n>]
                         [--allow-unsafe-folder]
 EOF
 }
 
-function store-init-help() {
+function init-help() {
     store-init-usage
     cat <<'EOF'
 
@@ -293,14 +296,14 @@ Options:
   -h, --help          Show this help.
 
 --opt=value works as well as --opt value.
-Examples: MANUAL.md, section `folio store init`.
+Examples: MANUAL.md, section `folio init`.
 EOF
 }
 
-# folio store init [--key <id>] | [--new-key] [--name <name>] [--email <email>]
+# folio init [--key <id>] | [--new-key] [--name <name>] [--email <email>]
 #                     [--passphrase-stdin|--passphrase-fd <n>] [--allow-unsafe-folder]
 # Anything not given is asked for. An existing key needs no passphrase: the store only encrypts to it.
-StoreInit() {
+Init() {
     # Process the command-line options
     local key_id="" new_key=0 name="" email="" passphrase_stdin=0 passphrase_fd="" allow_unsafe=0 arg
     while (( $# > 0 )); do
@@ -322,8 +325,8 @@ StoreInit() {
             --new-key)          new_key=1          ;;
             --passphrase-stdin) passphrase_stdin=1 ;;
             --allow-unsafe-folder) allow_unsafe=1 ;;
-            -h|--help)          store-init-help ; return 0 ;;
-            *) die "store init: unknown option: $arg${EXTRA_LINE}$(store-init-usage)" ;;
+            -h|--help)          init-help ; return 0 ;;
+            *) die "init: unknown option: $arg${EXTRA_LINE}$(store-init-usage)" ;;
         esac
     done
 
@@ -351,12 +354,12 @@ EOF
     fi
     if (( status == 0 )); then
         die "A EnvFolio store already exists at $STORE_PATH." \
-            "To create another one, run with${EXTRA_LINE}    FOLIO_STORE_DIR=<other-folder> $0 store init."
+            "To create another one, run with${EXTRA_LINE}    FOLIO_STORE_DIR=<other-folder> $0 init."
     fi
     if (( status == 2 )); then
         die "$STORE_PATH exists but is not a ready EnvFolio store" \
-            "(maybe an earlier \`folio store init\` did not finish)." \
-            "Remove it and run again, or run with${EXTRA_LINE}    FOLIO_STORE_DIR=<other-folder> $0 store init."
+            "(maybe an earlier \`folio init\` did not finish)." \
+            "Remove it and run again, or run with${EXTRA_LINE}    FOLIO_STORE_DIR=<other-folder> $0 init."
     fi
     if [[ -d $STORE_PATH ]]; then
         info "The store path is available: an empty folder, used as it is." >&2
@@ -475,7 +478,7 @@ function store-summary() {
     lines=(
         "Your pass store is ready."
         ""
-        "Store:   $(tilde-path "$(StorePath)")"
+        "Store:   $(tilde-path "$(Path)")"
         "Key:     $key"
         "         $uid"
         "Expires: ${expiry:-never}"
@@ -485,7 +488,7 @@ function store-summary() {
         "1. Your passphrase — it can't be reset. Memorise it, and keep a written copy offline."
         ""
         "2. A backup of your key and store — one file, made with:"
-        "     folio store backup"
+        "     folio backup"
         "   Keep it somewhere safe and offline, and run it again after you change passwords."
     )
     if [[ -n $expiry ]]; then
@@ -502,13 +505,13 @@ function store-summary() {
 # Warns (once) when the store's folder is someone else's or other users can get into it.
 STORE_MODE_CHECKED=0
 function require-store() {
-    store-exists || die "No ready EnvFolio store at $STORE_PATH. Create one with: folio store init"
+    store-exists || die "No ready EnvFolio store at $STORE_PATH. Create one with: folio init"
     (( STORE_MODE_CHECKED )) && return 0
     STORE_MODE_CHECKED=1
     warn-unsafe-store
 }
 
-# --- store backup -------------------------------------------------------------
+# --- backup -------------------------------------------------------------------
 
 # A backup is one file: folio-backup.txt (what it holds), key.asc (the store's keys, still
 # protected by their passphrase) and the store's folder — without .git unless --history.
@@ -516,15 +519,15 @@ BACKUP_SUFFIX=--folio.tar.gz
 ENCRYPTED_BACKUP_SUFFIX=--folio.gpg
 
 function store-backup-usage() {
-    echo "Usage: folio store backup [--history] [--encrypt [--passphrase-stdin]] [<file>|<folder>]"
+    echo "Usage: folio backup [--history] [--encrypt [--passphrase-stdin]] [<file>|<folder>]"
 }
 
-function store-backup-help() {
+function backup-help() {
     store-backup-usage
     cat <<'EOF'
 
 Save the whole EnvFolio store and its GPG key into one file, to get it all back with
-`folio store restore` — here or on a new machine. gpg asks for the key's passphrase to export
+`folio restore` — here or on a new machine. gpg asks for the key's passphrase to export
 it; in the backup, the key stays protected by that passphrase.
 
 The file is <file> (--folio.tar.gz added when missing), or
@@ -542,17 +545,17 @@ Options:
 EOF
 }
 
-# folio store backup [--history] [--encrypt [--passphrase-stdin]] [<file>|<folder>]
-StoreBackup() {
+# folio backup [--history] [--encrypt [--passphrase-stdin]] [<file>|<folder>]
+Backup() {
     local history=0 encrypt=0 passphrase_stdin=0 target=""
     while (( $# > 0 )); do
         case $1 in
             --history)          history=1          ;;
             --encrypt)          encrypt=1          ;;
             --passphrase-stdin) passphrase_stdin=1 ;;
-            -h|--help)          store-backup-help ; return 0 ;;
-            -*) die "store backup: unknown option: $1${EXTRA_LINE}$(store-backup-usage)" ;;
-            *)  [[ -z $target ]] || die "store backup: one file or folder only.${EXTRA_LINE}$(store-backup-usage)"
+            -h|--help)          backup-help ; return 0 ;;
+            -*) die "backup: unknown option: $1${EXTRA_LINE}$(store-backup-usage)" ;;
+            *)  [[ -z $target ]] || die "backup: one file or folder only.${EXTRA_LINE}$(store-backup-usage)"
                 target=$1 ;;
         esac
         shift
@@ -627,7 +630,7 @@ StoreBackup() {
         "Encrypted: $( (( encrypt )) && echo "yes" || echo "no (add --encrypt)" )"
         ""
         "To restore it, here or on a new machine:"
-        "  folio store restore $file"
+        "  folio restore $file"
         "That needs the key's passphrase$( (( encrypt )) && echo ", and the backup's own" )."
         "Keep the file somewhere safe and offline."
     )
@@ -635,17 +638,17 @@ StoreBackup() {
     show-box "${lines[@]}"
 }
 
-# --- store restore ------------------------------------------------------------
+# --- restore ------------------------------------------------------------------
 
 function store-restore-usage() {
-    echo "Usage: folio store restore [--passphrase-stdin] <file>"
+    echo "Usage: folio restore [--passphrase-stdin] <file>"
 }
 
-function store-restore-help() {
+function restore-help() {
     store-restore-usage
     cat <<'EOF'
 
-Bring back an EnvFolio store from a file made by `folio store backup`: import its GPG key
+Bring back an EnvFolio store from a file made by `folio backup`: import its GPG key
 (trusted as your own), and put the store at $FOLIO_STORE_DIR (default ~/.folio). A backup
 without its git history starts a new one. Refuses when $FOLIO_STORE_DIR is a folder with anything
 in it. An existing empty folder is used as it is (a folder made here is private, 700); when it is
@@ -661,16 +664,16 @@ Options:
 EOF
 }
 
-# folio store restore [--passphrase-stdin] <file>
-StoreRestore() {
+# folio restore [--passphrase-stdin] <file>
+Restore() {
     local passphrase_stdin=0 allow_unsafe=0 file=""
     while (( $# > 0 )); do
         case $1 in
             --passphrase-stdin) passphrase_stdin=1 ;;
             --allow-unsafe-folder) allow_unsafe=1 ;;
-            -h|--help)          store-restore-help ; return 0 ;;
-            -*) die "store restore: unknown option: $1${EXTRA_LINE}$(store-restore-usage)" ;;
-            *)  [[ -z $file ]] || die "store restore: one file only.${EXTRA_LINE}$(store-restore-usage)"
+            -h|--help)          restore-help ; return 0 ;;
+            -*) die "restore: unknown option: $1${EXTRA_LINE}$(store-restore-usage)" ;;
+            *)  [[ -z $file ]] || die "restore: one file only.${EXTRA_LINE}$(store-restore-usage)"
                 file=$1 ;;
         esac
         shift
@@ -692,7 +695,7 @@ StoreRestore() {
     local into=0
     if [[ -e $STORE_PATH ]]; then
         is-empty-dir "$STORE_PATH" \
-            || die "$STORE_PATH already exists. Move it away to restore there, or run with${EXTRA_LINE}    FOLIO_STORE_DIR=<other-folder> $0 store restore $file"
+            || die "$STORE_PATH already exists. Move it away to restore there, or run with${EXTRA_LINE}    FOLIO_STORE_DIR=<other-folder> $0 restore $file"
         accept-unsafe-store "$allow_unsafe" "$passphrase_stdin"
         into=1
     fi
@@ -769,7 +772,7 @@ StoreRestore() {
     echo ""
 }
 
-# --- store export -------------------------------------------------------------
+# --- export -------------------------------------------------------------------
 
 # An export is one file, always locked: folio-export.txt (what it holds), key.asc (a new key made
 # for this export only, with no passphrase — the lock on the file protects it) and store/, a pass
@@ -779,16 +782,16 @@ EXPORT_SUFFIX=.folio
 
 function store-export-usage() {
     cat <<'EOF'
-Usage: folio store export [-s|--secrets] [--to <key>|--passphrase-stdin|--passphrase-fd <n>]
+Usage: folio export [-s|--secrets] [--to <key>|--passphrase-stdin|--passphrase-fd <n>]
                           [-o|--output <file>|<folder>] [<name>...]
 EOF
 }
 
-function store-export-help() {
+function export-help() {
     store-export-usage
     cat <<'EOF'
 
-Copy some items into one file, to bring them into another store with `folio store import` — on
+Copy some items into one file, to bring them into another store with `folio import` — on
 a server, in a booth, or on another machine. Your store's key stays here: the items are encrypted
 and signed with a new key made for this export only, and the file is locked — with a passphrase,
 or with --to, to the public key of where it is going. With neither given, EnvFolio asks which.
@@ -816,10 +819,10 @@ Options:
 EOF
 }
 
-# folio store export [-s|--secrets] [--to <key>|--passphrase-stdin|--passphrase-fd <n>]
+# folio export [-s|--secrets] [--to <key>|--passphrase-stdin|--passphrase-fd <n>]
 #                       [-o|--output <file>|<folder>] [<name>...]
 # Anything not given is asked for: the items, and how to lock the file.
-StoreExport() {
+Export() {
     # Process the command-line options
     local secrets=0 to="" passphrase_stdin=0 passphrase_fd="" target="" names=() arg
     while (( $# > 0 )); do
@@ -838,9 +841,9 @@ StoreExport() {
             --output=*)         target=${arg#*=} ;;
             --passphrase-fd=*)  passphrase_fd=${arg#*=} ;;
             --passphrase-stdin) passphrase_stdin=1 ;;
-            -h|--help)          store-export-help ; return 0 ;;
+            -h|--help)          export-help ; return 0 ;;
             --)                 names+=("$@") ; break ;;
-            -*)                 die "store export: unknown option: $arg${EXTRA_LINE}$(store-export-usage)" ;;
+            -*)                 die "export: unknown option: $arg${EXTRA_LINE}$(store-export-usage)" ;;
             *)                  names+=("$arg") ;;
         esac
     done
@@ -861,7 +864,7 @@ StoreExport() {
 
     section "Overview"
     cat >&2 <<'EOF'
-This copies some items into one file, to bring them into another store with `folio store import`.
+This copies some items into one file, to bring them into another store with `folio import`.
 The items are encrypted and signed with a new key made for this export only; your store's key
 stays here. The file is locked with a passphrase, or to the public key of where it is going.
 It needs:
@@ -902,7 +905,7 @@ EOF
 
     # Input: the lock — --to <key>, or a passphrase (--passphrase-stdin / --passphrase-fd);
     # with neither, asked: a passphrase (gpg asks for it later), or a public key.
-    local choice to_key="To a public key"
+    local choice to_key="With a public key"
     if [[ -z $to && -z $passphrase_fd ]] && (( ! passphrase_stdin )); then
         echo >&2
         choice=$(ask-choice "How should the file be locked?" "With a passphrase" "$to_key") \
@@ -987,14 +990,16 @@ EOF
 
     section "Pack and lock the file"
     if [[ -z $recipient && -z $passphrase ]]; then
-        acknowledge "Next, gpg asks you to choose a passphrase for the export file (twice)." \
-                    "Whoever imports the file needs it: tell them another way than the file itself."
+        acknowledge "Next, gpg will ask you to choose a passphrase for the export file (twice)." \
+                    "Whoever imports the file needs it: tell them another way than the file itself." \
+                    "" \
+                    "Be prepared to provide the new passphrase."
     fi
     local seal=(gpg --symmetric --compress-algo none --output -)
     [[ -n $passphrase ]] && seal=(gpg --batch --pinentry-mode loopback --passphrase-fd 3 "${seal[@]:1}")
     [[ -n $recipient ]] && seal=(env GNUPGHOME="$home" gpg --batch --trust-model always --compress-algo none
                                  --encrypt --recipient "$recipient" --output -)
-    # As in store backup: the passphrase reaches gpg on fd 3, never in argv.
+    # As in backup: the passphrase reaches gpg on fd 3, never in argv.
     COPYFILE_DISABLE=1 tar -czf - -C "$pack" folio-export.txt key.asc store \
         | "${seal[@]}" > "$file.partial" 3< <(printf '%s\n' "$passphrase")
     [[ ${PIPESTATUS[*]} == "0 0" ]] || die "Packing the export failed."
@@ -1015,28 +1020,28 @@ EOF
              "Locked: $lock" \
              "" \
              "To bring them into a store (a new one, or one that is there):" \
-             "  folio store import $file" \
+             "  folio import $file" \
              "That needs $opens."
 }
 
-# --- store import -------------------------------------------------------------
+# --- import -------------------------------------------------------------------
 
 function store-import-usage() {
     cat <<'EOF'
-Usage: folio store import [-a|--all] [--overwrite|--skip-existing] [--key <id>]
+Usage: folio import [-a|--all] [--overwrite|--skip-existing] [--key <id>]
                           [--passphrase-stdin|--passphrase-fd <n>] [--allow-unsafe-folder]
                           [<file> [<name>...]]
 EOF
 }
 
-function store-import-help() {
+function import-help() {
     store-import-usage
     cat <<'EOF'
 
-Bring items from a file made by `folio store export` into the EnvFolio store
+Bring items from a file made by `folio export` into the EnvFolio store
 ($FOLIO_STORE_DIR, default ~/.folio): the secrets are encrypted to the store's key, the texts
 checked and signed with it (gpg may ask for its passphrase). With no store yet, one is made first,
-as `folio store init` does: its key is asked for here, before anything is made. The export's key
+as `folio init` does: its key is asked for here, before anything is made. The export's key
 is used here only, never added to your keyring.
 
 With no <file>, EnvFolio asks for it. A <name> is an item in the export, or a folder: every item
@@ -1047,7 +1052,7 @@ Options:
   -a, --all           Take every item in the export.
   --overwrite         Replace the items already in the store.
   --skip-existing     Keep the items already in the store; take only the new ones.
-  --key <id>          With no store yet: make it with this key, as `folio store init --key`.
+  --key <id>          With no store yet: make it with this key, as `folio init --key`.
   --passphrase-stdin  Read the file's passphrase (or your key's, for a file locked to it) from the
                       first line of stdin. Needs <file>, and --all or a <name>; with no store
                       yet, --key too.
@@ -1061,10 +1066,10 @@ Options:
 EOF
 }
 
-# folio store import [-a|--all] [--overwrite|--skip-existing] [--key <id>]
+# folio import [-a|--all] [--overwrite|--skip-existing] [--key <id>]
 #                       [--passphrase-stdin|--passphrase-fd <n>] [--allow-unsafe-folder] [<file> [<name>...]]
 # Anything not given is asked for: the file, a new store's key, the items, what to do with clashes.
-StoreImport() {
+Import() {
     # Process the command-line options
     local all=0 clash="" key_id="" passphrase_stdin=0 passphrase_fd="" allow_unsafe=0 file="" names=() arg
     while (( $# > 0 )); do
@@ -1081,8 +1086,8 @@ StoreImport() {
             --passphrase-fd=*)  passphrase_fd=${arg#*=} ;;
             --passphrase-stdin) passphrase_stdin=1 ;;
             --allow-unsafe-folder) allow_unsafe=1 ;;
-            -h|--help)          store-import-help ; return 0 ;;
-            -*) die "store import: unknown option: $arg${EXTRA_LINE}$(store-import-usage)" ;;
+            -h|--help)          import-help ; return 0 ;;
+            -*) die "import: unknown option: $arg${EXTRA_LINE}$(store-import-usage)" ;;
             *)  if [[ -z $file ]]; then file=$arg ; else names+=("$arg") ; fi ;;
         esac
     done
@@ -1108,7 +1113,7 @@ StoreImport() {
     store-exists || status=$?
     if (( status == 2 )) && ! is-empty-dir "$STORE_PATH"; then
         die "$STORE_PATH exists but is not a ready EnvFolio store" \
-            "(maybe an earlier \`folio store init\` did not finish)." \
+            "(maybe an earlier \`folio init\` did not finish)." \
             "Remove it and run again, or run with${EXTRA_LINE}    FOLIO_STORE_DIR=<other-folder>"
     fi
     (( status == 0 )) || new_store=1
@@ -1119,7 +1124,7 @@ StoreImport() {
 
     section "Overview"
     cat >&2 <<'EOF'
-This brings items from a file made by `folio store export` into your EnvFolio store. With no
+This brings items from a file made by `folio export` into your EnvFolio store. With no
 store yet, one is made first. It needs:
   - The export file, and what opens it: its passphrase, or your key it is locked to.
   - The items to take.
@@ -1248,7 +1253,7 @@ EOF
 
     if (( new_store )); then
         section "Make the store"
-        StoreInit "${init_args[@]}"
+        Init "${init_args[@]}"
     fi
     require-store
 
@@ -2517,7 +2522,7 @@ function ensure-requirements() {
     lines     "git    " "Syncs the store   " "brew install git         "
     lines     "tree   " "Lists the store   " "brew install tree        "
 
-    if [[ "$1 $2" =~ store\ (backup|restore|import|export) ]]; then
+    if [[ ${1:-} =~ ^(backup|restore|import|export)$ ]]; then
         lines     "tar    " "Packs backups     " "brew install gnu-tar     "
         lines     "gzip   " "Compresses backups" "brew install gzip        "
     fi
@@ -2648,12 +2653,15 @@ function confirm() {
 }
 
 # acknowledge <line>...: tell the user what comes next, and wait for Enter. Dies on cancel (Ctrl-D).
+# Read silently: a passphrase typed here by mistake is never shown, and is dropped.
 function acknowledge() {
     local answer
     printf '\n' >&2
     printf '%s\n' "$@" >&2
     printf 'Press Enter to continue (Ctrl-D cancels): ' >&2
-    IFS= read -r answer || { echo >&2 ; die "Cancelled." ; }
+    IFS= read -rs answer || { echo >&2 ; die "Cancelled." ; }
+    unset answer
+    echo >&2
 }
 
 # show-box <line>...: the lines in a rounded box.

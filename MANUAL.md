@@ -22,21 +22,21 @@ Lists every command, one line each.
 ### Help for one command
 
 ```bash
-folio help store init
+folio help init
 ```
 
-The usage and options of `folio store init` — the same as `folio store init --help`.
+The usage and options of `folio init` — the same as `folio init --help`.
 
 ---
 
-## `folio store init`
+## `folio init`
 
 Creates the EnvFolio store (`$FOLIO_STORE_DIR`, default `~/.folio`): picks or creates the GPG key that
 encrypts it, runs `pass init`, and starts the store's git history.
 
 ```
-folio store init [--key <id>] [--allow-unsafe-folder]
-folio store init [--new-key] [--name <name>] [--email <email>] [--passphrase-stdin|--passphrase-fd <n>] [--allow-unsafe-folder]
+folio init [--key <id>] [--allow-unsafe-folder]
+folio init [--new-key] [--name <name>] [--email <email>] [--passphrase-stdin|--passphrase-fd <n>] [--allow-unsafe-folder]
 ```
 
 | Option | Meaning |
@@ -59,7 +59,7 @@ an empty folder is fine.
 ### Ask for everything
 
 ```bash
-folio store init
+folio init
 ```
 
 Shows a menu of your secret keys plus *Create a new key* (straight to creating one if you have
@@ -71,7 +71,7 @@ passphrase.
 ### Use an existing key, no prompts
 
 ```bash
-folio store init --key jane@example.com < /dev/null
+folio init --key jane@example.com < /dev/null
 ```
 
 Uses the one secret key matching `jane@example.com`. Nothing is asked, so this works in a script.
@@ -79,7 +79,7 @@ Uses the one secret key matching `jane@example.com`. Nothing is asked, so this w
 ### Create a new key, no prompts
 
 ```bash
-folio store init --name "Jane Doe" --email jane@example.com --passphrase-stdin < passphrase-file
+folio init --name "Jane Doe" --email jane@example.com --passphrase-stdin < passphrase-file
 ```
 
 Creates a key for `Jane Doe <jane@example.com>` protected by the first line of `passphrase-file`.
@@ -89,7 +89,7 @@ Feed the passphrase from a file (made under `umask 077`) or another secret tool 
 ### Use another store folder
 
 ```bash
-FOLIO_STORE_DIR=~/work-folio folio store init --key jane@example.com
+FOLIO_STORE_DIR=~/work-folio folio init --key jane@example.com
 ```
 
 Creates the store in `~/work-folio` instead of `~/.folio`. Every later `folio` command needs the
@@ -101,17 +101,17 @@ An **empty** folder is fine: the store is made inside it (it may be a mount poin
 encrypted volume or a bind mount). Its mode and owner are left as they are — see *The store folder
 is private*.
 
-Otherwise `folio store init` refuses to run, and changes nothing:
+Otherwise `folio init` refuses to run, and changes nothing:
 
 - **A ready EnvFolio store** (it has `.gpg-id` and a git history) — says the store already exists.
 - **Anything else** in the folder, even only hidden files — says it is not a ready EnvFolio store.
-  This is what an earlier `folio store init` leaves if it stopped partway (an error, Ctrl-C, a
-  closed terminal): remove the folder and run `folio store init` again. A key created by the
+  This is what an earlier `folio init` leaves if it stopped partway (an error, Ctrl-C, a
+  closed terminal): remove the folder and run `folio init` again. A key created by the
   earlier run is kept, and shows up in the key menu.
 
 ### The store folder is private
 
-When `folio store init` or `folio store restore` creates the store folder, only you can get
+When `folio init` or `folio restore` creates the store folder, only you can get
 into it (`700`): even encrypted, the names of your entries and the plain texts would show to other
 users. An existing empty folder you point them at (a bind mount, say) is used as it is — that is
 your call.
@@ -125,7 +125,7 @@ folio: warning: other users can get into /home/you/.folio. To make it private:
     chmod 700 /home/you/.folio
 ```
 
-- **`store init`, `store restore`, `store import`** — the commands that put your items there —
+- **`folio init`, `folio restore`, `folio import`** — the commands that put your items there —
   warn, then ask `Use /home/you/.folio anyway? [y/N]`. Anything but yes stops them, and nothing
   changes; so does nothing to answer with (stdin at its end, or carrying a passphrase).
   `--allow-unsafe-folder` answers yes for them, in a script say; the warning still shows.
@@ -136,13 +136,13 @@ every time. Fix the folder instead, or keep the store somewhere else.
 
 ---
 
-## `folio store path`
+## `folio path`
 
 Prints the EnvFolio store's folder: `$FOLIO_STORE_DIR`, default `~/.folio`, as an absolute path. It
 works whether or not the store exists yet.
 
 ```
-folio store path
+folio path
 ```
 
 | Option | Meaning |
@@ -152,7 +152,7 @@ folio store path
 ### Print the store's folder
 
 ```bash
-folio store path
+folio path
 ```
 
 ```
@@ -161,13 +161,13 @@ folio store path
 
 ---
 
-## `folio store backup`
+## `folio backup`
 
 Saves the whole EnvFolio store and its GPG key into one file, to get it all back with
-`folio store restore` — on this machine or a new one.
+`folio restore` — on this machine or a new one.
 
 ```
-folio store backup [--history] [--encrypt [--passphrase-stdin]] [<file>|<folder>]
+folio backup [--history] [--encrypt [--passphrase-stdin]] [<file>|<folder>]
 ```
 
 | Option | Meaning |
@@ -195,7 +195,7 @@ secrets themselves need the key and its passphrase. Keep the file somewhere safe
 ### Back up into the current folder
 
 ```bash
-folio store backup
+folio backup
 ```
 
 Writes `backup-20261006-120000--folio.tar.gz` (the date and time now) here.
@@ -203,9 +203,9 @@ Writes `backup-20261006-120000--folio.tar.gz` (the date and time now) here.
 ### Restore on a new machine
 
 ```bash
-folio store backup /media/usb
+folio backup /media/usb
 # ... on the new machine:
-folio store restore /media/usb/backup-20261006-120000--folio.tar.gz
+folio restore /media/usb/backup-20261006-120000--folio.tar.gz
 ```
 
 The store comes back with a new git history, its texts still verify and its secrets decrypt.
@@ -213,7 +213,7 @@ The store comes back with a new git history, its texts still verify and its secr
 ### With the git history
 
 ```bash
-folio store backup --history
+folio backup --history
 ```
 
 The restored store has the same history as this one.
@@ -221,7 +221,7 @@ The restored store has the same history as this one.
 ### Encrypted
 
 ```bash
-folio store backup --encrypt
+folio backup --encrypt
 ```
 
 gpg asks for a passphrase for the backup (twice), and writes `backup-…--folio.gpg`. A restore asks
@@ -230,12 +230,12 @@ a file or another secret tool, not with `echo`.
 
 ---
 
-## `folio store restore`
+## `folio restore`
 
-Brings back an EnvFolio store from a file made by `folio store backup`.
+Brings back an EnvFolio store from a file made by `folio backup`.
 
 ```
-folio store restore [--passphrase-stdin] [--allow-unsafe-folder] <file>
+folio restore [--passphrase-stdin] [--allow-unsafe-folder] <file>
 ```
 
 | Option | Meaning |
@@ -251,24 +251,24 @@ is fine. A backup without its git history gets a new one: one commit of everythi
 An empty folder at `$FOLIO_STORE_DIR` is fine: the store is moved inside it (it may be a mount
 point, such as an encrypted volume or a bind mount), its mode and owner left as they are. A folder
 made by the restore is private (`700`) — see *The store folder is private* under
-`folio store init`.
+`folio init`.
 
 It refuses when the folder has anything in it, and changes nothing: move that folder away first, or
-restore elsewhere with `FOLIO_STORE_DIR=<other-folder> folio store restore <file>`.
+restore elsewhere with `FOLIO_STORE_DIR=<other-folder> folio restore <file>`.
 A file whose name ends in neither `--folio.tar.gz` nor `--folio.gpg`, or that is not an EnvFolio backup,
 is refused too. Nothing is left behind when it fails.
 
-Examples: see `folio store backup` above.
+Examples: see `folio backup` above.
 
 ---
 
-## `folio store export`
+## `folio export`
 
-Copies some items into one file, to bring them into another store with `folio store import` — on
+Copies some items into one file, to bring them into another store with `folio import` — on
 a server, in a booth, or on another machine. Your store's key never leaves this machine.
 
 ```
-folio store export [-s|--secrets] [--to <key>|--passphrase-stdin|--passphrase-fd <n>] [-o|--output <file>|<folder>] [<name>...]
+folio export [-s|--secrets] [--to <key>|--passphrase-stdin|--passphrase-fd <n>] [-o|--output <file>|<folder>] [<name>...]
 ```
 
 | Option | Meaning |
@@ -285,7 +285,7 @@ A `<name>` is a text or a secret, or a folder: every text under it, and its secr
 (`1 3 5-7`, or `all`).
 
 With neither `--to` nor a passphrase option, EnvFolio asks how to lock the file: with a passphrase
-(gpg asks for it, after EnvFolio says so and waits for Enter), or to a public key — picked from the
+(gpg asks for it, after EnvFolio says so and waits for Enter), or with a public key — picked from the
 usable keys in your keyring, or given as a key file.
 
 The file is `<file>` (`.folio` added when missing), or `store-<date>.folio` in `<folder>` —
@@ -308,7 +308,7 @@ How it works:
 ### Export with a passphrase
 
 ```bash
-folio store export web
+folio export web
 ```
 
 Takes the texts under `web/` (its secrets need `--secrets`). EnvFolio asks where to write the file
@@ -321,7 +321,7 @@ gpg asks for one for the file (twice).
 # on the server:
 gpg --armor --export server@example.com > server.asc
 # here:
-folio store export --secrets --to server.asc web
+folio export --secrets --to server.asc web
 ```
 
 Only the server's secret key can open the file, so it can travel through places you do not trust
@@ -329,12 +329,12 @@ Only the server's secret key can open the file, so it can travel through places 
 
 ---
 
-## `folio store import`
+## `folio import`
 
-Brings items from a file made by `folio store export` into the EnvFolio store.
+Brings items from a file made by `folio export` into the EnvFolio store.
 
 ```
-folio store import [-a|--all] [--overwrite|--skip-existing] [--key <id>] [--passphrase-stdin|--passphrase-fd <n>] [--allow-unsafe-folder] [<file> [<name>...]]
+folio import [-a|--all] [--overwrite|--skip-existing] [--key <id>] [--passphrase-stdin|--passphrase-fd <n>] [--allow-unsafe-folder] [<file> [<name>...]]
 ```
 
 | Option | Meaning |
@@ -342,7 +342,7 @@ folio store import [-a|--all] [--overwrite|--skip-existing] [--key <id>] [--pass
 | `-a`, `--all` | Take every item in the export. |
 | `--overwrite` | Replace the items already in the store. |
 | `--skip-existing` | Keep the items already in the store; take only the new ones. |
-| `--key <id>` | With no store yet: make it with this key, as `folio store init --key`. |
+| `--key <id>` | With no store yet: make it with this key, as `folio init --key`. |
 | `--passphrase-stdin` | Read the file's passphrase (or your key's, for a file locked to it) from the first line of stdin. Needs `<file>`, and `--all` or a `<name>`; with no store yet, `--key` too. |
 | `--passphrase-fd <n>` | The same, from the first line of file descriptor `<n>`. stdin stays free, so anything not given is still asked for. |
 | `--allow-unsafe-folder` | Import into a store folder that is someone else's or open to other users without asking. The warning still shows. |
@@ -359,7 +359,7 @@ import before anything is written. Then each secret is encrypted to the store's 
 one commit in the store's history, as when you add it by hand. The export's key is used in a
 keyring of its own and never added to yours.
 
-With no store yet, one is made first, as `folio store init` does: its key — `--key`, or picked,
+With no store yet, one is made first, as `folio init` does: its key — `--key`, or picked,
 or a new one from your name and email — is asked for before anything is made. An item already in
 the store is overwritten or skipped as `--overwrite` or
 `--skip-existing` says; with neither, EnvFolio lists them and asks.
@@ -367,7 +367,7 @@ the store is overwritten or skipped as `--overwrite` or
 ### Into a new store
 
 ```bash
-folio store import --all --key server@example.com store-20261006.folio
+folio import --all --key server@example.com store-20261006.folio
 ```
 
 Makes the store with the server's key, then imports every item.
@@ -375,7 +375,7 @@ Makes the store with the server's key, then imports every item.
 ### Merge into a store, keeping what is there
 
 ```bash
-folio store import --skip-existing store-20261006.folio aws/key web/user
+folio import --skip-existing store-20261006.folio aws/key web/user
 ```
 
 Takes `aws/key` and `web/user`; one already in the store stays as it is.
@@ -397,7 +397,7 @@ folio ls [--flat] [<subfolder>]
 | `--flat` | Full names, one per line, sorted, instead of a tree: `(S) web/github`. |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
-Only a folder can be listed. It needs a ready store (`folio store init`).
+Only a folder can be listed. It needs a ready store (`folio init`).
 
 ### List everything
 
@@ -455,7 +455,7 @@ folio text ls [--flat] [<subfolder>]
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
 Only a folder can be listed; a text's own name is refused (use `folio text show` once it exists).
-It needs a ready store (`folio store init`).
+It needs a ready store (`folio init`).
 
 ### List every text
 
@@ -494,7 +494,7 @@ folio text find <part>...
 | --- | --- |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
-It needs a ready store (`folio store init`).
+It needs a ready store (`folio init`).
 
 ### Find by name
 
@@ -525,7 +525,7 @@ folio text grep [<grep-option>...] <pattern>
 | `<grep-option>` | Any option of `grep`, e.g. `-i` to ignore case. |
 | `-h`, `--help` | Show the options and stop. Works without a store. In EnvFolio, `-h` is always help, never grep's `-h`. |
 
-It needs a ready store (`folio store init`).
+It needs a ready store (`folio init`).
 
 ### Find by value
 
@@ -555,7 +555,7 @@ folio text show [-c|--clip[=<line>]] <name>
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
 Only a text can be shown; a folder or a secret is refused (use `folio secret show` for secrets).
-It needs a ready store (`folio store init`).
+It needs a ready store (`folio init`).
 
 ### Show a text
 
@@ -606,7 +606,7 @@ folio text insert [-m|--multiline] [-f|--force] [-t|--text <text>] <name>
 A text and a secret can share a name: `web/github` can be both. At a terminal, it asks before
 overwriting a text. **From a script or pipe, it overwrites** (the old one stays in the git
 history). If signing fails, nothing is saved and the old text stays. It needs a ready store
-(`folio store init`).
+(`folio init`).
 
 ### Give the text
 
@@ -658,7 +658,7 @@ folio text edit <name>
 
 **The signature is checked first**, as `folio text show` does: a text changed outside EnvFolio is not
 opened, so editing never signs it by accident. If you save it unchanged, it fails with *Text
-unchanged.* and nothing is committed. It needs a ready store (`folio store init`).
+unchanged.* and nothing is committed. It needs a ready store (`folio init`).
 
 ### Edit a text
 
@@ -794,7 +794,7 @@ folio secret ls [--flat] [<subfolder>]
 
 Only a folder can be listed. A secret's own name is refused, because `pass ls <name>` would
 print the secret (use `folio secret show` once it exists). The same goes for `pass`'s other
-options, such as `-c`. It needs a ready store (`folio store init`).
+options, such as `-c`. It needs a ready store (`folio init`).
 
 ### List every secret
 
@@ -890,7 +890,7 @@ folio secret show [-c|--clip[=<line>]] <name>
 
 Only a secret can be shown. A folder is refused, because `pass show <folder>` would list it
 (use `folio secret ls`). `pass`'s `-q`/`--qrcode` is not offered. It needs a ready store
-(`folio store init`).
+(`folio init`).
 
 ### Print a secret
 
@@ -936,7 +936,7 @@ folio secret insert [-m|--multiline] [-f|--force] <name>
 
 Everything except `--help` goes straight to `pass insert`, so it behaves exactly like `pass`.
 `pass`'s `-e`/`--echo` is refused: it would show the secret on screen. The secret is never taken
-as an argument. It needs a ready store (`folio store init`).
+as an argument. It needs a ready store (`folio init`).
 
 ### Type a secret
 
@@ -1136,7 +1136,7 @@ An `<entry>` is one of:
 At least one `<entry>` is needed, unless `--all` is given; the whole store is never loaded by
 default. The `--` is
 needed, and everything after it is the command, which EnvFolio never parses. It needs a ready store
-(`folio store init`).
+(`folio init`).
 
 **Variable names.** An entry's name comes from its full path in the store, whatever was
 selected:
@@ -1261,7 +1261,7 @@ folio shell [-s|--secrets] [-a|--all] [-n|--names] <entry>...
 Entries, variable names, values and errors are as in `folio exec`. Before the shell starts, EnvFolio
 prints the loaded variable names, never their values, to stderr. It sets `FOLIO_SHELL=1`, so your
 own prompt can show it; EnvFolio does not change the prompt. `exit` leaves the shell. It needs a
-ready store (`folio store init`).
+ready store (`folio init`).
 
 ### Open a shell
 

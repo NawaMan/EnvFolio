@@ -25,7 +25,7 @@ teardown() {
 # A ready store holding text web/user.
 make-store() {
     gpg --batch --passphrase '' --quick-generate-key "Test User <test@example.com>" default default never 2>/dev/null
-    "$FOLIO" store init --key test@example.com < /dev/null >/dev/null 2>&1
+    "$FOLIO" init --key test@example.com < /dev/null >/dev/null 2>&1
     "$FOLIO" text insert -t jane web/user < /dev/null
 }
 
@@ -121,7 +121,7 @@ fake-editor() {
     fake-editor "x"
     run "$FOLIO" text edit web/user
     [ "$status" -eq 1 ]
-    [[ $output == *"No ready EnvFolio store"*"folio store init"* ]]
+    [[ $output == *"No ready EnvFolio store"*"folio init"* ]]
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 
