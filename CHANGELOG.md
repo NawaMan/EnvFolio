@@ -4,6 +4,23 @@ User-visible changes to EnvFolio. Newest first.
 
 ## Unreleased
 
+### Changed
+
+- The command is now `folio` (the app is still EnvFolio): `folio store init`, `folio text show`, and
+  so on. Releases ship the script as `folio`. The names EnvFolio uses for its files and settings
+  follow, with no fallback to the old ones:
+  - the store folder: `~/.folio` (was `~/.envfolio`)
+  - `FOLIO_STORE_DIR` (was `ENVFOLIO_STORE_DIR`) and `FOLIO_SHELL` (was `ENVFOLIO_SHELL`)
+  - backups: `--folio.tar.gz` and `--folio.gpg` (were `--envfolio.tar.gz`, `--envfolio.gpg`)
+  - exports: `.folio` (was `.envfolio`)
+  - inside them, `folio-backup.txt` and `folio-export.txt` (were `envfolio-*.txt`)
+
+  To upgrade from 0.3.0: put `folio` on your `PATH` and remove `envfolio`
+  (e.g. `rm ~/.local/bin/envfolio`); `mv ~/.envfolio ~/.folio`, or rename `ENVFOLIO_STORE_DIR` to
+  `FOLIO_STORE_DIR` where you set it; rename any backup or export you keep to the new ending
+  (`x--envfolio.tar.gz` → `x--folio.tar.gz`, `x.envfolio` → `x.folio`). `store restore` and
+  `store import` still read what is inside a 0.3.0 file once it is renamed.
+
 ## 0.3.0 — 2026-10-10
 
 ### Changed

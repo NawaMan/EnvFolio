@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 
-# envfolio secret insert, through the real ./envfolio, against a throwaway GPG home and store.
+# folio secret insert, through the real ./folio, against a throwaway GPG home and store.
 
 setup() {
     SANDBOX=$(mktemp -d)
@@ -8,13 +8,13 @@ setup() {
     export GIT_CONFIG_GLOBAL="$SANDBOX/no-gitconfig"
     export GIT_CONFIG_NOSYSTEM=1
     export GNUPGHOME="$SANDBOX/gnupg"
-    export ENVFOLIO_STORE_DIR="$SANDBOX/store"
-    export PASSWORD_STORE_DIR="$ENVFOLIO_STORE_DIR"
+    export FOLIO_STORE_DIR="$SANDBOX/store"
+    export PASSWORD_STORE_DIR="$FOLIO_STORE_DIR"
     export XDG_STATE_HOME="$SANDBOX/state"
     export USER=sb-test-nobody
     mkdir -p "$HOME" && mkdir -m 700 "$GNUPGHOME"
-    [[ $ENVFOLIO_STORE_DIR == "$SANDBOX"/* && $GNUPGHOME == "$SANDBOX"/* ]]
-    ENVFOLIO="$BATS_TEST_DIRNAME/../../envfolio"
+    [[ $FOLIO_STORE_DIR == "$SANDBOX"/* && $GNUPGHOME == "$SANDBOX"/* ]]
+    FOLIO="$BATS_TEST_DIRNAME/../../folio"
 }
 
 teardown() {
@@ -25,38 +25,38 @@ teardown() {
 # A ready store, encrypted to a throwaway no-passphrase key.
 make-store() {
     gpg --batch --passphrase '' --quick-generate-key "Test User <test@example.com>" default default never 2>/dev/null
-    "$ENVFOLIO" store init --key test@example.com < /dev/null >/dev/null 2>&1
+    "$FOLIO" store init --key test@example.com < /dev/null >/dev/null 2>&1
 }
 
 @test "MANUAL: secret insert — pipe a secret in" {
     make-store
-    run "$ENVFOLIO" secret insert web/github < <(printf 's3cr3t\ns3cr3t\n')
+    run "$FOLIO" secret insert web/github < <(printf 's3cr3t\ns3cr3t\n')
     [ "$status" -eq 0 ]
     [[ $output != *"s3cr3t"* ]]
-    [ -f "$ENVFOLIO_STORE_DIR/web/github.gpg" ]
+    [ -f "$FOLIO_STORE_DIR/web/github.gpg" ]
     [ "$(pass show web/github)" = "s3cr3t" ]
-    [[ $(git -C "$ENVFOLIO_STORE_DIR" log -1 --format=%s) == *"web/github"* ]]
+    [[ $(git -C "$FOLIO_STORE_DIR" log -1 --format=%s) == *"web/github"* ]]
 }
 
 @test "MANUAL: secret insert — several lines" {
     make-store
-    run "$ENVFOLIO" secret insert -m note < <(printf 'line one\nline two\n')
+    run "$FOLIO" secret insert -m note < <(printf 'line one\nline two\n')
     [ "$status" -eq 0 ]
     [ "$(pass show note)" = $'line one\nline two' ]
 }
 
 @test "secret insert: two different lines do not match, nothing is saved" {
     make-store
-    run "$ENVFOLIO" secret insert one < <(printf 'first\nsecond\n')
+    run "$FOLIO" secret insert one < <(printf 'first\nsecond\n')
     [ "$status" -ne 0 ]
     [[ $output == *"do not match"* ]]
-    [ ! -e "$ENVFOLIO_STORE_DIR/one.gpg" ]
+    [ ! -e "$FOLIO_STORE_DIR/one.gpg" ]
 }
 
 @test "secret insert: --force overwrites" {
     make-store
-    "$ENVFOLIO" secret insert -m dup < <(printf 'old\n')
-    run "$ENVFOLIO" secret insert -f -m dup < <(printf 'new\n')
+    "$FOLIO" secret insert -m dup < <(printf 'old\n')
+    run "$FOLIO" secret insert -f -m dup < <(printf 'new\n')
     [ "$status" -eq 0 ]
     [ "$(pass show dup)" = "new" ]
 }
@@ -65,47 +65,47 @@ make-store() {
     make-store
     local arg
     for arg in --echo -e -fe -em; do
-        run "$ENVFOLIO" secret insert "$arg" x < <(printf 'x\n')
+        run "$FOLIO" secret insert "$arg" x < <(printf 'x\n')
         [ "$status" -eq 1 ]
         [[ $output == *"--echo is not offered"* ]]
     done
-    [ ! -e "$ENVFOLIO_STORE_DIR/x.gpg" ]
+    [ ! -e "$FOLIO_STORE_DIR/x.gpg" ]
 }
 
 @test "secret insert: a name after -- is not an option" {
     make-store
-    run "$ENVFOLIO" secret insert -m -- -e < <(printf 'x\n')
+    run "$FOLIO" secret insert -m -- -e < <(printf 'x\n')
     [ "$status" -eq 0 ]
     [ "$(pass show -- -e)" = "x" ]
 }
 
 @test "secret insert: no store fails and creates nothing" {
-    run "$ENVFOLIO" secret insert web/github < <(printf 's3cr3t\ns3cr3t\n')
+    run "$FOLIO" secret insert web/github < <(printf 's3cr3t\ns3cr3t\n')
     [ "$status" -eq 1 ]
-    [[ $output == *"No ready EnvFolio store"*"envfolio store init"* ]]
-    [ ! -e "$ENVFOLIO_STORE_DIR" ]
+    [[ $output == *"No ready EnvFolio store"*"folio store init"* ]]
+    [ ! -e "$FOLIO_STORE_DIR" ]
 }
 
 @test "secret insert: an unfinished store fails" {
-    mkdir -p "$ENVFOLIO_STORE_DIR"
-    run "$ENVFOLIO" secret insert web/github < <(printf 's3cr3t\ns3cr3t\n')
+    mkdir -p "$FOLIO_STORE_DIR"
+    run "$FOLIO" secret insert web/github < <(printf 's3cr3t\ns3cr3t\n')
     [ "$status" -eq 1 ]
     [[ $output == *"No ready EnvFolio store"* ]]
 }
 
 @test "secret insert: bad arguments get pass's usage" {
     make-store
-    run "$ENVFOLIO" secret insert < /dev/null
+    run "$FOLIO" secret insert < /dev/null
     [ "$status" -ne 0 ]
     [[ $output == *"Usage:"*"insert"* ]]
-    run "$ENVFOLIO" secret insert a b < /dev/null
+    run "$FOLIO" secret insert a b < /dev/null
     [ "$status" -ne 0 ]
     [[ $output == *"Usage:"*"insert"* ]]
 }
 
 @test "secret insert --help: works without a store" {
-    run "$ENVFOLIO" secret insert --help < /dev/null
+    run "$FOLIO" secret insert --help < /dev/null
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: envfolio secret insert"* ]]
-    [ ! -e "$ENVFOLIO_STORE_DIR" ]
+    [[ $output == *"Usage: folio secret insert"* ]]
+    [ ! -e "$FOLIO_STORE_DIR" ]
 }

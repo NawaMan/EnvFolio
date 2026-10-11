@@ -8,14 +8,14 @@
 #                          is locked with a passphrase.
 #   <name>.txt.sig         Who signed it and when; with <name>.txt next to it, whether it verifies.
 #   <folder>               A store: every secret, text (name only) and signature in it, as above.
-#   *--envfolio.tar.gz     A backup: its manifest, its key (fingerprint and user id), its store.
-#   *.envfolio, *--envfolio.gpg
+#   *--folio.tar.gz     A backup: its manifest, its key (fingerprint and user id), its store.
+#   *.folio, *--folio.gpg
 #                          An export, or an encrypted backup: how it is locked. With --open, unlock
 #                          it (gpg may ask) and show what is inside, as for a backup.
 #
 # Packets are only ever listed in an empty keyring, so no secret can be decrypted by x-ray — gpg
 # --list-packets decrypts whatever the keyring can. An unlocked file is unpacked into a temporary
-# folder (umask 077) that is removed on exit, as `envfolio store import` does.
+# folder (umask 077) that is removed on exit, as `folio store import` does.
 
 umask 077
 TMP=$(mktemp -d) || exit 1
@@ -99,7 +99,7 @@ function show-store() {
 function show-inside() {
     local dir=$1 home manifest store
     home=$(mktemp -d "$TMP/XXXXXX-home")
-    for manifest in "$dir/envfolio-backup.txt" "$dir/envfolio-export.txt"; do
+    for manifest in "$dir"/folio-backup.txt "$dir"/folio-export.txt "$dir"/envfolio-backup.txt "$dir"/envfolio-export.txt; do
         [[ -f $manifest ]] && { echo "  ${manifest##*/}:" ; sed 's/^/    /' "$manifest" ; }
     done
     if [[ -f $dir/key.asc ]]; then
@@ -139,9 +139,9 @@ for file in "${files[@]}"; do
         echo "  no such file" ; status=1
     else
         case $file in
-            *--envfolio.tar.gz)
+            *--folio.tar.gz)
                 if tar -xzf "$file" -C "$unpack"; then show-inside "$unpack" ; else status=1 ; fi ;;
-            *.envfolio|*--envfolio.gpg)
+            *.folio|*--folio.gpg)
                 locks "$file" | sed 's/^/  /'
                 if (( ! open )); then
                     echo "  (--open to unlock it and see inside)"

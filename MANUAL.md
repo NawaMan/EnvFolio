@@ -5,16 +5,16 @@ keyboard has a matching test in `tests/` named `MANUAL: <command> — <example>`
 
 ---
 
-## `envfolio help`
+## `folio help`
 
 ```
-envfolio help [command]
+folio help [command]
 ```
 
 ### List the commands
 
 ```bash
-envfolio help
+folio help
 ```
 
 Lists every command, one line each.
@@ -22,21 +22,21 @@ Lists every command, one line each.
 ### Help for one command
 
 ```bash
-envfolio help store init
+folio help store init
 ```
 
-The usage and options of `envfolio store init` — the same as `envfolio store init --help`.
+The usage and options of `folio store init` — the same as `folio store init --help`.
 
 ---
 
-## `envfolio store init`
+## `folio store init`
 
-Creates the EnvFolio store (`$ENVFOLIO_STORE_DIR`, default `~/.envfolio`): picks or creates the GPG key that
+Creates the EnvFolio store (`$FOLIO_STORE_DIR`, default `~/.folio`): picks or creates the GPG key that
 encrypts it, runs `pass init`, and starts the store's git history.
 
 ```
-envfolio store init [--key <id>] [--allow-unsafe-folder]
-envfolio store init [--new-key] [--name <name>] [--email <email>] [--passphrase-stdin|--passphrase-fd <n>] [--allow-unsafe-folder]
+folio store init [--key <id>] [--allow-unsafe-folder]
+folio store init [--new-key] [--name <name>] [--email <email>] [--passphrase-stdin|--passphrase-fd <n>] [--allow-unsafe-folder]
 ```
 
 | Option | Meaning |
@@ -53,13 +53,13 @@ envfolio store init [--new-key] [--name <name>] [--email <email>] [--passphrase-
 `--opt=value` works as well as `--opt value`. EnvFolio first says what it needs, then confirms each
 input given and asks for the ones that are not; only then is anything made. Before gpg asks you to
 choose a new key's passphrase, EnvFolio says so and waits for Enter. `--key` cannot be combined
-with the new-key options. It fails if `$ENVFOLIO_STORE_DIR` is a folder with anything in it;
+with the new-key options. It fails if `$FOLIO_STORE_DIR` is a folder with anything in it;
 an empty folder is fine.
 
 ### Ask for everything
 
 ```bash
-envfolio store init
+folio store init
 ```
 
 Shows a menu of your secret keys plus *Create a new key* (straight to creating one if you have
@@ -71,7 +71,7 @@ passphrase.
 ### Use an existing key, no prompts
 
 ```bash
-envfolio store init --key jane@example.com < /dev/null
+folio store init --key jane@example.com < /dev/null
 ```
 
 Uses the one secret key matching `jane@example.com`. Nothing is asked, so this works in a script.
@@ -79,7 +79,7 @@ Uses the one secret key matching `jane@example.com`. Nothing is asked, so this w
 ### Create a new key, no prompts
 
 ```bash
-envfolio store init --name "Jane Doe" --email jane@example.com --passphrase-stdin < passphrase-file
+folio store init --name "Jane Doe" --email jane@example.com --passphrase-stdin < passphrase-file
 ```
 
 Creates a key for `Jane Doe <jane@example.com>` protected by the first line of `passphrase-file`.
@@ -89,11 +89,11 @@ Feed the passphrase from a file (made under `umask 077`) or another secret tool 
 ### Use another store folder
 
 ```bash
-ENVFOLIO_STORE_DIR=~/work-envfolio envfolio store init --key jane@example.com
+FOLIO_STORE_DIR=~/work-folio folio store init --key jane@example.com
 ```
 
-Creates the store in `~/work-envfolio` instead of `~/.envfolio`. Every later `envfolio` command needs the
-same `ENVFOLIO_STORE_DIR` to use it.
+Creates the store in `~/work-folio` instead of `~/.folio`. Every later `folio` command needs the
+same `FOLIO_STORE_DIR` to use it.
 
 ### When the store folder already exists
 
@@ -101,17 +101,17 @@ An **empty** folder is fine: the store is made inside it (it may be a mount poin
 encrypted volume or a bind mount). Its mode and owner are left as they are — see *The store folder
 is private*.
 
-Otherwise `envfolio store init` refuses to run, and changes nothing:
+Otherwise `folio store init` refuses to run, and changes nothing:
 
 - **A ready EnvFolio store** (it has `.gpg-id` and a git history) — says the store already exists.
 - **Anything else** in the folder, even only hidden files — says it is not a ready EnvFolio store.
-  This is what an earlier `envfolio store init` leaves if it stopped partway (an error, Ctrl-C, a
-  closed terminal): remove the folder and run `envfolio store init` again. A key created by the
+  This is what an earlier `folio store init` leaves if it stopped partway (an error, Ctrl-C, a
+  closed terminal): remove the folder and run `folio store init` again. A key created by the
   earlier run is kept, and shows up in the key menu.
 
 ### The store folder is private
 
-When `envfolio store init` or `envfolio store restore` creates the store folder, only you can get
+When `folio store init` or `folio store restore` creates the store folder, only you can get
 into it (`700`): even encrypted, the names of your entries and the plain texts would show to other
 users. An existing empty folder you point them at (a bind mount, say) is used as it is — that is
 your call.
@@ -120,13 +120,13 @@ Like gpg for its home folder, EnvFolio checks whether the store's folder belongs
 or other users can get into it (as they can into a store made by EnvFolio 0.1.0):
 
 ```
-envfolio: warning: /home/you/.envfolio belongs to root, not to you: they can read and change your store.
-envfolio: warning: other users can get into /home/you/.envfolio. To make it private:
-    chmod 700 /home/you/.envfolio
+folio: warning: /home/you/.folio belongs to root, not to you: they can read and change your store.
+folio: warning: other users can get into /home/you/.folio. To make it private:
+    chmod 700 /home/you/.folio
 ```
 
 - **`store init`, `store restore`, `store import`** — the commands that put your items there —
-  warn, then ask `Use /home/you/.envfolio anyway? [y/N]`. Anything but yes stops them, and nothing
+  warn, then ask `Use /home/you/.folio anyway? [y/N]`. Anything but yes stops them, and nothing
   changes; so does nothing to answer with (stdin at its end, or carrying a passphrase).
   `--allow-unsafe-folder` answers yes for them, in a script say; the warning still shows.
 - **Every other command** that uses the store warns, and carries on.
@@ -136,13 +136,13 @@ every time. Fix the folder instead, or keep the store somewhere else.
 
 ---
 
-## `envfolio store path`
+## `folio store path`
 
-Prints the EnvFolio store's folder: `$ENVFOLIO_STORE_DIR`, default `~/.envfolio`, as an absolute path. It
+Prints the EnvFolio store's folder: `$FOLIO_STORE_DIR`, default `~/.folio`, as an absolute path. It
 works whether or not the store exists yet.
 
 ```
-envfolio store path
+folio store path
 ```
 
 | Option | Meaning |
@@ -152,38 +152,38 @@ envfolio store path
 ### Print the store's folder
 
 ```bash
-envfolio store path
+folio store path
 ```
 
 ```
-/home/jane/.envfolio
+/home/jane/.folio
 ```
 
 ---
 
-## `envfolio store backup`
+## `folio store backup`
 
 Saves the whole EnvFolio store and its GPG key into one file, to get it all back with
-`envfolio store restore` — on this machine or a new one.
+`folio store restore` — on this machine or a new one.
 
 ```
-envfolio store backup [--history] [--encrypt [--passphrase-stdin]] [<file>|<folder>]
+folio store backup [--history] [--encrypt [--passphrase-stdin]] [<file>|<folder>]
 ```
 
 | Option | Meaning |
 | --- | --- |
 | `--history` | Keep the store's git history too. Without it, a restore starts a new one. |
-| `--encrypt` | Encrypt the backup with a passphrase of its own (`gpg --symmetric`); the file ends in `--envfolio.gpg` instead of `--envfolio.tar.gz`. |
+| `--encrypt` | Encrypt the backup with a passphrase of its own (`gpg --symmetric`); the file ends in `--folio.gpg` instead of `--folio.tar.gz`. |
 | `--passphrase-stdin` | Read that passphrase from the first line of stdin instead of gpg's prompt. Needs `--encrypt`. An empty passphrase is refused. |
 | `-h`, `--help` | Show the options and stop. |
 
-The file is `<file>` (the suffix added when missing), or `backup-<date>-<time>--envfolio.tar.gz` in
+The file is `<file>` (the suffix added when missing), or `backup-<date>-<time>--folio.tar.gz` in
 `<folder>` — default the current folder. An existing file is never replaced. The file is readable
 by you only.
 
 What is in it:
 
-- `envfolio-backup.txt` — when it was made, the store's folder name, and the key's fingerprint.
+- `folio-backup.txt` — when it was made, the store's folder name, and the key's fingerprint.
 - `key.asc` — the store's secret key, exported with `gpg --export-secret-keys`. gpg asks for the
   key's passphrase to export it, and the key stays protected by that passphrase in the file.
 - The store's folder: the secrets (encrypted), the texts and their signatures (plain) — and with
@@ -195,17 +195,17 @@ secrets themselves need the key and its passphrase. Keep the file somewhere safe
 ### Back up into the current folder
 
 ```bash
-envfolio store backup
+folio store backup
 ```
 
-Writes `backup-20261006-120000--envfolio.tar.gz` (the date and time now) here.
+Writes `backup-20261006-120000--folio.tar.gz` (the date and time now) here.
 
 ### Restore on a new machine
 
 ```bash
-envfolio store backup /media/usb
+folio store backup /media/usb
 # ... on the new machine:
-envfolio store restore /media/usb/backup-20261006-120000--envfolio.tar.gz
+folio store restore /media/usb/backup-20261006-120000--folio.tar.gz
 ```
 
 The store comes back with a new git history, its texts still verify and its secrets decrypt.
@@ -213,7 +213,7 @@ The store comes back with a new git history, its texts still verify and its secr
 ### With the git history
 
 ```bash
-envfolio store backup --history
+folio store backup --history
 ```
 
 The restored store has the same history as this one.
@@ -221,54 +221,54 @@ The restored store has the same history as this one.
 ### Encrypted
 
 ```bash
-envfolio store backup --encrypt
+folio store backup --encrypt
 ```
 
-gpg asks for a passphrase for the backup (twice), and writes `backup-…--envfolio.gpg`. A restore asks
+gpg asks for a passphrase for the backup (twice), and writes `backup-…--folio.gpg`. A restore asks
 for it again. With `--passphrase-stdin`, the first line of stdin is the passphrase — feed it from
 a file or another secret tool, not with `echo`.
 
 ---
 
-## `envfolio store restore`
+## `folio store restore`
 
-Brings back an EnvFolio store from a file made by `envfolio store backup`.
+Brings back an EnvFolio store from a file made by `folio store backup`.
 
 ```
-envfolio store restore [--passphrase-stdin] [--allow-unsafe-folder] <file>
+folio store restore [--passphrase-stdin] [--allow-unsafe-folder] <file>
 ```
 
 | Option | Meaning |
 | --- | --- |
-| `--passphrase-stdin` | Read the passphrase of an encrypted backup (`--envfolio.gpg`) from the first line of stdin instead of gpg's prompt. |
+| `--passphrase-stdin` | Read the passphrase of an encrypted backup (`--folio.gpg`) from the first line of stdin instead of gpg's prompt. |
 | `--allow-unsafe-folder` | Use an existing empty folder that is someone else's or open to other users without asking. The warning still shows. |
 | `-h`, `--help` | Show the options and stop. |
 
 It imports the backup's key into your keyring and trusts it as your own (so `pass` can encrypt to
-it), then puts the store at `$ENVFOLIO_STORE_DIR` (default `~/.envfolio`). A key already in your keyring
+it), then puts the store at `$FOLIO_STORE_DIR` (default `~/.folio`). A key already in your keyring
 is fine. A backup without its git history gets a new one: one commit of everything restored.
 
-An empty folder at `$ENVFOLIO_STORE_DIR` is fine: the store is moved inside it (it may be a mount
+An empty folder at `$FOLIO_STORE_DIR` is fine: the store is moved inside it (it may be a mount
 point, such as an encrypted volume or a bind mount), its mode and owner left as they are. A folder
 made by the restore is private (`700`) — see *The store folder is private* under
-`envfolio store init`.
+`folio store init`.
 
 It refuses when the folder has anything in it, and changes nothing: move that folder away first, or
-restore elsewhere with `ENVFOLIO_STORE_DIR=<other-folder> envfolio store restore <file>`.
-A file whose name ends in neither `--envfolio.tar.gz` nor `--envfolio.gpg`, or that is not an EnvFolio backup,
+restore elsewhere with `FOLIO_STORE_DIR=<other-folder> folio store restore <file>`.
+A file whose name ends in neither `--folio.tar.gz` nor `--folio.gpg`, or that is not an EnvFolio backup,
 is refused too. Nothing is left behind when it fails.
 
-Examples: see `envfolio store backup` above.
+Examples: see `folio store backup` above.
 
 ---
 
-## `envfolio store export`
+## `folio store export`
 
-Copies some items into one file, to bring them into another store with `envfolio store import` — on
+Copies some items into one file, to bring them into another store with `folio store import` — on
 a server, in a booth, or on another machine. Your store's key never leaves this machine.
 
 ```
-envfolio store export [-s|--secrets] [--to <key>|--passphrase-stdin|--passphrase-fd <n>] [-o|--output <file>|<folder>] [<name>...]
+folio store export [-s|--secrets] [--to <key>|--passphrase-stdin|--passphrase-fd <n>] [-o|--output <file>|<folder>] [<name>...]
 ```
 
 | Option | Meaning |
@@ -288,8 +288,8 @@ With neither `--to` nor a passphrase option, EnvFolio asks how to lock the file:
 (gpg asks for it, after EnvFolio says so and waits for Enter), or to a public key — picked from the
 usable keys in your keyring, or given as a key file.
 
-The file is `<file>` (`.envfolio` added when missing), or `store-<date>.envfolio` in `<folder>` —
-never inside the store. With no `-o`, EnvFolio asks, offering `store-<date>.envfolio` in the current
+The file is `<file>` (`.folio` added when missing), or `store-<date>.folio` in `<folder>` —
+never inside the store. With no `-o`, EnvFolio asks, offering `store-<date>.folio` in the current
 folder (Tab completes names). An existing file is never replaced. The file
 is readable by you only.
 
@@ -299,7 +299,7 @@ How it works:
   Each secret is decrypted with your store's key and encrypted to the new key through a pipe —
   the value never touches the disk. gpg may ask for your store key's passphrase. Each text is
   checked and signed again with the new key.
-- The file holds `envfolio-export.txt` (when it was made, the new key's fingerprint), `key.asc` (the
+- The file holds `folio-export.txt` (when it was made, the new key's fingerprint), `key.asc` (the
   new key, with no passphrase of its own) and `store/` — a `pass` store of the chosen items.
 - The whole file is **always locked**: with a passphrase, or with `--to`, to the public key of
   where it is going. Whoever opens the file can read every item in it, so it is never written
@@ -308,11 +308,11 @@ How it works:
 ### Export with a passphrase
 
 ```bash
-envfolio store export web
+folio store export web
 ```
 
 Takes the texts under `web/` (its secrets need `--secrets`). EnvFolio asks where to write the file
-(Enter takes `store-20261006.envfolio` here) and how to lock it; pick the passphrase, and
+(Enter takes `store-20261006.folio` here) and how to lock it; pick the passphrase, and
 gpg asks for one for the file (twice).
 
 ### Lock it to the server's public key
@@ -321,7 +321,7 @@ gpg asks for one for the file (twice).
 # on the server:
 gpg --armor --export server@example.com > server.asc
 # here:
-envfolio store export --secrets --to server.asc web
+folio store export --secrets --to server.asc web
 ```
 
 Only the server's secret key can open the file, so it can travel through places you do not trust
@@ -329,12 +329,12 @@ Only the server's secret key can open the file, so it can travel through places 
 
 ---
 
-## `envfolio store import`
+## `folio store import`
 
-Brings items from a file made by `envfolio store export` into the EnvFolio store.
+Brings items from a file made by `folio store export` into the EnvFolio store.
 
 ```
-envfolio store import [-a|--all] [--overwrite|--skip-existing] [--key <id>] [--passphrase-stdin|--passphrase-fd <n>] [--allow-unsafe-folder] [<file> [<name>...]]
+folio store import [-a|--all] [--overwrite|--skip-existing] [--key <id>] [--passphrase-stdin|--passphrase-fd <n>] [--allow-unsafe-folder] [<file> [<name>...]]
 ```
 
 | Option | Meaning |
@@ -342,7 +342,7 @@ envfolio store import [-a|--all] [--overwrite|--skip-existing] [--key <id>] [--p
 | `-a`, `--all` | Take every item in the export. |
 | `--overwrite` | Replace the items already in the store. |
 | `--skip-existing` | Keep the items already in the store; take only the new ones. |
-| `--key <id>` | With no store yet: make it with this key, as `envfolio store init --key`. |
+| `--key <id>` | With no store yet: make it with this key, as `folio store init --key`. |
 | `--passphrase-stdin` | Read the file's passphrase (or your key's, for a file locked to it) from the first line of stdin. Needs `<file>`, and `--all` or a `<name>`; with no store yet, `--key` too. |
 | `--passphrase-fd <n>` | The same, from the first line of file descriptor `<n>`. stdin stays free, so anything not given is still asked for. |
 | `--allow-unsafe-folder` | Import into a store folder that is someone else's or open to other users without asking. The warning still shows. |
@@ -359,7 +359,7 @@ import before anything is written. Then each secret is encrypted to the store's 
 one commit in the store's history, as when you add it by hand. The export's key is used in a
 keyring of its own and never added to yours.
 
-With no store yet, one is made first, as `envfolio store init` does: its key — `--key`, or picked,
+With no store yet, one is made first, as `folio store init` does: its key — `--key`, or picked,
 or a new one from your name and email — is asked for before anything is made. An item already in
 the store is overwritten or skipped as `--overwrite` or
 `--skip-existing` says; with neither, EnvFolio lists them and asks.
@@ -367,7 +367,7 @@ the store is overwritten or skipped as `--overwrite` or
 ### Into a new store
 
 ```bash
-envfolio store import --all --key server@example.com store-20261006.envfolio
+folio store import --all --key server@example.com store-20261006.folio
 ```
 
 Makes the store with the server's key, then imports every item.
@@ -375,21 +375,21 @@ Makes the store with the server's key, then imports every item.
 ### Merge into a store, keeping what is there
 
 ```bash
-envfolio store import --skip-existing store-20261006.envfolio aws/key web/user
+folio store import --skip-existing store-20261006.folio aws/key web/user
 ```
 
 Takes `aws/key` and `web/user`; one already in the store stays as it is.
 
 ---
 
-## `envfolio ls`
+## `folio ls`
 
 Lists the texts and secrets in the EnvFolio store together as one tree: names only, never values.
 Each name is marked **(S)** for a secret or **(T)** for a text. A name that is both shows twice.
 Signatures (`.txt.sig`) are left out.
 
 ```
-envfolio ls [--flat] [<subfolder>]
+folio ls [--flat] [<subfolder>]
 ```
 
 | Option | Meaning |
@@ -397,12 +397,12 @@ envfolio ls [--flat] [<subfolder>]
 | `--flat` | Full names, one per line, sorted, instead of a tree: `(S) web/github`. |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
-Only a folder can be listed. It needs a ready store (`envfolio store init`).
+Only a folder can be listed. It needs a ready store (`folio store init`).
 
 ### List everything
 
 ```bash
-envfolio ls
+folio ls
 ```
 
 ```
@@ -417,7 +417,7 @@ EnvFolio Store
 ### List one folder
 
 ```bash
-envfolio ls web
+folio ls web
 ```
 
 Lists only what is under `web`.
@@ -425,7 +425,7 @@ Lists only what is under `web`.
 ### List flat
 
 ```bash
-envfolio ls --flat
+folio ls --flat
 ```
 
 ```
@@ -439,14 +439,14 @@ One full name per line, ready for `grep` or a script.
 
 ---
 
-## `envfolio text ls`
+## `folio text ls`
 
-Lists the texts in the EnvFolio store as a tree: names only. It mirrors `envfolio secret ls`: the same
+Lists the texts in the EnvFolio store as a tree: names only. It mirrors `folio secret ls`: the same
 tree as `pass ls`, but with the texts instead of the secrets. Signatures (`.txt.sig`) and folders
 holding no texts are left out.
 
 ```
-envfolio text ls [--flat] [<subfolder>]
+folio text ls [--flat] [<subfolder>]
 ```
 
 | Option | Meaning |
@@ -454,13 +454,13 @@ envfolio text ls [--flat] [<subfolder>]
 | `--flat` | Full names, one per line, sorted, instead of a tree. |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
-Only a folder can be listed; a text's own name is refused (use `envfolio text show` once it exists).
-It needs a ready store (`envfolio store init`).
+Only a folder can be listed; a text's own name is refused (use `folio text show` once it exists).
+It needs a ready store (`folio store init`).
 
 ### List every text
 
 ```bash
-envfolio text ls
+folio text ls
 ```
 
 ```
@@ -474,32 +474,32 @@ Text Store
 ### List one folder
 
 ```bash
-envfolio text ls web
+folio text ls web
 ```
 
 Lists only what is under `web`.
 
 ---
 
-## `envfolio text find`
+## `folio text find`
 
 Lists the texts whose names contain any of the given parts, ignoring case, as a tree: names
-only. It mirrors `envfolio secret find`: `pass find`, for the texts.
+only. It mirrors `folio secret find`: `pass find`, for the texts.
 
 ```
-envfolio text find <part>...
+folio text find <part>...
 ```
 
 | Option | Meaning |
 | --- | --- |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
-It needs a ready store (`envfolio store init`).
+It needs a ready store (`folio store init`).
 
 ### Find by name
 
 ```bash
-envfolio text find home
+folio text find home
 ```
 
 ```
@@ -510,14 +510,14 @@ Search Terms: home
 
 ---
 
-## `envfolio text grep`
+## `folio text grep`
 
 Prints the lines of every text that match, each under its text's name. It mirrors
-`envfolio secret grep`: the same loop as `pass grep`, reading the plain texts instead of decrypting
-secrets. Secrets are never searched. Signatures are not checked here (`envfolio text show` will).
+`folio secret grep`: the same loop as `pass grep`, reading the plain texts instead of decrypting
+secrets. Secrets are never searched. Signatures are not checked here (`folio text show` will).
 
 ```
-envfolio text grep [<grep-option>...] <pattern>
+folio text grep [<grep-option>...] <pattern>
 ```
 
 | Option | Meaning |
@@ -525,12 +525,12 @@ envfolio text grep [<grep-option>...] <pattern>
 | `<grep-option>` | Any option of `grep`, e.g. `-i` to ignore case. |
 | `-h`, `--help` | Show the options and stop. Works without a store. In EnvFolio, `-h` is always help, never grep's `-h`. |
 
-It needs a ready store (`envfolio store init`).
+It needs a ready store (`folio store init`).
 
 ### Find by value
 
 ```bash
-envfolio text grep jane
+folio text grep jane
 ```
 
 ```
@@ -540,13 +540,13 @@ jane
 
 ---
 
-## `envfolio text show`
+## `folio text show`
 
 Prints a text, after checking its signature: `<name>.txt.sig` must be there, match the text, and
 be by the store's key (the first key in `.gpg-id`). Checking needs no passphrase.
 
 ```
-envfolio text show [-c|--clip[=<line>]] <name>
+folio text show [-c|--clip[=<line>]] <name>
 ```
 
 | Option | Meaning |
@@ -554,13 +554,13 @@ envfolio text show [-c|--clip[=<line>]] <name>
 | `-c`, `--clip[=<line>]` | Copy the first line, or line `<line>`, to the clipboard and print nothing. **The clipboard is not cleared** afterwards: a text is not a secret. Needs `pbcopy`, `wl-copy` or `xclip`. |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
-Only a text can be shown; a folder or a secret is refused (use `envfolio secret show` for secrets).
-It needs a ready store (`envfolio store init`).
+Only a text can be shown; a folder or a secret is refused (use `folio secret show` for secrets).
+It needs a ready store (`folio store init`).
 
 ### Show a text
 
 ```bash
-envfolio text show web/user
+folio text show web/user
 ```
 
 Prints the text exactly as it was inserted.
@@ -568,7 +568,7 @@ Prints the text exactly as it was inserted.
 ### Copy to the clipboard
 
 ```bash
-envfolio text show -c web/user
+folio text show -c web/user
 ```
 
 Copies the text's first line, once its signature is checked. `--clip=2` copies line 2 instead.
@@ -580,12 +580,12 @@ is not printed and the command fails. The message says how to see what changed
 (`git diff` / `git log -p` in the store), and how to sign it again if the text is right:
 
 ```bash
-envfolio text insert -f -m web/user < ~/.envfolio/web/user.txt
+folio text insert -f -m web/user < ~/.folio/web/user.txt
 ```
 
 ---
 
-## `envfolio text insert`
+## `folio text insert`
 
 Adds a text to the EnvFolio store. A text is **not a secret**: it is kept plain, not encrypted, as
 `<name>.txt` in the same folders as the secrets, and signed with the store's key as
@@ -593,7 +593,7 @@ Adds a text to the EnvFolio store. A text is **not a secret**: it is kept plain,
 Signing uses the key's secret half, so gpg may ask for its passphrase.
 
 ```
-envfolio text insert [-m|--multiline] [-f|--force] [-t|--text <text>] <name>
+folio text insert [-m|--multiline] [-f|--force] [-t|--text <text>] <name>
 ```
 
 | Option | Meaning |
@@ -606,18 +606,18 @@ envfolio text insert [-m|--multiline] [-f|--force] [-t|--text <text>] <name>
 A text and a secret can share a name: `web/github` can be both. At a terminal, it asks before
 overwriting a text. **From a script or pipe, it overwrites** (the old one stays in the git
 history). If signing fails, nothing is saved and the old text stays. It needs a ready store
-(`envfolio store init`).
+(`folio store init`).
 
 ### Give the text
 
 ```bash
-envfolio text insert -t "https://example.com" web/home
+folio text insert -t "https://example.com" web/home
 ```
 
 ### Type a text
 
 ```bash
-envfolio text insert web/user
+folio text insert web/user
 ```
 
 Asks for the text once, and shows it as you type.
@@ -627,7 +627,7 @@ Asks for the text once, and shows it as you type.
 ### Pipe a text in
 
 ```bash
-whoami | envfolio text insert web/user
+whoami | folio text insert web/user
 ```
 
 Only the first line is the text. For more, use `-m` below.
@@ -635,49 +635,49 @@ Only the first line is the text. For more, use `-m` below.
 ### Several lines
 
 ```bash
-envfolio text insert -m notes/todo < todo.txt
+folio text insert -m notes/todo < todo.txt
 ```
 
 All of stdin is the text, kept exactly.
 
 ---
 
-## `envfolio text edit`
+## `folio text edit`
 
 Opens a text in `$EDITOR` (`vi` if unset), or adds it if it is new, then signs and commits it. It
-mirrors `envfolio secret edit` (`pass edit`): you edit a temporary copy, removed afterwards, and the
+mirrors `folio secret edit` (`pass edit`): you edit a temporary copy, removed afterwards, and the
 text is saved only if you changed it. Signing may ask for the key's passphrase.
 
 ```
-envfolio text edit <name>
+folio text edit <name>
 ```
 
 | Option | Meaning |
 | --- | --- |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
-**The signature is checked first**, as `envfolio text show` does: a text changed outside EnvFolio is not
+**The signature is checked first**, as `folio text show` does: a text changed outside EnvFolio is not
 opened, so editing never signs it by accident. If you save it unchanged, it fails with *Text
-unchanged.* and nothing is committed. It needs a ready store (`envfolio store init`).
+unchanged.* and nothing is committed. It needs a ready store (`folio store init`).
 
 ### Edit a text
 
 ```bash
-envfolio text edit web/user
+folio text edit web/user
 ```
 
 *Interactive — checked by hand, and tested with a stand-in editor.*
 
 ---
 
-## `envfolio text generate`
+## `folio text generate`
 
 Generates a random text, saves, signs and commits it, then prints it. It mirrors
-`envfolio secret generate` (`pass generate`): the same characters and default length. It is kept
+`folio secret generate` (`pass generate`): the same characters and default length. It is kept
 plain, so use it for things like IDs, not passwords. Signing may ask for the key's passphrase.
 
 ```
-envfolio text generate [-n|--no-symbols] [-i|--in-place|-f|--force] <name> [<length>]
+folio text generate [-n|--no-symbols] [-i|--in-place|-f|--force] <name> [<length>]
 ```
 
 | Option | Meaning |
@@ -694,21 +694,21 @@ pipe, it is overwritten (the old one stays in the git history).
 ### Generate a text
 
 ```bash
-envfolio text generate -n id/session 12
+folio text generate -n id/session 12
 ```
 
 Saves a 12-character text of letters and digits as `id/session`, and prints it.
 
 ---
 
-## `envfolio text rm`
+## `folio text rm`
 
 Removes a text, or every text in a folder with `-r`, and commits the removal. The text stays in
-the store's git history. It mirrors `envfolio secret rm` (`pass rm`), but **only texts are removed**:
+the store's git history. It mirrors `folio secret rm` (`pass rm`), but **only texts are removed**:
 `-r` on a folder keeps the secrets in it.
 
 ```
-envfolio text rm [-r|--recursive] [-f|--force] <name>
+folio text rm [-r|--recursive] [-f|--force] <name>
 ```
 
 | Option | Meaning |
@@ -723,19 +723,19 @@ text and a folder means the text; end it with `/` for the folder.
 ### Remove a text
 
 ```bash
-envfolio text rm -f mail/work
+folio text rm -f mail/work
 ```
 
 ---
 
-## `envfolio text mv`
+## `folio text mv`
 
 Renames or moves a text, or every text in a folder, and commits the change. It mirrors
-`envfolio secret mv` (`pass mv`), but **only texts are moved**: secrets in a moved folder stay where
+`folio secret mv` (`pass mv`), but **only texts are moved**: secrets in a moved folder stay where
 they are. A signature covers the text, not its name, so a moved text still verifies.
 
 ```
-envfolio text mv [-f|--force] <old-name> <new-name>
+folio text mv [-f|--force] <old-name> <new-name>
 ```
 
 | Option | Meaning |
@@ -749,18 +749,18 @@ it. At a terminal, it asks before overwriting. **From a script or pipe, it overw
 ### Rename a text
 
 ```bash
-envfolio text mv web/user web/login
+folio text mv web/user web/login
 ```
 
 ---
 
-## `envfolio text cp`
+## `folio text cp`
 
-Copies a text, or every text in a folder, and commits the copy. It mirrors `envfolio secret cp`
+Copies a text, or every text in a folder, and commits the copy. It mirrors `folio secret cp`
 (`pass cp`), but **only texts are copied**.
 
 ```
-envfolio text cp [-f|--force] <old-name> <new-name>
+folio text cp [-f|--force] <old-name> <new-name>
 ```
 
 | Option | Meaning |
@@ -773,18 +773,18 @@ At a terminal, it asks before overwriting. **From a script or pipe, it overwrite
 ### Copy a text
 
 ```bash
-envfolio text cp web/user web/user-copy
+folio text cp web/user web/user-copy
 ```
 
 ---
 
-## `envfolio secret ls`
+## `folio secret ls`
 
 Lists the secrets in the EnvFolio store as a tree: names only, never their values. It is `pass ls`
 without the texts: the same tree, minus `*.txt`/`*.txt.sig` files and folders holding only texts.
 
 ```
-envfolio secret ls [--flat] [<subfolder>]
+folio secret ls [--flat] [<subfolder>]
 ```
 
 | Option | Meaning |
@@ -793,13 +793,13 @@ envfolio secret ls [--flat] [<subfolder>]
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
 Only a folder can be listed. A secret's own name is refused, because `pass ls <name>` would
-print the secret (use `envfolio secret show` once it exists). The same goes for `pass`'s other
-options, such as `-c`. It needs a ready store (`envfolio store init`).
+print the secret (use `folio secret show` once it exists). The same goes for `pass`'s other
+options, such as `-c`. It needs a ready store (`folio store init`).
 
 ### List every secret
 
 ```bash
-envfolio secret ls
+folio secret ls
 ```
 
 ```
@@ -812,20 +812,20 @@ Secret Store
 ### List one folder
 
 ```bash
-envfolio secret ls web
+folio secret ls web
 ```
 
 Lists only what is under `web`.
 
 ---
 
-## `envfolio secret find`
+## `folio secret find`
 
 Lists the secrets whose names contain any of the given parts, ignoring case, as a tree. It shows
 names only, never values. It is `pass find` without the texts.
 
 ```
-envfolio secret find <part>...
+folio secret find <part>...
 ```
 
 | Option | Meaning |
@@ -835,7 +835,7 @@ envfolio secret find <part>...
 ### Find by name
 
 ```bash
-envfolio secret find git
+folio secret find git
 ```
 
 ```
@@ -846,14 +846,14 @@ Search Terms: git
 
 ---
 
-## `envfolio secret grep`
+## `folio secret grep`
 
 Decrypts every secret and prints the lines that match, each under its secret's name. **The
 matching lines are secret values, and they are shown on screen.** It is `pass grep`, so gpg may
 ask for the key's passphrase.
 
 ```
-envfolio secret grep [<grep-option>...] <pattern>
+folio secret grep [<grep-option>...] <pattern>
 ```
 
 | Option | Meaning |
@@ -864,7 +864,7 @@ envfolio secret grep [<grep-option>...] <pattern>
 ### Find by value
 
 ```bash
-envfolio secret grep jane
+folio secret grep jane
 ```
 
 ```
@@ -874,13 +874,13 @@ user: jane
 
 ---
 
-## `envfolio secret show`
+## `folio secret show`
 
 Decrypts a secret and prints it, or copies it to the clipboard. It is `pass show`, so gpg may
 ask for the key's passphrase.
 
 ```
-envfolio secret show [-c|--clip[=<line>]] <name>
+folio secret show [-c|--clip[=<line>]] <name>
 ```
 
 | Option | Meaning |
@@ -889,13 +889,13 @@ envfolio secret show [-c|--clip[=<line>]] <name>
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
 Only a secret can be shown. A folder is refused, because `pass show <folder>` would list it
-(use `envfolio secret ls`). `pass`'s `-q`/`--qrcode` is not offered. It needs a ready store
-(`envfolio store init`).
+(use `folio secret ls`). `pass`'s `-q`/`--qrcode` is not offered. It needs a ready store
+(`folio store init`).
 
 ### Print a secret
 
 ```bash
-envfolio secret show web/github
+folio secret show web/github
 ```
 
 Prints the whole secret, every line of it.
@@ -903,7 +903,7 @@ Prints the whole secret, every line of it.
 ### Copy to the clipboard
 
 ```bash
-envfolio secret show -c web/github
+folio secret show -c web/github
 ```
 
 Copies the secret's first line without showing it, and says when the clipboard will clear. As in
@@ -912,20 +912,20 @@ Copies the secret's first line without showing it, and says when the clipboard w
 ### Copy one line
 
 ```bash
-envfolio secret show --clip=2 note
+folio secret show --clip=2 note
 ```
 
 Copies only line 2 of `note`, e.g. the user name kept under a password.
 
 ---
 
-## `envfolio secret insert`
+## `folio secret insert`
 
 Adds a secret to the EnvFolio store, encrypted with the store's key, and commits it to the store's git
-history. It is a plain `pass` entry, so `PASSWORD_STORE_DIR=~/.envfolio pass show <name>` reads it too.
+history. It is a plain `pass` entry, so `PASSWORD_STORE_DIR=~/.folio pass show <name>` reads it too.
 
 ```
-envfolio secret insert [-m|--multiline] [-f|--force] <name>
+folio secret insert [-m|--multiline] [-f|--force] <name>
 ```
 
 | Option | Meaning |
@@ -936,12 +936,12 @@ envfolio secret insert [-m|--multiline] [-f|--force] <name>
 
 Everything except `--help` goes straight to `pass insert`, so it behaves exactly like `pass`.
 `pass`'s `-e`/`--echo` is refused: it would show the secret on screen. The secret is never taken
-as an argument. It needs a ready store (`envfolio store init`).
+as an argument. It needs a ready store (`folio store init`).
 
 ### Type a secret
 
 ```bash
-envfolio secret insert web/github
+folio secret insert web/github
 ```
 
 Asks for the secret twice, without echo. If `web/github` already exists, asks before overwriting it.
@@ -951,7 +951,7 @@ Asks for the secret twice, without echo. If `web/github` already exists, asks be
 ### Pipe a secret in
 
 ```bash
-printf '%s\n%s\n' "$value" "$value" | envfolio secret insert web/github
+printf '%s\n%s\n' "$value" "$value" | folio secret insert web/github
 ```
 
 As at the prompt, the secret is given twice — one per line — and must match. Nothing is asked:
@@ -961,14 +961,14 @@ history). For a single copy, use `-m` below.
 ### Several lines
 
 ```bash
-envfolio secret insert -m note < note.txt
+folio secret insert -m note < note.txt
 ```
 
 All of stdin is the secret.
 
 ---
 
-## `envfolio secret edit`
+## `folio secret edit`
 
 Opens a secret in `$EDITOR` (vi if unset), or adds it if it is new, and commits the change. It
 is `pass edit`: the secret is decrypted to a temporary file for the editor, in `/dev/shm` (a RAM
@@ -976,7 +976,7 @@ disk) where there is one, and removed afterwards. Without `/dev/shm` (macOS), `p
 asks first. If you save it unchanged, nothing is committed.
 
 ```
-envfolio secret edit <name>
+folio secret edit <name>
 ```
 
 | Option | Meaning |
@@ -986,20 +986,20 @@ envfolio secret edit <name>
 ### Edit a secret
 
 ```bash
-envfolio secret edit web/github
+folio secret edit web/github
 ```
 
 *Interactive — checked by hand, and tested with a stand-in editor.*
 
 ---
 
-## `envfolio secret generate`
+## `folio secret generate`
 
 Generates a random secret, saves and commits it, then prints it, or copies it with `-c`. It is
 `pass generate`.
 
 ```
-envfolio secret generate [-n|--no-symbols] [-c|--clip] [-i|--in-place|-f|--force] <name> [<length>]
+folio secret generate [-n|--no-symbols] [-c|--clip] [-i|--in-place|-f|--force] <name> [<length>]
 ```
 
 | Option | Meaning |
@@ -1017,7 +1017,7 @@ terminal.** From a script or pipe, it is overwritten (the old one stays in the g
 ### Generate a secret
 
 ```bash
-envfolio secret generate -n api 12
+folio secret generate -n api 12
 ```
 
 Saves a 12-character secret of letters and digits as `api`, and prints it.
@@ -1025,20 +1025,20 @@ Saves a 12-character secret of letters and digits as `api`, and prints it.
 ### Copy to the clipboard
 
 ```bash
-envfolio secret generate -c api
+folio secret generate -c api
 ```
 
 Saves the new secret and copies it without showing it.
 
 ---
 
-## `envfolio secret rm`
+## `folio secret rm`
 
 Removes a secret, or a folder with `-r`, and commits the removal. The secret stays in the store's
 git history. It is `pass rm`.
 
 ```
-envfolio secret rm [-r|--recursive] [-f|--force] <name>
+folio secret rm [-r|--recursive] [-f|--force] <name>
 ```
 
 | Option | Meaning |
@@ -1048,23 +1048,23 @@ envfolio secret rm [-r|--recursive] [-f|--force] <name>
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
 At a terminal it asks first. **From a script or pipe, it does not ask.** On a folder, `-r` removes
-everything in it, **texts included** — `pass` acts on the whole folder. (`envfolio text rm -r` removes
+everything in it, **texts included** — `pass` acts on the whole folder. (`folio text rm -r` removes
 only the texts.)
 
 ### Remove a secret
 
 ```bash
-envfolio secret rm -f mail/work
+folio secret rm -f mail/work
 ```
 
 ---
 
-## `envfolio secret mv`
+## `folio secret mv`
 
 Renames or moves a secret or a folder, and commits the change. It is `pass mv`.
 
 ```
-envfolio secret mv [-f|--force] <old-name> <new-name>
+folio secret mv [-f|--force] <old-name> <new-name>
 ```
 
 | Option | Meaning |
@@ -1079,17 +1079,17 @@ in it, **texts included**.
 ### Rename a secret
 
 ```bash
-envfolio secret mv web/github web/gh
+folio secret mv web/github web/gh
 ```
 
 ---
 
-## `envfolio secret cp`
+## `folio secret cp`
 
 Copies a secret or a folder, and commits the copy. It is `pass cp`.
 
 ```
-envfolio secret cp [-f|--force] <old-name> <new-name>
+folio secret cp [-f|--force] <old-name> <new-name>
 ```
 
 | Option | Meaning |
@@ -1103,19 +1103,19 @@ copied with everything in it, **texts included**.
 ### Copy a secret
 
 ```bash
-envfolio secret cp web/github web/github-copy
+folio secret cp web/github web/github-copy
 ```
 
 ---
 
-## `envfolio exec`
+## `folio exec`
 
 Runs a command with entries from the EnvFolio store as environment variables, the way `op run` and
 `aws-vault exec` do. Texts load by default; secrets load only with `--secrets`. Values never go
 on a command line, into a file, or on the screen.
 
 ```
-envfolio exec [-s|--secrets] [-a|--all] [-n|--names] <entry>... -- <command> [<arg>...]
+folio exec [-s|--secrets] [-a|--all] [-n|--names] <entry>... -- <command> [<arg>...]
 ```
 
 | Option | Meaning |
@@ -1136,7 +1136,7 @@ An `<entry>` is one of:
 At least one `<entry>` is needed, unless `--all` is given; the whole store is never loaded by
 default. The `--` is
 needed, and everything after it is the command, which EnvFolio never parses. It needs a ready store
-(`envfolio store init`).
+(`folio store init`).
 
 **Variable names.** An entry's name comes from its full path in the store, whatever was
 selected:
@@ -1176,7 +1176,7 @@ command would not get the value; load it under another name with `VAR=<name>`.
 
 **Values.** An entry's whole content, with trailing newlines removed (as `$(pass show x)` gives
 it), so multi-line values such as keys come through whole. Each text's signature is checked as
-in `envfolio text show`; each secret is decrypted with `pass show`, so gpg may ask for the key's
+in `folio text show`; each secret is decrypted with `pass show`, so gpg may ask for the key's
 passphrase. **All or nothing:** every entry is checked and read before the command starts; if one
 fails, the command does not run and EnvFolio exits 1.
 
@@ -1187,7 +1187,7 @@ EnvFolio's own `PASSWORD_STORE_DIR` is not passed on: the caller's value is put 
 ### Run a command with texts
 
 ```bash
-envfolio exec git -- git commit
+folio exec git -- git commit
 ```
 
 Runs `git commit` with every text under `git/` set, e.g. `git/user_name` as `GIT_USER_NAME`.
@@ -1195,7 +1195,7 @@ Runs `git commit` with every text under `git/` set, e.g. `git/user_name` as `GIT
 ### Add secrets
 
 ```bash
-envfolio exec --secrets gh -- gh repo list
+folio exec --secrets gh -- gh repo list
 ```
 
 Also loads the secrets under `gh/`, e.g. `gh/token` as `GH_TOKEN`.
@@ -1203,16 +1203,16 @@ Also loads the secrets under `gh/`, e.g. `gh/token` as `GH_TOKEN`.
 ### Layer a namespace
 
 ```bash
-envfolio exec --secrets gh @nawa -- gh repo list
+folio exec --secrets gh @nawa -- gh repo list
 ```
 
 Loads `gh/`, then everything in `@nawa/` over it: `@nawa/gh/token` gives `GH_TOKEN`, replacing
-`gh/token`'s. `envfolio exec @nawa -- cmd` alone loads only what is in the namespace.
+`gh/token`'s. `folio exec @nawa -- cmd` alone loads only what is in the namespace.
 
 ### Load everything
 
 ```bash
-envfolio exec --all --secrets @nawa -- ./deploy
+folio exec --all --secrets @nawa -- ./deploy
 ```
 
 Loads every text and secret outside the namespaces, then `@nawa/` over them. Without
@@ -1221,7 +1221,7 @@ Loads every text and secret outside the namespaces, then `@nawa/` over them. Wit
 ### Check the names first
 
 ```bash
-envfolio exec --names --secrets gh @nawa -- gh repo list
+folio exec --names --secrets gh @nawa -- gh repo list
 ```
 
 ```
@@ -1234,7 +1234,7 @@ Shows what the command would get, without running it. Warnings and notes still s
 ### Pick the variable name
 
 ```bash
-envfolio exec --secrets GITHUB_TOKEN=gh/token gh -- ./deploy
+folio exec --secrets GITHUB_TOKEN=gh/token gh -- ./deploy
 ```
 
 Sets `GITHUB_TOKEN` from `gh/token`, and loads the rest of `gh/` by the rule. `gh/token` is
@@ -1242,33 +1242,33 @@ claimed, so it does not also give `GH_TOKEN`.
 
 ---
 
-## `envfolio shell`
+## `folio shell`
 
 Starts your shell (`$SHELL`, or `/bin/sh`) with entries from the EnvFolio store as environment
-variables. It is `envfolio exec <entry>... -- "$SHELL"`, plus a line saying what was loaded.
+variables. It is `folio exec <entry>... -- "$SHELL"`, plus a line saying what was loaded.
 
 ```
-envfolio shell [-s|--secrets] [-a|--all] [-n|--names] <entry>...
+folio shell [-s|--secrets] [-a|--all] [-n|--names] <entry>...
 ```
 
 | Option | Meaning |
 | --- | --- |
 | `-s`, `--secrets` | Also load secrets. |
-| `-a`, `--all` | Load every entry outside the namespaces first, as in `envfolio exec`. |
-| `-n`, `--names` | Only show which variable would get which entry, as in `envfolio exec`; no shell starts. |
+| `-a`, `--all` | Load every entry outside the namespaces first, as in `folio exec`. |
+| `-n`, `--names` | Only show which variable would get which entry, as in `folio exec`; no shell starts. |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
-Entries, variable names, values and errors are as in `envfolio exec`. Before the shell starts, EnvFolio
-prints the loaded variable names, never their values, to stderr. It sets `ENVFOLIO_SHELL=1`, so your
+Entries, variable names, values and errors are as in `folio exec`. Before the shell starts, EnvFolio
+prints the loaded variable names, never their values, to stderr. It sets `FOLIO_SHELL=1`, so your
 own prompt can show it; EnvFolio does not change the prompt. `exit` leaves the shell. It needs a
-ready store (`envfolio store init`).
+ready store (`folio store init`).
 
 ### Open a shell
 
 ```bash
-envfolio shell --secrets gh @nawa
+folio shell --secrets gh @nawa
 ```
 
 ```
-envfolio shell: loaded GH_TOKEN, GH_USER (texts: 1, secrets: 1). Type 'exit' to leave.
+folio shell: loaded GH_TOKEN, GH_USER (texts: 1, secrets: 1). Type 'exit' to leave.
 ```

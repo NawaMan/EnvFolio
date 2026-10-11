@@ -1,12 +1,12 @@
 # Release EnvFolio: Actions → Release → Run workflow (on main), or `gh workflow run release.yml`.
 # Running it is the go-ahead; nothing here releases on its own.
 #
-#   prepare  the version: the `version` input, or APP_VERSION in ./envfolio without --rc
+#   prepare  the version: the `version` input, or APP_VERSION in ./folio without --rc
 #            (0.2.0--rc -> 0.2.0); refused if not on main, the tag exists, or CHANGELOG.md has
 #            neither a non-empty `## Unreleased` nor a `## <version>` section
 #   check    shellcheck + every test on Linux (bash 5) and macOS (bash 3.2) — check.yml
 #   release  commit APP_VERSION=<version> and `## <version> — <date>`, tag v<version>, push both;
-#            a GitHub Release with envfolio and SHA256SUMS, notes from that CHANGELOG section;
+#            a GitHub Release with folio and SHA256SUMS, notes from that CHANGELOG section;
 #            then commit the next minor with --rc (0.3.0--rc) and a fresh `## Unreleased` to main
 name: Release
 
@@ -39,7 +39,7 @@ jobs:
         run: |
           set -euo pipefail
           [[ $REF == refs/heads/main ]] || { echo "::error::Release from main, not $REF."; exit 1; }
-          app=$(sed -n 's/^APP_VERSION=//p' envfolio)
+          app=$(sed -n 's/^APP_VERSION=//p' folio)
           version=${INPUT_VERSION:-${app%--rc}}
           [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
               || { echo "::error::'$version' is not <major>.<minor>.<patch>."; exit 1; }
@@ -77,7 +77,7 @@ jobs:
       - name: Commit the release and tag it
         run: |
           set -euo pipefail
-          sed -i "s/^APP_VERSION=.*/APP_VERSION=$VERSION/" envfolio
+          sed -i "s/^APP_VERSION=.*/APP_VERSION=$VERSION/" folio
           sed -i "s/^## Unreleased\$/## $VERSION — $(date -u +%F)/" CHANGELOG.md
           git diff --quiet || git commit -qam "Release $VERSION"
           git tag -a "$TAG" -m "EnvFolio $VERSION"
@@ -88,8 +88,8 @@ jobs:
           set -euo pipefail
           awk -v v="$VERSION" '/^## / { if (on) exit; on = ($2 == v); next } on' CHANGELOG.md \
               > "$RUNNER_TEMP/notes.md"
-          sha256sum envfolio > "$RUNNER_TEMP/SHA256SUMS"
-          gh release create "$TAG" envfolio "$RUNNER_TEMP/SHA256SUMS" \
+          sha256sum folio > "$RUNNER_TEMP/SHA256SUMS"
+          gh release create "$TAG" folio "$RUNNER_TEMP/SHA256SUMS" \
               --verify-tag --title "EnvFolio $VERSION" --notes-file "$RUNNER_TEMP/notes.md"
 
       - name: Start the next version on main
@@ -97,7 +97,7 @@ jobs:
           set -euo pipefail
           IFS=. read -r major minor _ <<< "$VERSION"
           next="$major.$((minor + 1)).0--rc"
-          sed -i "s/^APP_VERSION=.*/APP_VERSION=$next/" envfolio
+          sed -i "s/^APP_VERSION=.*/APP_VERSION=$next/" folio
           awk '!done && /^## / { print "## Unreleased\n"; done = 1 } { print }' CHANGELOG.md > CHANGELOG.new
           mv CHANGELOG.new CHANGELOG.md
           git commit -qam "Start $next after releasing $VERSION"

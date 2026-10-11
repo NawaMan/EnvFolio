@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 
-# `envfolio store init` end to end, with the answers to its prompts piped in. The tests climb a
+# `folio store init` end to end, with the answers to its prompts piped in. The tests climb a
 # ladder: each gives one more input as an option, and answers only the prompts that are left.
 # Runs the real script against a throwaway GPG home and store. gpg's own passphrase prompt is a
 # fake pinentry (use-pinentry) that answers with a set passphrase.
@@ -14,14 +14,14 @@ setup() {
     export GIT_CONFIG_NOSYSTEM=1
     unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL EMAIL
     export GNUPGHOME="$SANDBOX/gnupg"
-    export ENVFOLIO_STORE_DIR="$SANDBOX/store"
+    export FOLIO_STORE_DIR="$SANDBOX/store"
     export XDG_STATE_HOME="$SANDBOX/state"
     export USER=sb-test-nobody
     unset PASSWORD_STORE_DIR
     mkdir -p "$HOME" && mkdir -m 700 "$GNUPGHOME"
-    [[ $GNUPGHOME == "$SANDBOX"/* && $ENVFOLIO_STORE_DIR == "$SANDBOX"/* && $HOME == "$SANDBOX"/* ]]
+    [[ $GNUPGHOME == "$SANDBOX"/* && $FOLIO_STORE_DIR == "$SANDBOX"/* && $HOME == "$SANDBOX"/* ]]
 
-    ENVFOLIO="$BATS_TEST_DIRNAME/../../envfolio"
+    FOLIO="$BATS_TEST_DIRNAME/../../folio"
 }
 
 teardown() {
@@ -31,16 +31,16 @@ teardown() {
 
 # --- Helpers ------------------------------------------------------------------
 
-# init-answering [<answer>...] -- [<option>...]: run `envfolio store init <option>...` with the
+# init-answering [<answer>...] -- [<option>...]: run `folio store init <option>...` with the
 # answers on stdin, one per line (stdin is empty when there are none).
 init-answering() {
     local answers=()
     while (( $# > 0 )) && [[ $1 != -- ]]; do answers+=("$1") ; shift ; done
     (( $# > 0 )) && shift
     if (( ${#answers[@]} > 0 )); then
-        run "$ENVFOLIO" store init "$@" < <(printf '%s\n' "${answers[@]}")
+        run "$FOLIO" store init "$@" < <(printf '%s\n' "${answers[@]}")
     else
-        run "$ENVFOLIO" store init "$@" < /dev/null
+        run "$FOLIO" store init "$@" < /dev/null
     fi
 }
 
@@ -54,7 +54,7 @@ secret-key-count() {
     gpg --list-secret-keys --with-colons 2>/dev/null | grep -c '^sec' || true
 }
 
-store-fpr() { cat "$ENVFOLIO_STORE_DIR/.gpg-id" ; }
+store-fpr() { cat "$FOLIO_STORE_DIR/.gpg-id" ; }
 
 key-uid-of() {
     gpg --list-keys --with-colons "$1" | awk -F: '$1 == "uid" { print $10 ; exit }'
@@ -72,7 +72,7 @@ assert-store() {
     local fpr=$1 uid=$2
     [ "$status" -eq 0 ]
     [ "$(store-fpr)" = "$fpr" ]
-    [ "$(git -C "$ENVFOLIO_STORE_DIR" log -1 --format='%an <%ae>')" = "$uid" ]
+    [ "$(git -C "$FOLIO_STORE_DIR" log -1 --format='%an <%ae>')" = "$uid" ]
 }
 
 # A new key "<name> <email>" is the store's key, and <passphrase> (only that) unlocks it.
@@ -90,7 +90,7 @@ assert-new-key-store() {
 # Nothing was made: no store folder, and the keyring has <count> secret keys.
 assert-nothing-made() {
     [ "$status" -ne 0 ]
-    [ ! -e "$ENVFOLIO_STORE_DIR" ]
+    [ ! -e "$FOLIO_STORE_DIR" ]
     [ "$(secret-key-count)" -eq "$1" ]
 }
 
@@ -122,7 +122,7 @@ assert-nothing-made() {
 
 @test "store init flow 4: --name --email --passphrase-fd — asks nothing" {
     # bats keeps fd 3 for itself: fd 5 carries the passphrase.
-    run "$ENVFOLIO" store init --name "Jane Doe" --email jane@example.com --passphrase-fd 5 \
+    run "$FOLIO" store init --name "Jane Doe" --email jane@example.com --passphrase-fd 5 \
         < /dev/null 5< <(printf '%s\n' pw-four)
     [[ $output != *"Your name"* && $output != *"Your email"* && $output != *"Next, gpg asks you to choose the new key's passphrase"* ]]
     assert-new-key-store "Jane Doe" jane@example.com pw-four

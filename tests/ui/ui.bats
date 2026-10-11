@@ -7,13 +7,13 @@ bats_require_minimum_version 1.5.0    # run --separate-stderr
 setup() {
     SANDBOX=$(mktemp -d)
     export HOME="$SANDBOX/home"
-    export ENVFOLIO_STORE_DIR="$SANDBOX/store"
+    export FOLIO_STORE_DIR="$SANDBOX/store"
     export XDG_STATE_HOME="$SANDBOX/state"
     export USER=sb-test-nobody
     mkdir -p "$HOME"
 
-    # shellcheck source=SCRIPTDIR/../../envfolio
-    source "$BATS_TEST_DIRNAME/../../envfolio"
+    # shellcheck source=SCRIPTDIR/../../folio
+    source "$BATS_TEST_DIRNAME/../../folio"
     [[ $STORE_PATH == "$SANDBOX"/* ]]
 }
 
@@ -59,17 +59,17 @@ teardown() {
 }
 
 @test "ask-path: piped, prints the answer; an empty answer keeps the guess" {
-    run --separate-stderr ask-path "Export file" "a .envfolio file" <<< "out/x.envfolio"
+    run --separate-stderr ask-path "Export file" "a .folio file" <<< "out/x.folio"
     [ "$status" -eq 0 ]
-    [ "$output" = "out/x.envfolio" ]
-    [[ $stderr == *"Export file [a .envfolio file]:"* ]]
-    run --separate-stderr ask-path "File" "" "./store-1.envfolio" <<< ""
-    [ "$output" = "./store-1.envfolio" ]
+    [ "$output" = "out/x.folio" ]
+    [[ $stderr == *"Export file [a .folio file]:"* ]]
+    run --separate-stderr ask-path "File" "" "./store-1.folio" <<< ""
+    [ "$output" = "./store-1.folio" ]
 }
 
 @test "ask-path: a leading ~ is the home folder" {
-    run --separate-stderr ask-path "File" <<< "~/out/x.envfolio"
-    [ "$output" = "$HOME/out/x.envfolio" ]
+    run --separate-stderr ask-path "File" <<< "~/out/x.folio"
+    [ "$output" = "$HOME/out/x.folio" ]
     run --separate-stderr ask-path "File" <<< "~"
     [ "$output" = "$HOME" ]
     run --separate-stderr ask-path "File" <<< "a~/b"

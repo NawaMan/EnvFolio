@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - run: shellcheck envfolio tools/*.sh tests/test-all.sh
+      - run: shellcheck folio tools/*.sh tests/test-all.sh
 
   # The runner starts steps with SIGPIPE ignored, and bash cannot undo that for its children:
   # `tr < /dev/urandom` (in `pass generate`, `text generate`) then never stops — on macOS it runs
@@ -45,6 +45,6 @@ jobs:
           mkdir -p "$RUNNER_TEMP/bin"
           ln -s "$(brew --prefix)/bin/gtimeout" "$RUNNER_TEMP/bin/timeout"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
-      # /bin/bash on macOS is 3.2; put it first so `env bash` (bats and envfolio) finds it,
+      # /bin/bash on macOS is 3.2; put it first so `env bash` (bats and folio) finds it,
       # not a Homebrew bash 5. test-all.sh fails if it is not 3.x.
       - run: PATH="/bin:$PATH" perl -e '$SIG{PIPE} = "DEFAULT"; exec @ARGV' /bin/bash tests/test-all.sh 3
