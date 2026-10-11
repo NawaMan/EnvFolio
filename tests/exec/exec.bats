@@ -31,7 +31,7 @@ teardown() {
 #   secrets: gh/token, @nawa/gh/token, both/x
 make-store() {
     gpg --batch --passphrase '' --quick-generate-key "Test User <test@example.com>" default default never 2>/dev/null
-    "$FOLIO" store init --key test@example.com < /dev/null >/dev/null 2>&1
+    "$FOLIO" init --key test@example.com < /dev/null >/dev/null 2>&1
     "$FOLIO" text insert -t "Test User"        git/user_name   < /dev/null
     "$FOLIO" text insert -t "test@example.com" git/email       < /dev/null
     "$FOLIO" text insert -t "shared-user"      gh/user         < /dev/null
@@ -291,7 +291,7 @@ make-store() {
 @test "exec: no store fails and creates nothing" {
     run "$FOLIO" exec git -- true
     [ "$status" -eq 1 ]
-    [[ $output == *"folio store init"* ]]
+    [[ $output == *"folio init"* ]]
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 

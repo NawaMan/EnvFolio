@@ -25,7 +25,7 @@ teardown() {
 # A ready store, encrypted to a throwaway no-passphrase key.
 make-store() {
     gpg --batch --passphrase '' --quick-generate-key "Test User <test@example.com>" default default never 2>/dev/null
-    "$FOLIO" store init --key test@example.com < /dev/null >/dev/null 2>&1
+    "$FOLIO" init --key test@example.com < /dev/null >/dev/null 2>&1
 }
 
 @test "MANUAL: secret insert — pipe a secret in" {
@@ -82,7 +82,7 @@ make-store() {
 @test "secret insert: no store fails and creates nothing" {
     run "$FOLIO" secret insert web/github < <(printf 's3cr3t\ns3cr3t\n')
     [ "$status" -eq 1 ]
-    [[ $output == *"No ready EnvFolio store"*"folio store init"* ]]
+    [[ $output == *"No ready EnvFolio store"*"folio init"* ]]
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 

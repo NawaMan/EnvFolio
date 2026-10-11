@@ -21,7 +21,7 @@ A command-line tool for password management. It is built heavily on top of [`pas
 
 # High-Level CLI Design
 
-- `folio store ...`  to deal with store-related actions like: init, backup, restore, import and export.
+- `folio init`, `backup`, `restore`, `export`, `import`, `path` to deal with the store itself.
 - `folio text ...`   to deal with text-related actions like: show, insert, generate, edit, find, ...
 - `folio secret ...` to deal with secret-related actions like: show, insert, generate, edit, find, ...
 - `folio ls`         to list both types of items (texts/secrets) together, as a tree or flat.

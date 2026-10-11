@@ -26,7 +26,7 @@ teardown() {
 # web/homebank.
 make-store() {
     gpg --batch --passphrase '' --quick-generate-key "Test User <test@example.com>" default default never 2>/dev/null
-    "$FOLIO" store init --key test@example.com < /dev/null >/dev/null 2>&1
+    "$FOLIO" init --key test@example.com < /dev/null >/dev/null 2>&1
     "$FOLIO" text insert -t "https://example.com" web/home  < /dev/null
     "$FOLIO" text insert -t jane                  web/user  < /dev/null
     "$FOLIO" text insert -t "jane@work"           mail/work < /dev/null
@@ -87,7 +87,7 @@ plain() { printf '%s\n' "$output" | sed $'s/\e\\[[0-9;]*m//g' ; }
 @test "text find: no store fails and creates nothing" {
     run "$FOLIO" text find home
     [ "$status" -eq 1 ]
-    [[ $output == *"No ready EnvFolio store"*"folio store init"* ]]
+    [[ $output == *"No ready EnvFolio store"*"folio init"* ]]
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 

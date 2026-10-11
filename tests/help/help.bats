@@ -21,7 +21,7 @@ teardown() {
     run "$FOLIO" help
     [ "$status" -eq 0 ]
     [[ $output == *"Usage: folio <command>"* ]]
-    [[ $output == *"store init"* ]]
+    [[ $output == *"  init "* ]]
 }
 
 @test "folio help: unknown topic fails" {
@@ -30,56 +30,56 @@ teardown() {
     [[ $output == *"no help for 'nope'"* ]]
 }
 
-@test "store init --help: shows help, exits 0, makes no store" {
-    run "$FOLIO" store init --help < /dev/null
+@test "init --help: shows help, exits 0, makes no store" {
+    run "$FOLIO" init --help < /dev/null
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio store init"* ]]
+    [[ $output == *"Usage: folio init"* ]]
     [[ $output == *"--passphrase-stdin"* ]]
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 
-@test "store init -h: same as --help, even after other options" {
-    run "$FOLIO" store init --help
+@test "init -h: same as --help, even after other options" {
+    run "$FOLIO" init --help
     local long=$output
-    run "$FOLIO" store init --key someone -h < /dev/null
+    run "$FOLIO" init --key someone -h < /dev/null
     [ "$status" -eq 0 ]
     [ "$output" = "$long" ]
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 
 @test "MANUAL: help — help for one command" {
-    run "$FOLIO" store init --help
+    run "$FOLIO" init --help
     local long=$output
-    run "$FOLIO" help store init
+    run "$FOLIO" help init
     [ "$status" -eq 0 ]
     [ "$output" = "$long" ]
 }
 
-@test "store init: an unknown option shows the usage" {
-    run "$FOLIO" store init --nope < /dev/null
+@test "init: an unknown option shows the usage" {
+    run "$FOLIO" init --nope < /dev/null
     [ "$status" -eq 1 ]
     [[ $output == *"unknown option: --nope"* ]]
-    [[ $output == *"Usage: folio store init"* ]]
+    [[ $output == *"Usage: folio init"* ]]
 }
 
-@test "MANUAL: store path — print the store's folder" {
-    run "$FOLIO" store path
+@test "MANUAL: path — print the store's folder" {
+    run "$FOLIO" path
     [ "$status" -eq 0 ]
     [ "$output" = "$FOLIO_STORE_DIR" ]
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 
-@test "store path --help: the same as folio help store path, without a store" {
-    run "$FOLIO" store path --help
+@test "path --help: the same as folio help path, without a store" {
+    run "$FOLIO" path --help
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio store path"* ]]
+    [[ $output == *"Usage: folio path"* ]]
     local long=$output
-    run "$FOLIO" help store path
+    run "$FOLIO" help path
     [ "$status" -eq 0 ]
     [ "$output" = "$long" ]
-    run "$FOLIO" store path extra
+    run "$FOLIO" path extra
     [ "$status" -eq 1 ]
-    [[ $output == *"Usage: folio store path"* ]]
+    [[ $output == *"Usage: folio path"* ]]
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 
@@ -87,5 +87,15 @@ teardown() {
     run "$FOLIO" help secret insert < /dev/null
     [ "$status" -eq 0 ]
     [[ $output == *"Usage: folio secret insert"* ]]
+    [ ! -e "$FOLIO_STORE_DIR" ]
+}
+
+@test "folio store <command>: gone since 0.5.0 — says what to run instead, touches nothing" {
+    run "$FOLIO" store init
+    [ "$status" -eq 1 ]
+    [[ $output == *'there is no `folio store` any more: run `folio init`.'* ]]
+    run "$FOLIO" store
+    [ "$status" -eq 1 ]
+    [[ $output == *'its commands are `folio init`'* ]]
     [ ! -e "$FOLIO_STORE_DIR" ]
 }

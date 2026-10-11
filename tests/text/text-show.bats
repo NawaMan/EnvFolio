@@ -25,7 +25,7 @@ teardown() {
 # A ready store holding text web/user, a three-line text note, and a secret web/github.
 make-store() {
     gpg --batch --passphrase '' --quick-generate-key "Test User <test@example.com>" default default never 2>/dev/null
-    "$FOLIO" store init --key test@example.com < /dev/null >/dev/null 2>&1
+    "$FOLIO" init --key test@example.com < /dev/null >/dev/null 2>&1
     "$FOLIO" text insert -t jane web/user < /dev/null
     "$FOLIO" text insert -m      note     < <(printf 'one\ntwo\n\n')
     "$FOLIO" secret insert -m web/github < <(printf 's3cr3t\n') >/dev/null
@@ -175,7 +175,7 @@ fake-clipboard() {
 @test "text show: no store fails and creates nothing" {
     run "$FOLIO" text show web/user
     [ "$status" -eq 1 ]
-    [[ $output == *"No ready EnvFolio store"*"folio store init"* ]]
+    [[ $output == *"No ready EnvFolio store"*"folio init"* ]]
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 

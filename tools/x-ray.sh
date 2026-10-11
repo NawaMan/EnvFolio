@@ -15,7 +15,7 @@
 #
 # Packets are only ever listed in an empty keyring, so no secret can be decrypted by x-ray — gpg
 # --list-packets decrypts whatever the keyring can. An unlocked file is unpacked into a temporary
-# folder (umask 077) that is removed on exit, as `folio store import` does.
+# folder (umask 077) that is removed on exit, as `folio import` does.
 
 umask 077
 TMP=$(mktemp -d) || exit 1

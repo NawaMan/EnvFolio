@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 
-# StoreInit's git history, against a throwaway GPG home and store, with no global git identity.
+# Init's git history, against a throwaway GPG home and store, with no global git identity.
 
 setup() {
     SANDBOX=$(mktemp -d)
@@ -53,7 +53,7 @@ teardown() {
 }
 
 @test "store-init: starts a git history authored from the key" {
-    run StoreInit
+    run Init
     [ "$status" -eq 0 ]
     store-exists
 
@@ -68,14 +68,14 @@ teardown() {
         fpr=$2
         source "$1"
         select-key() { printf "%s\n" "$fpr"; }
-        StoreInit
+        Init
     ' _ "$BATS_TEST_DIRNAME/../../folio" "$TEST_FPR"
     [ "$status" -eq 0 ]
     [ -s "$SANDBOX/rel-store/.gpg-id" ]
 }
 
 @test "store-init: later pass changes are committed automatically" {
-    StoreInit
+    Init
     local before
     before=$(git -C "$FOLIO_STORE_DIR" rev-list --count HEAD)
     printf 'not-a-real-secret\n' | pass insert -e test/entry >/dev/null

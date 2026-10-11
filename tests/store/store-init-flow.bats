@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 
-# `folio store init` end to end, with the answers to its prompts piped in. The tests climb a
+# `folio init` end to end, with the answers to its prompts piped in. The tests climb a
 # ladder: each gives one more input as an option, and answers only the prompts that are left.
 # Runs the real script against a throwaway GPG home and store. gpg's own passphrase prompt is a
 # fake pinentry (use-pinentry) that answers with a set passphrase.
@@ -31,16 +31,16 @@ teardown() {
 
 # --- Helpers ------------------------------------------------------------------
 
-# init-answering [<answer>...] -- [<option>...]: run `folio store init <option>...` with the
+# init-answering [<answer>...] -- [<option>...]: run `folio init <option>...` with the
 # answers on stdin, one per line (stdin is empty when there are none).
 init-answering() {
     local answers=()
     while (( $# > 0 )) && [[ $1 != -- ]]; do answers+=("$1") ; shift ; done
     (( $# > 0 )) && shift
     if (( ${#answers[@]} > 0 )); then
-        run "$FOLIO" store init "$@" < <(printf '%s\n' "${answers[@]}")
+        run "$FOLIO" init "$@" < <(printf '%s\n' "${answers[@]}")
     else
-        run "$FOLIO" store init "$@" < /dev/null
+        run "$FOLIO" init "$@" < /dev/null
     fi
 }
 
@@ -96,7 +96,7 @@ assert-nothing-made() {
 
 # --- No key in the keyring: one more option per step ---------------------------
 
-@test "store init flow 1: nothing given — asks name, email; gpg asks the passphrase (no picker)" {
+@test "init flow 1: nothing given — asks name, email; gpg asks the passphrase (no picker)" {
     use-pinentry pw-one
     init-answering "Jane Doe" jane@example.com "" --
     [[ $output == *"Your name"* && $output == *"Your email"* && $output == *"Next, gpg asks you to choose the new key's passphrase"* ]]
@@ -104,7 +104,7 @@ assert-nothing-made() {
     assert-new-key-store "Jane Doe" jane@example.com pw-one
 }
 
-@test "store init flow 2: --name — asks email; gpg asks the passphrase" {
+@test "init flow 2: --name — asks email; gpg asks the passphrase" {
     use-pinentry pw-two
     init-answering jane@example.com "" -- --name "Jane Doe"
     [[ $output != *"Your name"* ]]
@@ -112,7 +112,7 @@ assert-nothing-made() {
     assert-new-key-store "Jane Doe" jane@example.com pw-two
 }
 
-@test "store init flow 3: --name --email — only gpg asks, for the passphrase" {
+@test "init flow 3: --name --email — only gpg asks, for the passphrase" {
     use-pinentry pw-three
     init-answering "" -- --name "Jane Doe" --email jane@example.com
     [[ $output != *"Your name"* && $output != *"Your email"* ]]
@@ -120,15 +120,15 @@ assert-nothing-made() {
     assert-new-key-store "Jane Doe" jane@example.com pw-three
 }
 
-@test "store init flow 4: --name --email --passphrase-fd — asks nothing" {
+@test "init flow 4: --name --email --passphrase-fd — asks nothing" {
     # bats keeps fd 3 for itself: fd 5 carries the passphrase.
-    run "$FOLIO" store init --name "Jane Doe" --email jane@example.com --passphrase-fd 5 \
+    run "$FOLIO" init --name "Jane Doe" --email jane@example.com --passphrase-fd 5 \
         < /dev/null 5< <(printf '%s\n' pw-four)
     [[ $output != *"Your name"* && $output != *"Your email"* && $output != *"Next, gpg asks you to choose the new key's passphrase"* ]]
     assert-new-key-store "Jane Doe" jane@example.com pw-four
 }
 
-@test "store init flow 5: --name --email --passphrase-stdin — asks nothing" {
+@test "init flow 5: --name --email --passphrase-stdin — asks nothing" {
     init-answering pw-five -- --name "Jane Doe" --email jane@example.com --passphrase-stdin
     [[ $output != *"Your name"* && $output != *"Your email"* && $output != *"Next, gpg asks you to choose the new key's passphrase"* ]]
     assert-new-key-store "Jane Doe" jane@example.com pw-five
@@ -136,7 +136,7 @@ assert-nothing-made() {
 
 # --- One key in the keyring: one more option per step --------------------------
 
-@test "store init flow 6: an existing key, nothing given — the picker, pick that key" {
+@test "init flow 6: an existing key, nothing given — the picker, pick that key" {
     add-existing-key
     init-answering 1 --
     [[ $output == *"Which GPG key"* ]]
@@ -145,7 +145,7 @@ assert-nothing-made() {
     [ "$(secret-key-count)" -eq 1 ]
 }
 
-@test "store init flow 7: an existing key, nothing given — the picker, then a new key" {
+@test "init flow 7: an existing key, nothing given — the picker, then a new key" {
     add-existing-key
     use-pinentry pw-seven
     init-answering 2 "Jane Doe" jane@example.com "" --
@@ -155,7 +155,7 @@ assert-nothing-made() {
     [ "$(secret-key-count)" -eq 2 ]
 }
 
-@test "store init flow 8: an existing key, --key — asks nothing" {
+@test "init flow 8: an existing key, --key — asks nothing" {
     add-existing-key
     init-answering -- --key old@example.com
     [[ $output != *"Which GPG key"* && $output != *"Your name"* ]]
@@ -165,32 +165,32 @@ assert-nothing-made() {
 
 # --- Failures leave nothing behind ---------------------------------------------
 
-@test "store init flow: gpg's passphrase prompt cancelled — nothing made" {
+@test "init flow: gpg's passphrase prompt cancelled — nothing made" {
     use-pinentry --cancel
     init-answering "" -- --name "Jane Doe" --email jane@example.com
     [[ $output == *"Creating the key failed"* || $output == *"no key was created"* ]]
     assert-nothing-made 0
 }
 
-@test "store init flow: an empty passphrase on stdin — nothing made" {
+@test "init flow: an empty passphrase on stdin — nothing made" {
     init-answering "" -- --name "Jane Doe" --email jane@example.com --passphrase-stdin
     [[ $output == *"No passphrase on stdin"* ]]
     assert-nothing-made 0
 }
 
-@test "store init flow: input ends at the name — nothing made" {
+@test "init flow: input ends at the name — nothing made" {
     init-answering --
     [[ $output == *"Cancelled"* ]]
     assert-nothing-made 0
 }
 
-@test "store init flow: --passphrase-fd on a closed fd — nothing made" {
+@test "init flow: --passphrase-fd on a closed fd — nothing made" {
     init-answering -- --name "Jane Doe" --email jane@example.com --passphrase-fd 7
     [[ $output == *"no such file descriptor"* ]]
     assert-nothing-made 0
 }
 
-@test "store init flow: input ends before gpg asks the new key's passphrase — nothing made" {
+@test "init flow: input ends before gpg asks the new key's passphrase — nothing made" {
     use-pinentry pw
     init-answering -- --name "Jane Doe" --email jane@example.com
     [[ $output == *"Next, gpg asks you to choose the new key's passphrase"* && $output == *"Cancelled"* ]]

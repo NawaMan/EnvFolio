@@ -262,7 +262,7 @@ Starting style, not law — deviate explicitly (say so and why) rather than sile
   `pass init`, and texts are signed with it; `git` because the store is synced as a git repo;
   `tree` (already a dependency of `pass`) because `secret ls`/`find` run pass's own `tree` line
   with the texts left out; `tar` + `gzip` because
-  `folio store backup` packs everything into one file. Every prompt goes through the Input helpers
+  `folio backup` packs everything into one file. Every prompt goes through the Input helpers
   (`ask-text`, `ask-choice`, `confirm`, `show-box`), in plain bash. Plus one clipboard tool — `pbcopy` /
   `wl-copy` / `xclip`, whichever `pass` itself uses on the machine — for `folio text show -c`.
   The script's `ensure-requirements` is the authoritative list. Anything
@@ -278,8 +278,8 @@ Starting style, not law — deviate explicitly (say so and why) rather than sile
   layer is what needs a TTY.
 - A script that can be `source`d without running `Main` (guard with
   `[[ ${BASH_SOURCE[0]} == "$0" ]] && Main "$@"`) lets tests call its functions.
-- A function that **is a command** — `Main`, a group dispatcher (`Store`, `Text`, `Secret`) or a
-  command (`StoreInit`, `TextShow`, `Ls`, `Exec`, …) — is named in TitleCase from the command
+- A function that **is a command** — `Main`, a group dispatcher (`Text`, `Secret`) or a
+  command (`Init`, `TextShow`, `Ls`, `Exec`, …) — is named in TitleCase from the command
   words and written `Name() {`. Everything else, its `*-help` text included, is
   `function kebab-name() {`. So a command stands out from its helpers.
 

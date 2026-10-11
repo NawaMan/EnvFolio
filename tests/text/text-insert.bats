@@ -25,7 +25,7 @@ teardown() {
 # A ready store, encrypted to (and signing with) a throwaway no-passphrase key.
 make-store() {
     gpg --batch --passphrase '' --quick-generate-key "Test User <test@example.com>" default default never 2>/dev/null
-    "$FOLIO" store init --key test@example.com < /dev/null >/dev/null 2>&1
+    "$FOLIO" init --key test@example.com < /dev/null >/dev/null 2>&1
 }
 
 # The text file is signed by the store's key.
@@ -141,7 +141,7 @@ is-signed() {
 @test "text insert: no store fails and creates nothing" {
     run "$FOLIO" text insert -t x note < /dev/null
     [ "$status" -eq 1 ]
-    [[ $output == *"No ready EnvFolio store"*"folio store init"* ]]
+    [[ $output == *"No ready EnvFolio store"*"folio init"* ]]
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 
