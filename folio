@@ -1152,42 +1152,17 @@ EOF
         [[ -n $passphrase ]] || die "No passphrase on file descriptor $passphrase_fd."
     fi
 
-    umask 077
-    local stage home root
-    stage=$(mktemp -d) || die "Cannot make a temporary folder."
-    remove-on-exit "$stage"
-    home=$stage/home root=$stage/unpack/store
-    new-gpg-home "$home"
-    mkdir "$stage/unpack"
-
     if [[ -z $passphrase ]] && is-passphrase-locked "$file"; then
         acknowledge "Next, gpg asks for the export file's passphrase: the one chosen when it was exported."
     fi
-    local open=(gpg --decrypt --output -)
-    [[ -n $passphrase ]] && open=(gpg --batch --pinentry-mode loopback --passphrase-fd 3 "${open[@]:1}")
-    "${open[@]}" < "$file" 3< <(printf '%s\n' "$passphrase") | tar -xzf - -C "$stage/unpack"
-    [[ ${PIPESTATUS[*]} == "0 0" ]] || die "Opening $file failed."
+    open-export "$file" "$passphrase"
     unset passphrase
-
-    local field value format="" key="" manifest=$stage/unpack/folio-export.txt
-    [[ -f $manifest ]] || manifest=$stage/unpack/envfolio-export.txt    # made before 0.4.0, renamed by hand
-    [[ -f $manifest ]] || die "$file is not an EnvFolio export: it has no folio-export.txt."
-    while read -r field value; do
-        case $field in
-            folio-export|envfolio-export) format=$value ;;
-            key)                          key=$value    ;;
-        esac
-    done < "$manifest"
-    [[ $format == 1 ]]                 || die "$file is an EnvFolio export of a format this EnvFolio cannot read ($format)."
-    [[ $key =~ ^[0-9A-F]{40,64}$ ]]    || die "$file names a key that is not a fingerprint: $key"
-    [[ -s $stage/unpack/key.asc && -d $root ]] || die "$file has no key or no items in it."
-    GNUPGHOME=$home gpg --batch --quiet --import "$stage/unpack/key.asc" 2>/dev/null
-    GNUPGHOME=$home gpg --list-secret-keys "$key" >/dev/null 2>&1 || die "$file has no secret key $key."
-    show-answer "Opened" "the export's key is $key"
+    local home=$EXPORT_HOME root=$EXPORT_ROOT
+    show-answer "Opened" "the export's key is $EXPORT_KEY"
 
     # Input: the items — --all, the <name>s, or picked from a list
     select-items import "$root" 1 "$all" "${names[@]}"
-    local item name signer texts=0
+    local item name texts=0
     for item in "${SELECTED[@]}"; do [[ $item == *.gpg ]] || texts=$(( texts + 1 )) ; done
     show-answer "Items" "${#SELECTED[@]} (texts: $texts, secrets: $(( ${#SELECTED[@]} - texts )))"
     for item in "${SELECTED[@]}"; do printf '    %s\n' "$(item-label "$item")" >&2 ; done
@@ -1195,9 +1170,7 @@ EOF
     # Every text must be the one the export signed, before anything is written.
     for item in "${SELECTED[@]}"; do
         [[ $item == *.txt ]] || continue
-        signer=$(GNUPGHOME=$home gpg --status-fd 1 --verify "$root/$item.sig" "$root/$item" 2>/dev/null \
-                    | awk '$2 == "VALIDSIG" { print $NF }')
-        [[ $signer == "$key" ]] || die "import: the signature of '${item%.txt}' in the export does not verify."
+        verify-export-text import "${item%.txt}"
     done
 
     # Input: the store — FOLIO_STORE_DIR, default ~/.folio (see STORE_PATH at the top). Before
@@ -1286,6 +1259,54 @@ EOF
              "Texts:   $texts" \
              "Secrets: $secrets" \
              "Skipped: $skipped (already in the store)"
+}
+
+# open-export <file> <passphrase> [quiet]: unpack an export into a private temporary folder, its key into
+# a GnuPG home of its own (never your keyring); both are removed when EnvFolio exits. Sets
+# EXPORT_HOME, EXPORT_ROOT (its items, laid out like a store) and EXPORT_KEY. An empty
+# <passphrase> leaves opening to gpg: it asks for the file's passphrase, or uses your key the file
+# is locked to. With quiet, gpg says only what goes wrong.
+function open-export() {
+    local file=$1 passphrase=$2 quiet=${3:-} stage
+    umask 077
+    stage=$(mktemp -d) || die "Cannot make a temporary folder."
+    remove-on-exit "$stage"
+    EXPORT_HOME=$stage/home EXPORT_ROOT=$stage/unpack/store
+    new-gpg-home "$EXPORT_HOME"
+    mkdir "$stage/unpack"
+
+    local open=(gpg --decrypt --output -)
+    [[ -n $quiet ]] && open=(gpg --quiet "${open[@]:1}")
+    [[ -n $passphrase ]] && open=(gpg --batch --pinentry-mode loopback --passphrase-fd 3 "${open[@]:1}")
+    # The passphrase reaches gpg on fd 3 (printf is a builtin: never in argv).
+    "${open[@]}" < "$file" 3< <(printf '%s\n' "$passphrase") | tar -xzf - -C "$stage/unpack"
+    [[ ${PIPESTATUS[*]} == "0 0" ]] || die "Opening $file failed."
+    unset passphrase
+
+    local field value format="" key="" manifest=$stage/unpack/folio-export.txt
+    [[ -f $manifest ]] || manifest=$stage/unpack/envfolio-export.txt    # made before 0.4.0, renamed by hand
+    [[ -f $manifest ]] || die "$file is not an EnvFolio export: it has no folio-export.txt."
+    while read -r field value; do
+        case $field in
+            folio-export|envfolio-export) format=$value ;;
+            key)                          key=$value    ;;
+        esac
+    done < "$manifest"
+    [[ $format == 1 ]]                 || die "$file is an EnvFolio export of a format this EnvFolio cannot read ($format)."
+    [[ $key =~ ^[0-9A-F]{40,64}$ ]]    || die "$file names a key that is not a fingerprint: $key"
+    [[ -s $stage/unpack/key.asc && -d $EXPORT_ROOT ]] || die "$file has no key or no items in it."
+    GNUPGHOME=$EXPORT_HOME gpg --batch --quiet --import "$stage/unpack/key.asc" 2>/dev/null
+    GNUPGHOME=$EXPORT_HOME gpg --list-secret-keys "$key" >/dev/null 2>&1 || die "$file has no secret key $key."
+    EXPORT_KEY=$key
+}
+
+# verify-export-text <how> <name>: die unless the text <name> in the opened export is the one the
+# export signed.
+function verify-export-text() {
+    local signer item=$EXPORT_ROOT/$2.txt
+    signer=$(GNUPGHOME=$EXPORT_HOME gpg --status-fd 1 --verify "$item.sig" "$item" 2>/dev/null \
+                | awk '$2 == "VALIDSIG" { print $NF }')
+    [[ $signer == "$EXPORT_KEY" ]] || die "$1: the signature of '$2' in the export does not verify."
 }
 
 # check-export-file <file>: die unless <file> is there and named as an export.
@@ -2175,7 +2196,8 @@ Ls() {
 
 function run-exec-help() {
     cat <<'HELP'
-Usage: folio exec [-s|--secrets] [-a|--all] [-n|--names] <entry>... -- <command> [<arg>...]
+Usage: folio exec [-s|--secrets] [-a|--all] [-n|--names] [--from <file> [--passphrase-fd <n>]]
+                  <entry>... -- <command> [<arg>...]
 
 Run a command with entries from the store as environment variables. Texts load by default;
 secrets only with --secrets. Values are never printed.
@@ -2190,13 +2212,20 @@ Options:
   -a, --all           Load every entry outside the @namespaces first; <entry> is then optional.
   -n, --names         Only show which variable would get which entry, and stop: nothing is read,
                       nothing runs.
+  --from <file>       Take the entries from a file made by `folio export`, not from the store,
+                      which is then not needed. gpg asks for the file's passphrase, or uses your
+                      key the file is locked to. Nothing is kept: the file is opened in a private
+                      temporary folder, removed before the command starts.
+  --passphrase-fd <n> With --from: the file's passphrase, from the first line of file descriptor
+                      <n>, e.g. --passphrase-fd 3 3< pass.txt.
   -h, --help          Show this help and stop.
 HELP
 }
 
 function run-shell-help() {
     cat <<'HELP'
-Usage: folio shell [-s|--secrets] [-a|--all] [-n|--names] <entry>...
+Usage: folio shell [-s|--secrets] [-a|--all] [-n|--names] [--from <file> [--passphrase-fd <n>]]
+                   <entry>...
 
 Start your shell ($SHELL) with entries from the store as environment variables, and say which
 names were loaded (never their values). FOLIO_SHELL=1 is set. Type `exit` to leave.
@@ -2207,6 +2236,8 @@ Options:
   -a, --all           Load every entry outside the @namespaces first; <entry> is then optional.
   -n, --names         Only show which variable would get which entry, and stop: nothing is read,
                       nothing runs.
+  --from <file>       Take the entries from a file made by `folio export`, as in `folio exec`.
+  --passphrase-fd <n> With --from: the file's passphrase, from the first line of file descriptor <n>.
   -h, --help          Show this help and stop.
 HELP
 }
@@ -2215,12 +2246,16 @@ Exec()  { exec-with-entries exec  "$@" ; }
 Shell() { exec-with-entries shell "$@" ; }
 
 VAR_NAME_PATTERN='^[A-Za-z_][A-Za-z0-9_]*$'
+# Where the entries come from, in messages: the store, or with --from, the export.
+ENTRIES_IN="the store"
 
-# exec-with-entries <exec|shell> [-s|--secrets] <entry>... [-- <command> [<arg>...]]
+# exec-with-entries <exec|shell> [-s|--secrets] [--from <file> [--passphrase-fd <n>]] <entry>...
+#                   [-- <command> [<arg>...]]
 # Read every entry first, then export them all at once and exec: no `pass` or `gpg` call made
-# while reading ever sees a value already loaded.
+# while reading ever sees a value already loaded. With --from, the entries come from an export
+# file instead of the store, which is then not needed at all.
 function exec-with-entries() {
-    local how=$1 secrets=0 all=0 only_names=0 dashes=0 entries=() arg ; shift
+    local how=$1 secrets=0 all=0 only_names=0 dashes=0 from_file="" passphrase_fd="" entries=() arg ; shift
     while (( $# > 0 )); do
         arg=$1 ; shift
         case $arg in
@@ -2228,20 +2263,32 @@ function exec-with-entries() {
             -s|--secrets) secrets=1 ;;
             -a|--all)     all=1 ;;
             -n|--names)   only_names=1 ;;
+            --from|--passphrase-fd)
+                          [[ $# -gt 0 && -n $1 ]] || die "$arg needs a value."
+                          if [[ $arg == --from ]]; then from_file=$1 ; else passphrase_fd=$1 ; fi
+                          shift ;;
+            --from=*)          from_file=${arg#*=} ;;
+            --passphrase-fd=*) passphrase_fd=${arg#*=} ;;
             --)           dashes=1 ; break ;;
             -*)           die "$how: unknown option: $arg" ;;
             *)            entries+=("$arg") ;;
         esac
     done
+    local from_usage="[--from <file> [--passphrase-fd <n>]]"
     if [[ $how == exec ]]; then
         (( (${#entries[@]} > 0 || all) && (only_names || (dashes && $# > 0)) )) \
-            || die "Usage: folio exec [-s|--secrets] [-a|--all] [-n|--names] <entry>... -- <command> [<arg>...]"
+            || die "Usage: folio exec [-s|--secrets] [-a|--all] [-n|--names] $from_usage <entry>... -- <command> [<arg>...]"
     else
         (( (${#entries[@]} > 0 || all) && ! dashes )) \
-            || die "Usage: folio shell [-s|--secrets] [-a|--all] [-n|--names] <entry>..."
+            || die "Usage: folio shell [-s|--secrets] [-a|--all] [-n|--names] $from_usage <entry>..."
         set -- "${SHELL:-/bin/sh}"
     fi
-    require-store
+    if [[ -n $from_file ]]; then
+        open-export-for "$how" "$from_file" "$passphrase_fd"
+    else
+        [[ -z $passphrase_fd ]] || die "$how: --passphrase-fd is for opening a --from file."
+        require-store
+    fi
     # --all is the store's root (""), loaded first wherever it was typed.
     (( all )) && entries=("" "${entries[@]}")
     resolve-entries "$how" "$secrets" "${entries[@]}"
@@ -2251,14 +2298,21 @@ function exec-with-entries() {
     for (( i = 0; i < ${#EXEC_VARS[@]}; i++ )); do
         file=${EXEC_FILES[i]}
         if [[ $file == *.txt ]]; then
-            verify-text "${file%.txt}"
+            if [[ -n $from_file ]]; then verify-export-text "$how" "${file%.txt}"
+            else                    verify-text "${file%.txt}"
+            fi
             value=$(cat "$STORE_PATH/$file") ; texts=$(( texts + 1 ))
+        elif [[ -n $from_file ]]; then
+            value=$(GNUPGHOME=$EXPORT_HOME gpg --batch --quiet --decrypt "$STORE_PATH/$file" 2>/dev/null) \
+                || die "$how: could not decrypt '${file%.gpg}' in the export."
         else
             value=$(pass show -- "${file%.gpg}") || die "$how: could not decrypt '${file%.gpg}'."
         fi
         pairs+=("${EXEC_VARS[i]}=$value")
     done
     unset value
+    # Every value is read: the unpacked export and its key go now, as exec runs no EXIT trap.
+    remove-now
 
     if [[ $how == shell ]]; then
         local names
@@ -2274,6 +2328,26 @@ function exec-with-entries() {
     set -- "${pairs[@]}" -- "$@"
     unset pairs entries EXEC_VARS EXEC_FILES
     export-and-exec "$@"
+}
+
+# open-export-for <exec|shell> <file> <passphrase-fd>: open the export <file> for exec or shell,
+# and read the entries from it from here on (STORE_PATH is its unpacked items). The passphrase is
+# the first line of fd <passphrase-fd>, if given; otherwise gpg asks for it, or uses your key the
+# file is locked to.
+function open-export-for() {
+    local how=$1 file=$2 fd=$3 passphrase=""
+    check-export-file "$file"
+    if [[ -n $fd ]]; then
+        [[ $fd =~ ^[0-9]+$ ]] || die "--passphrase-fd needs a file descriptor number, not '$fd'."
+        { : <&"$fd" ; } 2>/dev/null || die "--passphrase-fd $fd: no such file descriptor is open."
+        IFS= read -rs -u "$fd" passphrase || true
+        [[ -n $passphrase ]] || die "No passphrase on file descriptor $fd."
+    elif is-passphrase-locked "$file"; then
+        info "folio $how: gpg asks for the passphrase of $(tilde-path "$file")." >&2
+    fi
+    open-export "$file" "$passphrase" quiet
+    unset passphrase
+    STORE_PATH=$EXPORT_ROOT ENTRIES_IN="the export"
 }
 
 # export-and-exec <var>=<value>... -- <command> [<arg>...]
@@ -2307,7 +2381,7 @@ function resolve-entries() {
         is-explicit "$entry" || continue
         var=${entry%%=*} name=${entry#*=}
         [[ $var =~ $VAR_NAME_PATTERN ]] || die "$how: '$var' is not a valid variable name."
-        entry-file "$how" "$secrets" "$name" || die "$how: '$name' is not a text or secret in the store."
+        entry-file "$how" "$secrets" "$name" || die "$how: '$name' is not a text or secret in $ENTRIES_IN."
         exp_vars+=("$var") ; exp_files+=("$ENTRY_FILE") ; claimed+="$ENTRY_FILE "
     done
 
@@ -2331,7 +2405,7 @@ function resolve-entries() {
         fi
         if (( ! found )); then
             [[ -n $entry ]] && die "$how: '$entry' has no entries to load."
-            die "$how: the store has no entries to load."
+            die "$how: $ENTRIES_IN has no entries to load."
         fi
     done
 
@@ -2392,7 +2466,7 @@ function note-skipped-secrets() {
         [[ -n $entry || ${file#"$STORE_PATH"/} != @* ]] && count=$(( count + 1 ))
     done < <(find "$STORE_PATH${entry:+/${entry%/}}" -mindepth 1 -name '.*' -prune -o -type f -name '*.gpg' -print)
     (( count > 0 )) || return 0
-    where="under '$entry'" ; [[ -n $entry ]] || where="in the store"
+    where="under '$entry'" ; [[ -n $entry ]] || where="in $ENTRIES_IN"
     (( found )) || die "$how: only secrets $where ($count); add --secrets to load them."
     printf "folio %s: left out %d secret(s) %s; add --secrets to load them.\n" "$how" "$count" "$where" >&2
 }
@@ -2522,7 +2596,8 @@ function ensure-requirements() {
     lines     "git    " "Syncs the store   " "brew install git         "
     lines     "tree   " "Lists the store   " "brew install tree        "
 
-    if [[ ${1:-} =~ ^(backup|restore|import|export)$ ]]; then
+    # tar and gzip also open an export for exec and shell --from.
+    if [[ ${1:-} =~ ^(backup|restore|import|export)$ || ( ${1:-} =~ ^(exec|shell)$ && " $* " == *" --from"* ) ]]; then
         lines     "tar    " "Packs backups     " "brew install gnu-tar     "
         lines     "gzip   " "Compresses backups" "brew install gzip        "
     fi
@@ -2550,9 +2625,14 @@ function die()  { printf 'folio: %s\n' "$*" >&2; exit 1; }
 REMOVE_ON_EXIT=() GPG_HOMES=()
 function remove-on-exit() {
     REMOVE_ON_EXIT+=("$@")
-    # shellcheck disable=SC2154  # h is the trap's own loop variable
-    trap 'for h in "${GPG_HOMES[@]}"; do GNUPGHOME=$h gpgconf --kill gpg-agent; done 2>/dev/null
-          rm -rf -- "${REMOVE_ON_EXIT[@]}"' EXIT
+    trap remove-now EXIT
+}
+# remove-now: remove them already — before an `exec`, after which no EXIT trap runs.
+function remove-now() {
+    local h
+    for h in "${GPG_HOMES[@]}"; do GNUPGHOME=$h gpgconf --kill gpg-agent; done 2>/dev/null
+    (( ${#REMOVE_ON_EXIT[@]} == 0 )) || rm -rf -- "${REMOVE_ON_EXIT[@]}"
+    REMOVE_ON_EXIT=() GPG_HOMES=()
 }
 # new-gpg-home <folder>: a GnuPG home of its own, for an export's key; gone when EnvFolio exits.
 function new-gpg-home() {

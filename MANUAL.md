@@ -1115,14 +1115,17 @@ Runs a command with entries from the EnvFolio store as environment variables, th
 on a command line, into a file, or on the screen.
 
 ```
-folio exec [-s|--secrets] [-a|--all] [-n|--names] <entry>... -- <command> [<arg>...]
+folio exec [-s|--secrets] [-a|--all] [-n|--names] [--from <file> [--passphrase-fd <n>]]
+           <entry>... -- <command> [<arg>...]
 ```
 
 | Option | Meaning |
 | --- | --- |
 | `-s`, `--secrets` | Also load secrets. Without it, a secret named directly is refused, and the secrets in a folder are left out, with a note on stderr saying how many. |
 | `-a`, `--all` | Load every entry outside the namespaces (top `@` folders) first, wherever it is typed; the entries given then layer over it. With it, `<entry>` is optional. |
-| `-n`, `--names` | Only show which variable would get which entry, in the order they are set, marked (S)ecret or (T)ext, and stop. Nothing is read or decrypted (no passphrase, no signature check), and the command, if given, does not run. |
+| `-n`, `--names` | Only show which variable would get which entry, in the order they are set, marked (S)ecret or (T)ext, and stop. Nothing is read or decrypted (no passphrase, no signature check), and the command, if given, does not run. With `--from`, the file is still opened to see what is in it. |
+| `--from <file>` | Take the entries from a file made by `folio export`, not from the store. No store is needed, and none is made or touched. See [From an export file](#from-an-export-file). |
+| `--passphrase-fd <n>` | With `--from`: the file's passphrase, from the first line of file descriptor `<n>`, e.g. `--passphrase-fd 3 3< pass.txt`. stdin stays the command's. |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
 An `<entry>` is one of:
@@ -1136,7 +1139,7 @@ An `<entry>` is one of:
 At least one `<entry>` is needed, unless `--all` is given; the whole store is never loaded by
 default. The `--` is
 needed, and everything after it is the command, which EnvFolio never parses. It needs a ready store
-(`folio init`).
+(`folio init`), unless the entries come from a file with `--from`.
 
 **Variable names.** An entry's name comes from its full path in the store, whatever was
 selected:
@@ -1240,6 +1243,40 @@ folio exec --secrets GITHUB_TOKEN=gh/token gh -- ./deploy
 Sets `GITHUB_TOKEN` from `gh/token`, and loads the rest of `gh/` by the rule. `gh/token` is
 claimed, so it does not also give `GH_TOKEN`.
 
+### From an export file
+
+```bash
+folio exec --from items.folio --secrets --all -- ./deploy
+```
+
+Loads the entries from `items.folio`, a file made by `folio export`, on a machine with no EnvFolio
+store at all — a booth in the cloud, say. Entries, `--secrets`, `--all`, namespaces, `VAR=<name>`
+and variable names are as from a store; the file's items are laid out as they were in the store
+they were exported from.
+
+The file is opened as `folio import` opens it: gpg asks for its passphrase (or it comes from
+`--passphrase-fd`), or, when it is locked to your public key, uses your secret key from your
+keyring (gpg may ask for that key's passphrase). Nothing more is asked after that: the items in
+the file are locked to a key of the export's own, which has none. Each text is checked against the
+export's signature; a text or secret that does not check stops everything, and the command does
+not run.
+
+Nothing is kept. The file is unpacked into a private temporary folder (`700`), with its key in a
+GnuPG home of its own, never added to your keyring; once every value is read, the folder is
+removed, before the command starts. The file itself is left as it is.
+
+To give the passphrase without typing it, open it on a file descriptor. Here the shell opens the
+file, removes its name at once, and hands EnvFolio the open descriptor:
+
+```bash
+{ rm /dev/shm/pass ; folio exec --from items.folio --passphrase-fd 3 -a -- ./deploy ; } 3< /dev/shm/pass
+```
+
+Anyone who has both the file and its passphrase has its items: bring them to the machine by
+different routes. With a file locked to your key, the passphrase never travels — for instance,
+lock it to your own key, and forward your gpg-agent to the machine over SSH, so the key stays on
+yours.
+
 ---
 
 ## `folio shell`
@@ -1248,7 +1285,7 @@ Starts your shell (`$SHELL`, or `/bin/sh`) with entries from the EnvFolio store 
 variables. It is `folio exec <entry>... -- "$SHELL"`, plus a line saying what was loaded.
 
 ```
-folio shell [-s|--secrets] [-a|--all] [-n|--names] <entry>...
+folio shell [-s|--secrets] [-a|--all] [-n|--names] [--from <file> [--passphrase-fd <n>]] <entry>...
 ```
 
 | Option | Meaning |
@@ -1256,12 +1293,14 @@ folio shell [-s|--secrets] [-a|--all] [-n|--names] <entry>...
 | `-s`, `--secrets` | Also load secrets. |
 | `-a`, `--all` | Load every entry outside the namespaces first, as in `folio exec`. |
 | `-n`, `--names` | Only show which variable would get which entry, as in `folio exec`; no shell starts. |
+| `--from <file>` | Take the entries from a file made by `folio export`, as in `folio exec`. |
+| `--passphrase-fd <n>` | With `--from`: the file's passphrase, from file descriptor `<n>`, as in `folio exec`. |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
 Entries, variable names, values and errors are as in `folio exec`. Before the shell starts, EnvFolio
 prints the loaded variable names, never their values, to stderr. It sets `FOLIO_SHELL=1`, so your
 own prompt can show it; EnvFolio does not change the prompt. `exit` leaves the shell. It needs a
-ready store (`folio init`).
+ready store (`folio init`), unless the entries come from a file with `--from`.
 
 ### Open a shell
 
