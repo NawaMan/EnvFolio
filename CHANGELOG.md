@@ -4,6 +4,15 @@ User-visible changes to EnvFolio. Newest first.
 
 ## Unreleased
 
+### Added
+
+- `folio exec --from <file>` and `folio shell --from <file>`: take the entries from a file made by
+  `folio export` instead of the store, on a machine with no EnvFolio store at all. Everything else
+  is as from a store (`--secrets`, `--all`, namespaces, `VAR=<name>`). gpg asks for the file's
+  passphrase, or it comes from `--passphrase-fd <n>`; a file locked to your key needs that key in
+  your keyring. The file is opened in a private temporary folder that is removed before the command
+  starts.
+
 ## 0.5.0 — 2026-10-11
 
 ### Changed
