@@ -12,6 +12,9 @@ User-visible changes to EnvFolio. Newest first.
   passphrase, or it comes from `--passphrase-fd <n>`; a file locked to your key needs that key in
   your keyring. The file is opened in a private temporary folder that is removed before the command
   starts.
+- A warning from `restore`, `import`, and `exec`/`shell --from` with `--secrets`, when gpg is
+  2.5.24 — the version Homebrew installs at the time of writing. It imports a secret key it then
+  cannot decrypt with (it says "No secret key"), so those fail. gpg 2.4 (and 2.5.22) are fine.
 
 ## 0.5.0 — 2026-10-11
 

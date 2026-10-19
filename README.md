@@ -46,7 +46,8 @@ folio version
 
 - `bash` 3.2 or newer (the one macOS ships is enough)
 - `pass`
-- `gpg`
+- `gpg` — but not 2.5.24 (Homebrew's at the time of writing): it imports a secret key it then
+  cannot decrypt with, so `restore`, `import` and `--from` fail. EnvFolio warns. 2.4 is fine.
 - `git`
 - `tar`
 - `gzip`
