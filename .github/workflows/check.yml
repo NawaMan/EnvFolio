@@ -45,6 +45,45 @@ jobs:
           mkdir -p "$RUNNER_TEMP/bin"
           ln -s "$(brew --prefix)/bin/gtimeout" "$RUNNER_TEMP/bin/timeout"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      # gpg 2.4.7, the stable line the booth and Linux run, built from source: Homebrew has only
+      # its current gnupg (pulled in by pass), and 2.5.24 imports a secret key it then cannot
+      # decrypt with. The build links Homebrew's libraries, so their versions are in the cache key.
+      - name: Libraries for gnupg 2.4.7
+        id: gnupg-libs
+        run: |
+          brew install libgpg-error libgcrypt libassuan libksba npth pinentry
+          echo "versions=$(brew list --versions libgpg-error libgcrypt libassuan libksba npth | tr ' \n' '-_')" >> "$GITHUB_OUTPUT"
+      - name: Cache gnupg 2.4.7
+        id: gnupg-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/gnupg-2.4.7
+          key: gnupg-2.4.7-${{ runner.os }}-${{ runner.arch }}-${{ steps.gnupg-libs.outputs.versions }}
+      - name: Build gnupg 2.4.7
+        if: steps.gnupg-cache.outputs.cache-hit != 'true'
+        run: |
+          cd "$RUNNER_TEMP"
+          curl -fsSLO https://gnupg.org/ftp/gcrypt/gnupg/gnupg-2.4.7.tar.bz2
+          # Signed by the GnuPG release keys (Werner Koch, NIIBE Yutaka); checked when pinned.
+          echo "7b24706e4da7e0e3b06ca068231027401f238102c41c909631349dcc3b85eb46  gnupg-2.4.7.tar.bz2" | shasum -a 256 -c -
+          tar -xjf gnupg-2.4.7.tar.bz2
+          cd gnupg-2.4.7
+          ./configure --prefix="$HOME/gnupg-2.4.7" --with-pinentry-pgm="$(brew --prefix)/bin/pinentry" \
+              --with-libgpg-error-prefix="$(brew --prefix libgpg-error)" \
+              --with-libgcrypt-prefix="$(brew --prefix libgcrypt)" \
+              --with-libassuan-prefix="$(brew --prefix libassuan)" \
+              --with-ksba-prefix="$(brew --prefix libksba)" \
+              --with-npth-prefix="$(brew --prefix npth)" \
+              --disable-doc --disable-nls --disable-ldap --disable-gnutls --disable-sqlite \
+              --disable-ccid-driver --disable-wks-tools
+          make -j"$(sysctl -n hw.ncpu)"
+          make install
+      # First on PATH, ahead of Homebrew's; gpg2 too, as pass prefers it when there is one.
+      - name: Use gnupg 2.4.7
+        run: |
+          ln -sf gpg "$HOME/gnupg-2.4.7/bin/gpg2"
+          echo "$HOME/gnupg-2.4.7/bin" >> "$GITHUB_PATH"
+      - run: gpg --version | head -n 1 && gpg2 --version | head -n 1
       # /bin/bash on macOS is 3.2; put it first so `env bash` (bats and folio) finds it,
       # not a Homebrew bash 5. test-all.sh fails if it is not 3.x.
       - run: PATH="/bin:$PATH" perl -e '$SIG{PIPE} = "DEFAULT"; exec @ARGV' /bin/bash tests/test-all.sh 3
