@@ -1420,3 +1420,74 @@ folio shell --secrets gh @nawa
 ```
 folio shell: loaded GH_TOKEN, GH_USER (texts: 1, secrets: 1). Type 'exit' to leave.
 ```
+
+---
+
+## `folio completion`
+
+Prints the script that makes **Tab** complete `folio`'s commands, their options, and the names of
+texts and secrets, in bash or zsh. Names only: completing never reads, decrypts or checks an entry,
+so it is quick and never asks for a passphrase.
+
+```
+folio completion bash|zsh
+```
+
+| Option | Meaning |
+| --- | --- |
+| `-h`, `--help` | Show the options and stop. |
+
+What Tab offers:
+
+- the commands, and `text`'s and `secret`'s own ones (zsh shows what each does);
+- a command's options, from its help — so only the ones it takes;
+- text names after `text …`, secret names after `secret …`, both after `export`, `exec` and
+  `shell` (also after `VAR=`), folders only after `ls`. A level at a time: `web/` first, then what
+  is in it; a folder that is the only choice opens at once;
+- file names where a file goes (`restore`, `import`, `backup`, `--from`, `-o`, `--to`), and after
+  `exec … --` the command to run;
+- topics after `folio help`.
+
+The script runs `folio` by the name typed (`folio`, `./folio`, …), so it follows
+`FOLIO_STORE_DIR` and always matches the version you have.
+
+### bash
+
+```bash
+# in ~/.bashrc
+eval "$(folio completion bash)"
+```
+
+```
+$ folio secret sh<Tab>          → folio secret show
+$ folio secret show web/<Tab>
+web/github   web/gitlab   web/deep/
+```
+
+Works with the bash macOS ships (3.2), without the `bash-completion` package.
+
+### zsh
+
+```zsh
+# in ~/.zshrc
+eval "$(folio completion zsh)"
+```
+
+Uses zsh's own completion system (it runs `compinit` if your `.zshrc` has not), with a description
+beside each choice:
+
+```
+$ folio secret <Tab>
+cp        -- Copy a secret
+edit      -- Edit a secret in $EDITOR
+…
+```
+
+### No shell named
+
+```bash
+folio completion
+```
+
+Says which line to add to `~/.bashrc` or `~/.zshrc`, and fails, so `eval "$(folio completion)"`
+loads nothing by mistake.

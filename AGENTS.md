@@ -278,6 +278,11 @@ Starting style, not law — deviate explicitly (say so and why) rather than sile
   layer is what needs a TTY.
 - A script that can be `source`d without running `Main` (guard with
   `[[ ${BASH_SOURCE[0]} == "$0" ]] && Main "$@"`) lets tests call its functions.
+- **Tab completion (`folio completion`) must cover every command and option.** A new option goes
+  in its command's help under `Options:` — that is where completion reads it from (a placeholder
+  like `<file>` or `<folder>` makes its value complete as one). A new command, or a changed
+  argument, needs its line in `completion-args`. `tests/completion/completion.bats` fails when a
+  command has no line there, or a `Usage:` line names an option `Options:` does not.
 - A function that **is a command** — `Main`, a group dispatcher (`Text`, `Secret`) or a
   command (`Init`, `TextShow`, `Ls`, `Exec`, …) — is named in TitleCase from the command
   words and written `Name() {`. Everything else, its `*-help` text included, is

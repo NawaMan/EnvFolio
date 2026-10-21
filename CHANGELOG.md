@@ -4,6 +4,13 @@ User-visible changes to EnvFolio. Newest first.
 
 ## Unreleased
 
+### Added
+
+- `folio completion bash|zsh`: Tab completion for commands, their options, and the names of texts
+  and secrets (names only: nothing is read or decrypted), plus file names where a file goes. zsh
+  gets its own, with a description beside each choice; bash's works with the 3.2 macOS ships.
+  Load it with `eval "$(folio completion bash)"` in `~/.bashrc`, or `zsh` in `~/.zshrc`.
+
 ## 0.7.0 — 2026-10-21
 
 ### Added
