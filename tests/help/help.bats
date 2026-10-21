@@ -34,7 +34,7 @@ teardown() {
     run "$FOLIO" init --help < /dev/null
     [ "$status" -eq 0 ]
     [[ $output == *"Usage: folio init"* ]]
-    [[ $output == *"--passphrase-stdin"* ]]
+    [[ $output == *"--store-passphrase-stdin"* ]]
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 

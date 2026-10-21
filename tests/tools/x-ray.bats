@@ -64,7 +64,7 @@ shows-nothing-secret() {
 }
 
 @test "x-ray: an export with a passphrase — locked, not opened without --open" {
-    "$FOLIO" export -o "$SANDBOX/out/pw" --passphrase-stdin web < <(printf 'p\n') >/dev/null 2>&1
+    "$FOLIO" export -o "$SANDBOX/out/pw" --file-passphrase-stdin web < <(printf 'p\n') >/dev/null 2>&1
     run "$XRAY" "$SANDBOX/out/pw.folio"
     [ "$status" -eq 0 ]
     [[ $output == *"locked with a passphrase (AES256)"* && $output == *"--open to unlock it"* ]]

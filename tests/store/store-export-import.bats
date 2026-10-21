@@ -61,7 +61,7 @@ left-clean() {
 
 @test "MANUAL: export — export with a passphrase" {
     make-store
-    run "$FOLIO" export -o "$SANDBOX/out" --passphrase-stdin web < <(printf 'export pass\n')
+    run "$FOLIO" export -o "$SANDBOX/out" --file-passphrase-stdin web < <(printf 'export pass\n')
     [ "$status" -eq 0 ]
     [[ $output == *"Items:  2 (texts: 2, secrets: 0)"* ]]
     [[ $output == *"left out 1 secret(s) under 'web'"* ]]
@@ -76,9 +76,9 @@ left-clean() {
 
 @test "MANUAL: import — into a new store" {
     make-store
-    "$FOLIO" export -o "$SANDBOX/out" --passphrase-stdin web/home web/github < <(printf 'export pass\n') >/dev/null 2>&1
+    "$FOLIO" export -o "$SANDBOX/out" --file-passphrase-stdin web/home web/github < <(printf 'export pass\n') >/dev/null 2>&1
     go-there
-    run "$FOLIO" import --all --key server@example.com --passphrase-stdin "$(export-file)" < <(printf 'export pass\n')
+    run "$FOLIO" import --all --key server@example.com --file-passphrase-stdin "$(export-file)" < <(printf 'export pass\n')
     [ "$status" -eq 0 ]
     [[ $output == *"Texts:   1"* && $output == *"Secrets: 1"* ]]
     [ "$("$FOLIO" text show web/home)" = "https://example.com" ]
@@ -113,11 +113,11 @@ left-clean() {
 
 @test "MANUAL: import — merge into a store, keeping what is there" {
     make-store
-    "$FOLIO" export -o "$SANDBOX/out" --passphrase-stdin --secrets web aws < <(printf 'p\n') >/dev/null 2>&1
+    "$FOLIO" export -o "$SANDBOX/out" --file-passphrase-stdin --secrets web aws < <(printf 'p\n') >/dev/null 2>&1
     go-there
     "$FOLIO" init --key server@example.com < /dev/null >/dev/null 2>&1
     "$FOLIO" text insert -t "old" web/user < /dev/null >/dev/null
-    run "$FOLIO" import --skip-existing --passphrase-stdin "$(export-file)" aws/key web/user < <(printf 'p\n')
+    run "$FOLIO" import --skip-existing --file-passphrase-stdin "$(export-file)" aws/key web/user < <(printf 'p\n')
     [ "$status" -eq 0 ]
     [[ $output == *"Skipped: 1"* ]]
     [ "$("$FOLIO" secret show aws/key)" = "AKIA" ]
@@ -126,26 +126,26 @@ left-clean() {
 
 @test "import: --overwrite replaces an item already in the store" {
     make-store
-    "$FOLIO" export -o "$SANDBOX/out" --passphrase-stdin web/user web/home < <(printf 'p\n') >/dev/null 2>&1
+    "$FOLIO" export -o "$SANDBOX/out" --file-passphrase-stdin web/user web/home < <(printf 'p\n') >/dev/null 2>&1
     go-there
     "$FOLIO" init --key server@example.com < /dev/null >/dev/null 2>&1
     "$FOLIO" text insert -t "old" web/user < /dev/null >/dev/null
-    run "$FOLIO" import --overwrite --passphrase-stdin "$(export-file)" web/user < <(printf 'p\n')
+    run "$FOLIO" import --overwrite --file-passphrase-stdin "$(export-file)" web/user < <(printf 'p\n')
     [ "$status" -eq 0 ]
     [ "$("$FOLIO" text show web/user)" = "jane" ]
 }
 
 @test "import: into an open store folder, asked; stdin with the passphrase cannot answer" {
     make-store
-    "$FOLIO" export -o "$SANDBOX/out" --passphrase-stdin web/user < <(printf 'p\n') >/dev/null 2>&1
+    "$FOLIO" export -o "$SANDBOX/out" --file-passphrase-stdin web/user < <(printf 'p\n') >/dev/null 2>&1
     go-there
     "$FOLIO" init --key server@example.com < /dev/null >/dev/null 2>&1
     chmod 755 "$FOLIO_STORE_DIR"
-    run "$FOLIO" import --all --passphrase-stdin "$(export-file)" < <(printf 'p\n')
+    run "$FOLIO" import --all --file-passphrase-stdin "$(export-file)" < <(printf 'p\n')
     [ "$status" -eq 1 ]
     [[ $output == *"other users can get into"*"stdin carries the passphrase"*"--allow-unsafe-folder"* ]]
     [ ! -e "$FOLIO_STORE_DIR/web/user.txt" ]
-    run "$FOLIO" import --all --passphrase-stdin --allow-unsafe-folder "$(export-file)" < <(printf 'p\n')
+    run "$FOLIO" import --all --file-passphrase-stdin --allow-unsafe-folder "$(export-file)" < <(printf 'p\n')
     [ "$status" -eq 0 ]
     [ "$(grep -c 'warning:' <<< "$output")" -eq 1 ]
     [ "$("$FOLIO" text show web/user 2>/dev/null)" = "jane" ]
@@ -153,13 +153,13 @@ left-clean() {
 
 @test "import: making a store in an open empty folder is asked once, then made" {
     make-store
-    "$FOLIO" export -o "$SANDBOX/out" --passphrase-stdin web/user < <(printf 'p\n') >/dev/null 2>&1
+    "$FOLIO" export -o "$SANDBOX/out" --file-passphrase-stdin web/user < <(printf 'p\n') >/dev/null 2>&1
     go-there
     mkdir -m 755 "$FOLIO_STORE_DIR"
-    run "$FOLIO" import --all --key server@example.com --passphrase-stdin "$(export-file)" < <(printf 'p\n')
+    run "$FOLIO" import --all --key server@example.com --file-passphrase-stdin "$(export-file)" < <(printf 'p\n')
     [ "$status" -eq 1 ]
     [ -z "$(ls -A "$FOLIO_STORE_DIR")" ]
-    run "$FOLIO" import --all --key server@example.com --passphrase-stdin --allow-unsafe-folder "$(export-file)" < <(printf 'p\n')
+    run "$FOLIO" import --all --key server@example.com --file-passphrase-stdin --allow-unsafe-folder "$(export-file)" < <(printf 'p\n')
     [ "$status" -eq 0 ]
     [ "$(grep -c 'warning:' <<< "$output")" -eq 1 ]
     [ "$("$FOLIO" text show web/user 2>/dev/null)" = "jane" ]
@@ -190,27 +190,27 @@ left-clean() {
 
 @test "export: bad arguments fail and write nothing" {
     make-store
-    run "$FOLIO" export -o "$SANDBOX/out" --passphrase-stdin < <(printf 'p\n')
+    run "$FOLIO" export -o "$SANDBOX/out" --file-passphrase-stdin < <(printf 'p\n')
     [ "$status" -eq 1 ]
     [[ $output == *"needs the items named"* ]]
-    run "$FOLIO" export -o "$SANDBOX/out" --to x --passphrase-stdin web < /dev/null
+    run "$FOLIO" export -o "$SANDBOX/out" --to x --file-passphrase-stdin web < /dev/null
     [ "$status" -eq 1 ]
-    run "$FOLIO" export -o "$SANDBOX/out" --passphrase-stdin aws < <(printf 'p\n')
+    run "$FOLIO" export -o "$SANDBOX/out" --file-passphrase-stdin aws < <(printf 'p\n')
     [ "$status" -eq 1 ]
     [[ $output == *"only secrets under 'aws' (1); add --secrets"* ]]
-    run "$FOLIO" export -o "$SANDBOX/out" --passphrase-stdin nope < <(printf 'p\n')
+    run "$FOLIO" export -o "$SANDBOX/out" --file-passphrase-stdin nope < <(printf 'p\n')
     [ "$status" -eq 1 ]
     [[ $output == *"'nope' is not an item"* ]]
-    run "$FOLIO" export -o "$SANDBOX/out" --passphrase-stdin ../x < <(printf 'p\n')
+    run "$FOLIO" export -o "$SANDBOX/out" --file-passphrase-stdin ../x < <(printf 'p\n')
     [ "$status" -eq 1 ]
     [[ $output == *"not a valid name"* ]]
     run "$FOLIO" export -o "$SANDBOX/out" --to nobody@example.com web < /dev/null
     [ "$status" -eq 1 ]
     [[ $output == *"No public key"* ]]
-    run "$FOLIO" export -o "$SANDBOX/out" --passphrase-stdin web < /dev/null
+    run "$FOLIO" export -o "$SANDBOX/out" --file-passphrase-stdin web < /dev/null
     [ "$status" -eq 1 ]
     [[ $output == *"No passphrase"* ]]
-    run "$FOLIO" export -o "$FOLIO_STORE_DIR/web" --passphrase-stdin web < <(printf 'p\n')
+    run "$FOLIO" export -o "$FOLIO_STORE_DIR/web" --file-passphrase-stdin web < <(printf 'p\n')
     [ "$status" -eq 1 ]
     [[ $output == *"is inside the store"* ]]
     [ ! -e "$FOLIO_STORE_DIR/web"/*.folio ]
@@ -223,9 +223,9 @@ left-clean() {
 
 @test "import: a wrong passphrase or a file that is not an export is refused, nothing made" {
     make-store
-    "$FOLIO" export -o "$SANDBOX/out" --passphrase-stdin web < <(printf 'p\n') >/dev/null 2>&1
+    "$FOLIO" export -o "$SANDBOX/out" --file-passphrase-stdin web < <(printf 'p\n') >/dev/null 2>&1
     go-there
-    run "$FOLIO" import --all --key server@example.com --passphrase-stdin "$(export-file)" < <(printf 'wrong\n')
+    run "$FOLIO" import --all --key server@example.com --file-passphrase-stdin "$(export-file)" < <(printf 'wrong\n')
     [ "$status" -eq 1 ]
     [ ! -e "$FOLIO_STORE_DIR" ]
     echo hi > "$SANDBOX/x.tgz"
@@ -245,7 +245,7 @@ left-clean() {
 
 @test "import: a text changed inside the export is refused before anything is written" {
     make-store
-    "$FOLIO" export -o "$SANDBOX/out" --passphrase-stdin web < <(printf 'p\n') >/dev/null 2>&1
+    "$FOLIO" export -o "$SANDBOX/out" --file-passphrase-stdin web < <(printf 'p\n') >/dev/null 2>&1
     # Re-pack the export with a changed text, under the same passphrase.
     mkdir "$SANDBOX/x"
     gpg --batch --pinentry-mode loopback --passphrase p --decrypt "$(export-file)" 2>/dev/null | tar -xzf - -C "$SANDBOX/x"
@@ -253,7 +253,7 @@ left-clean() {
     tar -czf - -C "$SANDBOX/x" folio-export.txt key.asc store \
         | gpg --batch --pinentry-mode loopback --passphrase p --symmetric --output "$SANDBOX/bad.folio"
     go-there
-    run "$FOLIO" import --all --key server@example.com --passphrase-stdin "$SANDBOX/bad.folio" < <(printf 'p\n')
+    run "$FOLIO" import --all --key server@example.com --file-passphrase-stdin "$SANDBOX/bad.folio" < <(printf 'p\n')
     [ "$status" -eq 1 ]
     [[ $output == *"signature of 'web/home' in the export does not verify"* ]]
     [ ! -e "$FOLIO_STORE_DIR" ]
@@ -261,7 +261,7 @@ left-clean() {
 
 @test "import: an export made before 0.4.0 (envfolio-export.txt), renamed by hand, is imported" {
     make-store
-    "$FOLIO" export -o "$SANDBOX/out" --passphrase-stdin web < <(printf 'p\n') >/dev/null 2>&1
+    "$FOLIO" export -o "$SANDBOX/out" --file-passphrase-stdin web < <(printf 'p\n') >/dev/null 2>&1
     # Re-pack it as 0.3.0 made it: the manifest was envfolio-export.txt, "envfolio-export 1".
     mkdir "$SANDBOX/x"
     gpg --batch --pinentry-mode loopback --passphrase p --decrypt "$(export-file)" 2>/dev/null | tar -xzf - -C "$SANDBOX/x"
@@ -270,7 +270,7 @@ left-clean() {
     tar -czf - -C "$SANDBOX/x" envfolio-export.txt key.asc store \
         | gpg --batch --pinentry-mode loopback --passphrase p --symmetric --output "$SANDBOX/old.folio"
     go-there
-    run "$FOLIO" import --all --key server@example.com --passphrase-stdin "$SANDBOX/old.folio" < <(printf 'p\n')
+    run "$FOLIO" import --all --key server@example.com --file-passphrase-stdin "$SANDBOX/old.folio" < <(printf 'p\n')
     [ "$status" -eq 0 ]
     [ "$("$FOLIO" text show web/home)" = "https://example.com" ]
     [ "$("$FOLIO" text show web/user)" = "jane" ]

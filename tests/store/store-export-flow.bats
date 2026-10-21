@@ -147,23 +147,23 @@ ALL=(aws/key.gpg web/github.gpg web/home.txt web/user.txt)
     assert-export "$SANDBOX/out/to-server.folio" pw-four web/github.gpg web/home.txt web/user.txt
 }
 
-@test "export flow 5: + --passphrase-fd — asks nothing" {
+@test "export flow 5: + --file-passphrase-fd — asks nothing" {
     # bats keeps fd 3 for itself: fd 5 carries the passphrase.
-    run "$FOLIO" export --secrets -o "$SANDBOX/out/to-server" --passphrase-fd 5 web \
+    run "$FOLIO" export --secrets -o "$SANDBOX/out/to-server" --file-passphrase-fd 5 web \
         < /dev/null 5< <(printf '%s\n' pw-five)
     [[ $output != *"Which items?"* && $output != *"How should the file be locked?"* ]]
     assert-export "$SANDBOX/out/to-server.folio" pw-five web/github.gpg web/home.txt web/user.txt
 }
 
-@test "export flow 5b: --passphrase-fd leaves stdin free for picking the items" {
-    run "$FOLIO" export -o "$SANDBOX/out/to-server" --passphrase-fd 5 \
+@test "export flow 5b: --file-passphrase-fd leaves stdin free for picking the items" {
+    run "$FOLIO" export -o "$SANDBOX/out/to-server" --file-passphrase-fd 5 \
         < <(printf '%s\n' "1 3") 5< <(printf '%s\n' pw-five-b)
     [[ $output == *"Which items?"* && $output != *"How should the file be locked?"* ]]
     assert-export "$SANDBOX/out/to-server.folio" pw-five-b aws/key.gpg web/home.txt
 }
 
-@test "export flow 6: --passphrase-stdin instead — asks nothing" {
-    export-answering pw-six -- --secrets -o "$SANDBOX/out/to-server" --passphrase-stdin web
+@test "export flow 6: --file-passphrase-stdin instead — asks nothing" {
+    export-answering pw-six -- --secrets -o "$SANDBOX/out/to-server" --file-passphrase-stdin web
     [[ $output != *"Which items?"* && $output != *"How should the file be locked?"* ]]
     assert-export "$SANDBOX/out/to-server.folio" pw-six web/github.gpg web/home.txt web/user.txt
 }
@@ -235,8 +235,8 @@ ALL=(aws/key.gpg web/github.gpg web/home.txt web/user.txt)
     [ "$(ls -A "$SANDBOX/out")" = taken.folio ]
 }
 
-@test "export flow: --passphrase-fd on a closed fd — nothing made" {
-    export-answering -- -o "$SANDBOX/out" --passphrase-fd 7 web
+@test "export flow: --file-passphrase-fd on a closed fd — nothing made" {
+    export-answering -- -o "$SANDBOX/out" --file-passphrase-fd 7 web
     [[ $output == *"no such file descriptor"* ]]
     assert-nothing-made
 }
