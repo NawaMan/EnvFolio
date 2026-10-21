@@ -27,6 +27,7 @@ A command-line tool for password management. It is built heavily on top of [`pas
 - `folio ls`         to list both types of items (texts/secrets) together, as a tree or flat.
 - `folio exec ...`   to run a command with items as environment variables (secrets only with `--secrets`).
 - `folio shell ...`  to start a shell with items as environment variables.
+- `folio completion bash|zsh` for Tab completion of commands, options and item names.
 
 Every command, with examples: [MANUAL.md](MANUAL.md).
 
@@ -41,6 +42,9 @@ executable and put it on your `PATH`:
 chmod +x folio && mv folio ~/.local/bin/
 folio version
 ```
+
+For Tab completion, add `eval "$(folio completion bash)"` to `~/.bashrc`, or
+`eval "$(folio completion zsh)"` to `~/.zshrc`.
 
 # Dependencies
 
