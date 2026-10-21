@@ -53,6 +53,8 @@ folio version
 - `gzip`
 - `tree` (already needed by `pass`)
 - one clipboard tool, only for `-c`: `pbcopy` (macOS), `wl-copy` (Wayland) or `xclip` (X11)
+- optionally, a GUI pinentry to have gpg ask for passphrases in a window — see
+  [Passphrase prompts in a window](MANUAL.md#passphrase-prompts-in-a-window-gui)
 
 # Common Environment Variables
 

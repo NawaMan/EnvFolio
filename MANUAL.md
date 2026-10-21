@@ -29,6 +29,69 @@ The usage and options of `folio init` — the same as `folio init --help`.
 
 ---
 
+## Passphrase prompts in a window (GUI)
+
+EnvFolio never asks for a passphrase itself: gpg does, through its agent's *pinentry* program. By
+default that is often a prompt in the terminal. To get a window instead, install a GUI pinentry,
+name it in `~/.gnupg/gpg-agent.conf`, and restart the agent. This is gpg's own setting, so it
+applies to `pass` and every other gpg tool on the machine too.
+
+### Linux
+
+Pick the one that matches your desktop:
+
+| Desktop | Program | Debian / Ubuntu | Fedora | Arch |
+| --- | --- | --- | --- | --- |
+| GNOME and other GTK desktops | `pinentry-gnome3` | `sudo apt install pinentry-gnome3` | `sudo dnf install pinentry-gnome3` | `sudo pacman -S pinentry gcr` |
+| KDE Plasma | `pinentry-qt` | `sudo apt install pinentry-qt` | `sudo dnf install pinentry-qt` | `sudo pacman -S pinentry` |
+
+Then add the line to `~/.gnupg/gpg-agent.conf` (create the file if it is not there) and restart
+the agent:
+
+```bash
+echo "pinentry-program $(command -v pinentry-gnome3)" >> ~/.gnupg/gpg-agent.conf
+gpgconf --kill gpg-agent
+```
+
+The path must be absolute — the file does not expand `~` or `$HOME`. On Debian and Ubuntu,
+`sudo update-alternatives --config pinentry` picks the default program for every user instead.
+
+### macOS
+
+```bash
+brew install pinentry-mac
+echo "pinentry-program $(brew --prefix)/bin/pinentry-mac" >> ~/.gnupg/gpg-agent.conf
+gpgconf --kill gpg-agent
+```
+
+With [GPG Suite](https://gpgtools.org) installed instead of Homebrew's gpg, the window is already
+set up. `pinentry-mac` offers *Save in Keychain*: ticked, the passphrase is kept in the macOS
+Keychain and gpg does not ask again; leave it unticked to be asked each time.
+
+### Check it
+
+```bash
+gpgconf --kill gpg-agent
+echo test | gpg --clearsign > /dev/null
+```
+
+The window should open and ask for your key's passphrase. Then any EnvFolio command that needs it
+(`folio secret show`, `folio text insert`, `folio export`, …) asks the same way.
+
+### Good to know
+
+- `--passphrase-stdin` and `--passphrase-fd` never open a window: the passphrase comes from stdin
+  or the file descriptor instead.
+- With no display — over SSH, in a container or a booth — keep a terminal pinentry
+  (`pinentry-curses` or `pinentry-tty`). The GUI ones usually fall back to the terminal when
+  there is no display.
+- If the window opens on the wrong screen, or never opens and gpg waits, the agent was started
+  from another session: run `gpg-connect-agent updatestartuptty /bye` in the current one.
+- How long the agent remembers a passphrase is `default-cache-ttl` and `max-cache-ttl` (seconds)
+  in the same file.
+
+---
+
 ## `folio init`
 
 Creates the EnvFolio store (`$FOLIO_STORE_DIR`, default `~/.folio`): picks or creates the GPG key that
