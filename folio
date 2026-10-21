@@ -8,7 +8,7 @@
 #   folio init | path | backup | restore | export | import
 #   folio text   ls | find | grep | show | insert | edit | generate | rm | mv | cp
 #   folio secret ls | find | grep | show | insert | edit | generate | rm | mv | cp
-#   folio ls | exec | shell | version | help [command]
+#   folio ls | exec | shell | completion | version | help [command]
 #
 # Environment:
 #   FOLIO_STORE_DIR  The EnvFolio store (default ~/.folio). Laid out like a pass store, but
@@ -41,6 +41,8 @@ export PASSWORD_STORE_DIR="$STORE_PATH"
 #== Main =======================================================================
 
 Main() {
+    # Asked at every Tab press, by the scripts of `folio completion`: quick, and quiet.
+    if [[ ${1:-} == __complete ]]; then shift ; complete-words "$@" ; return 0 ; fi
     # Quiet when all is there; otherwise show the table and stop.
     if ! ensure-requirements "$@" >/dev/null; then ensure-requirements "$@" ; return 1 ; fi
 
@@ -68,10 +70,11 @@ Main() {
         ls)      Ls      "$@" ;;
         exec)    Exec    "$@" ;;
         shell)   Shell   "$@" ;;
+        completion) Completion "$@" ;;
         version) Version "$@" ;;
         help)    Help    "$@" ;;
         store)   store-is-gone "$@" ;;
-        "")      echo    "Usage: folio <init|path|backup|restore|export|import|text|secret|ls|exec|shell|version|help> [args...]" >&2 ; return 1 ;;
+        "")      echo    "Usage: folio <init|path|backup|restore|export|import|text|secret|ls|exec|shell|completion|version|help> [args...]" >&2 ; return 1 ;;
         *)       echo    "folio: unknown command: $category" >&2 ; return 1 ;;
     esac
 }
@@ -93,6 +96,7 @@ Help() {
         "ls")              list-help            ;;
         "exec")            run-exec-help        ;;
         "shell")           run-shell-help       ;;
+        "completion")      completion-help      ;;
         "text ls")         text-ls-help         ;;
         "text find")       text-find-help       ;;
         "text grep")       text-grep-help       ;;
@@ -151,6 +155,7 @@ Commands:
   ls                List texts and secrets together
   exec              Run a command with entries as environment variables
   shell             Start a shell with entries as environment variables
+  completion        Print the Tab completion script for bash or zsh
   version           Print EnvFolio's version
   help [command]    Show help, e.g. `folio help init`
 
@@ -2634,6 +2639,339 @@ function set-entry-var() {
         [[ ${EXEC_VARS[i]} == "$1" ]] && { EXEC_FILES[i]=$2 ; return 0 ; }
     done
     EXEC_VARS+=("$1") ; EXEC_FILES+=("$2")
+}
+
+#== Command: Completion ========================================================
+
+function completion-help() {
+    cat <<'EOF'
+Usage: folio completion bash|zsh
+
+Print the script that makes Tab complete folio's commands, their options, and the names of texts
+and secrets — names only: nothing is read or decrypted. Load it from your shell's startup file:
+
+  bash, in ~/.bashrc:   eval "$(folio completion bash)"
+  zsh,  in ~/.zshrc:    eval "$(folio completion zsh)"
+
+Options:
+  -h, --help          Show this help and stop.
+EOF
+}
+
+# folio completion bash|zsh
+Completion() {
+    case ${1:-} in
+        -h|--help) completion-help ;;
+        bash)      completion-bash ;;
+        zsh)       completion-zsh  ;;
+        "")        die "completion: which shell? Put \`eval \"\$(folio completion bash)\"\` in ~/.bashrc," \
+                       "or \`eval \"\$(folio completion zsh)\"\` in ~/.zshrc." ;;
+        *)         die "completion: there is none for '$1'; there is for bash and zsh." ;;
+    esac
+}
+
+# The script for bash: plain bash 3.2 (no compopt, no bash-completion package). It asks
+# `folio __complete` what fits, as the zsh one does.
+function completion-bash() {
+    cat <<'EOF'
+# Tab completion for folio (EnvFolio), from `folio completion bash`.
+_folio() {
+    local line cur trim how item folio
+    local -a words
+    COMPREPLY=()
+    # The words up to the cursor, split at blanks only: COMP_WORDS also splits at = and :.
+    line=${COMP_LINE:0:COMP_POINT}
+    IFS=$' \t' read -r -a words <<< "$line"
+    [[ $line == *[[:blank:]] || ${#words[@]} -eq 0 ]] && words+=("")
+    cur=${words[${#words[@]}-1]}
+    folio=${words[0]}
+    [[ $folio == '~/'* ]] && folio=$HOME/${folio#'~/'}
+    # bash replaces only what follows the last = or : in the word, so that much is cut off.
+    trim=${cur%"${cur##*[=:]}"}
+    how=
+    while IFS= read -r item; do
+        if [[ -z $how ]]; then how=$item ; continue ; fi
+        item=${item%%$'\t'*}
+        COMPREPLY+=("${item#"$trim"}")
+    done < <("$folio" __complete "${words[@]:1}" 2>/dev/null)
+    case $how in
+        files)    while IFS= read -r item; do COMPREPLY+=("$item"); done < <(compgen -f -- "$cur") ;;
+        dirs)     while IFS= read -r item; do COMPREPLY+=("$item"); done < <(compgen -d -- "$cur") ;;
+        commands) while IFS= read -r item; do COMPREPLY+=("$item"); done < <(compgen -c -- "$cur") ;;
+    esac
+}
+complete -o filenames -F _folio folio
+EOF
+}
+
+# The script for zsh: its own completion system, with a description beside each choice.
+function completion-zsh() {
+    cat <<'EOF'
+# Tab completion for folio (EnvFolio), from `folio completion zsh`.
+_folio() {
+    local how line word desc folio=${words[1]}
+    local -a lines plain folders
+    [[ $folio == '~/'* ]] && folio=$HOME/${folio#'~/'}
+    lines=( "${(@f)$("$folio" __complete "${(@)words[2,CURRENT]}" 2>/dev/null)}" )
+    how=${lines[1]}
+    case $how in
+        files)    _files ;;
+        dirs)     _files -/ ;;
+        commands) _command_names -e ;;
+        words)
+            for line in "${(@)lines[2,-1]}"; do
+                word=${line%%$'\t'*} desc=${line#*$'\t'}
+                [[ $line == *$'\t'* ]] || desc=
+                word=${word//:/\\:}
+                if [[ $word == */ ]]; then folders+=( "$word${desc:+:$desc}" )
+                else                      plain+=( "$word${desc:+:$desc}" ) ; fi
+            done
+            (( ${#plain} ))   && _describe -t values 'folio' plain
+            (( ${#folders} )) && _describe -t folders 'folder' folders -S ''
+            ;;
+    esac
+    return 0
+}
+(( $+functions[compdef] )) || { autoload -Uz compinit && compinit ; }
+compdef _folio folio
+EOF
+}
+
+# folio __complete <word>...: what Tab can put for the last word (maybe empty), given the words
+# after `folio` before it. Asked by the scripts of `folio completion`, not by a person. The first
+# line says how: words, files, dirs, commands or none. For words, each follows on a line of its
+# own as <word><tab><description>; a word ending in / is a folder, so no space goes after it.
+# Options come from each command's help (its Options:), so one completes once it is documented;
+# what a command's other arguments are is in completion-args.
+function complete-words() {
+    local words=("$@") cur key at=1 options value="" dashes=-1 count=0 last="" i word kind
+    local -a kinds
+    (( ${#words[@]} > 0 )) || words=("")
+    cur=${words[${#words[@]}-1]}
+    if (( ${#words[@]} == 1 )); then complete-commands "" "$cur" ; return 0 ; fi
+    key=${words[0]}
+    if [[ $key == text || $key == secret ]]; then
+        if (( ${#words[@]} == 2 )); then complete-commands "$key" "$cur" ; return 0 ; fi
+        key="$key ${words[1]}" at=2
+    fi
+    kind=$(completion-args "$key") || { echo none ; return 0 ; }
+    read -r -a kinds <<< "$kind"
+    options=$(help-options "$key")
+
+    for (( i = at; i < ${#words[@]} - 1; i++ )); do
+        word=${words[i]}
+        if [[ -n $value ]]; then value= ; continue ; fi        # the value of the option before it
+        if (( dashes >= 0 )); then dashes=$(( dashes + 1 )) ; continue ; fi
+        case $word in
+            --)  dashes=0 ;;
+            -?*) value=$(option-value "$word" "$options") ;;
+            *)   count=$(( count + 1 )) last=$word ;;
+        esac
+    done
+    if [[ -n $value ]]; then echo "$value" ; return 0 ; fi
+    if (( dashes >= 0 )); then
+        # After `--`: exec's command and its arguments; for the others, more of the same arguments.
+        if [[ $key == exec ]]; then
+            if (( dashes == 0 )); then echo commands ; else echo files ; fi
+            return 0
+        fi
+        count=$(( count + dashes ))
+    elif [[ $cur == -* ]]; then
+        complete-options "$cur" "$options" ; return 0
+    fi
+
+    # The kind of the argument at <count>; the last kind, marked ..., stands for all the rest.
+    if (( count < ${#kinds[@]} )); then kind=${kinds[count]}
+    else kind=${kinds[${#kinds[@]}-1]} ; [[ $kind == *... ]] || kind=none ; fi
+    case ${kind%...} in
+        none|files|dirs) echo "${kind%...}" ;;
+        text)            complete-entries txt "$cur" ;;
+        secret)          complete-entries gpg "$cur" ;;
+        entry)
+            # VAR=<name> picks the variable's name: complete the name after the =.
+            if [[ $cur == *=* ]]; then complete-entries all "${cur#*=}" "" "${cur%%=*}="
+            else                       complete-entries all "$cur" ; fi ;;
+        text-folder)     complete-entries txt "$cur" folders ;;
+        secret-folder)   complete-entries gpg "$cur" folders ;;
+        entry-folder)    complete-entries all "$cur" folders ;;
+        shell)           printf 'words\nbash\tFor bash\nzsh\tFor zsh\n' | complete-matching "$cur" ;;
+        help)
+            if (( count == 0 )); then complete-commands "" "$cur"
+            elif (( count == 1 )) && [[ $last == text || $last == secret ]]; then complete-commands "$last" "$cur"
+            else echo none ; fi ;;
+        *)               echo none ;;
+    esac
+}
+
+# completion-args <command>: the kinds of its arguments, in order; one marked ... stands for all
+# the rest. Fails for a command it does not know. Kinds: none, files, dirs, text, secret, entry
+# (either, or a folder of them), text-folder, secret-folder, entry-folder, shell, help.
+# A new command needs a line here: tests/completion/completion.bats fails until it has one.
+function completion-args() {
+    case $1 in
+        init|path|version)            echo none ;;
+        backup|restore)               echo files ;;
+        import)                       echo "files none..." ;;
+        export|exec|shell)            echo "entry..." ;;
+        ls)                           echo entry-folder ;;
+        completion)                   echo shell ;;
+        help)                         echo "help..." ;;
+        "text ls")                    echo text-folder ;;
+        "text find"|"text grep")      echo none ;;
+        "text show"|"text insert"|"text edit"|"text rm") echo text ;;
+        "text generate")              echo "text none" ;;
+        "text mv"|"text cp")          echo "text text" ;;
+        "secret ls")                  echo secret-folder ;;
+        "secret find"|"secret grep")  echo none ;;
+        "secret show"|"secret insert"|"secret edit"|"secret rm") echo secret ;;
+        "secret generate")            echo "secret none" ;;
+        "secret mv"|"secret cp")      echo "secret secret" ;;
+        *)                            return 1 ;;
+    esac
+}
+
+# complete-matching <cur>: pass on the header line, then the <word><tab><description> lines whose
+# word starts with <cur>.
+function complete-matching() {
+    local line
+    IFS= read -r line && echo "$line"
+    while IFS= read -r line; do
+        [[ ${line%%$'\t'*} == "$1"* ]] && echo "$line"
+    done
+    return 0
+}
+
+# complete-commands <group> <cur>: the commands in `folio help` (with <group>, text or secret: its
+# own ones) that start with <cur>, each with its description from there.
+function complete-commands() {
+    local group=$1 line name desc seen=" " in=0
+    {
+        echo words
+        while IFS= read -r line; do
+            [[ $line == Commands:* ]] && { in=1 ; continue ; }
+            [[ -z $line ]] && in=0
+            [[ $in == 1 && $line == "  "[a-z]* ]] || continue
+            line=${line#  } name=${line%%  *}
+            desc=${line#"$name"} ; desc=${desc#"${desc%%[! ]*}"}
+            name=${name%% \[*}                                   # "help [command]"
+            if [[ -n $group ]]; then
+                [[ $name == "$group "* ]] || continue
+                name=${name#"$group "}
+            elif [[ $name == *" "* ]]; then
+                name=${name%% *} desc="Work with ${name}s"         # text ls … -> text
+            fi
+            [[ $seen == *" $name "* ]] && continue
+            seen+="$name "
+            printf '%s\t%s\n' "$name" "$desc"
+        done < <(folio-help)
+    } | complete-matching "$2"
+}
+
+# help-options <command>: its options, from the Options: of its help, one line each:
+# <option><tab><what its value is: files, dirs, none, or - when it takes none><tab><description>.
+function help-options() {
+    local line row="" in=0
+    while IFS= read -r line; do
+        if [[ $line == Options:* ]]; then in=1 ; continue ; fi
+        (( in )) || continue
+        [[ -z $line ]] && break
+        if [[ $line == "  -"* || $line == "      -"* ]]; then
+            [[ -z $row ]] || help-option-lines "$row" ""
+            row=${line#"${line%%-*}"}
+        elif [[ -n $row ]]; then
+            help-option-lines "$row" "${line#"${line%%[! ]*}"}"
+            row=
+        fi
+    done < <(Help "$@" 2>/dev/null)
+    [[ -z $row ]] || help-option-lines "$row" ""
+}
+
+# help-option-lines <row> <next line>: help-options' lines for one row of Options:, e.g.
+# "-o, --output <file>|<folder>  Write to…". The description is the rest of the row — or the next
+# line, when the row has none — cut to its first sentence.
+function help-option-lines() {
+    local token value=- desc=""
+    local -a tokens names=()
+    read -r -a tokens <<< "${1//, / }"
+    for token in "${tokens[@]}"; do
+        if [[ -n $desc ]]; then desc+=" $token" ; continue ; fi
+        case $token in
+            -*)                   names+=("${token%%\[*}") ;;     # --clip[=<line>]: its value is optional
+            "<file>"*|"<key>"*)   value=files ;;
+            "<folder>"*)          value=dirs ;;
+            "<"*)                 value=none ;;
+            *)                    desc=$token ;;
+        esac
+    done
+    [[ -n $desc ]] || desc=$2
+    desc=${desc%%. *} ; desc=${desc%%; *} ; desc=${desc%, e.g.} ; desc=${desc%[.,]}
+    for token in "${names[@]}"; do printf '%s\t%s\t%s\n' "$token" "$value" "$desc" ; done
+}
+
+# option-value <word> <options>: how to complete the value <word> takes (files, dirs or none), or
+# nothing when it takes none — or has it already, after =.
+function option-value() {
+    local name value rest
+    [[ $1 == *=* ]] && return 0
+    while IFS=$'\t' read -r name value rest; do
+        [[ $name == "$1" && $value != - ]] && { echo "$value" ; return 0 ; }
+    done <<< "$2"
+}
+
+# complete-options <cur> <options>: the options that start with <cur>. Only the long ones for - or
+# --; a short one (-c) completes only as itself.
+function complete-options() {
+    local name value desc
+    echo words
+    while IFS=$'\t' read -r name value desc; do
+        [[ -n $name && $name == "$1"* ]] || continue
+        [[ $1 != - && $1 != --* || $name == --* ]] || continue
+        printf '%s\t%s\n' "$name" "$desc"
+    done <<< "$2"
+}
+
+# complete-entries <txt|gpg|all> <cur> [folders] [<prefix>]: the texts (txt), secrets (gpg) or both
+# whose names start with <cur>, a level at a time: what is deeper shows as its folder ("web/").
+# A folder that is the only choice is opened, so Tab goes on into it. With folders, only folders.
+# <prefix> goes in front of each (VAR= for exec). Names only: no file is read.
+function complete-entries() {
+    local kind=$1 cur=$2 folders=${3:-} prefix=${4:-} found more
+    found=$(store-names-at "$kind" "$cur" "$folders")
+    # One folder and nothing else: what is in it instead.
+    while [[ -z $folders && -n $found && $found != *$'\n'* && ${found%%$'\t'*} == */ ]]; do
+        more=$(store-names-at "$kind" "${found%%$'\t'*}" "")
+        [[ -n $more ]] || break
+        found=$more
+    done
+    echo words
+    [[ -n $found ]] && printf '%s\n' "$found" | while IFS= read -r more; do printf '%s%s\n' "$prefix" "$more" ; done
+    return 0
+}
+
+# store-names-at <txt|gpg|all> <cur> [folders]: complete-entries' lines for one level, sorted, a
+# name that is both a text and a secret once ("text, secret").
+function store-names-at() {
+    local kind=$1 cur=$2 folders=${3:-} file name rest what
+    [[ -d $STORE_PATH ]] || return 0
+    find -L "$STORE_PATH" -mindepth 1 -name '.*' -prune -o -type f \( -name '*.gpg' -o -name '*.txt' \) -print \
+        | while IFS= read -r file; do
+            name=${file#"$STORE_PATH"/}
+            case $kind:$name in
+                gpg:*.gpg|all:*.gpg) name=${name%.gpg} what=secret ;;
+                txt:*.txt|all:*.txt) name=${name%.txt} what=text   ;;
+                *)                   continue ;;
+            esac
+            [[ $name == "$cur"* ]] || continue
+            rest=${name#"$cur"}
+            if [[ $rest == */* ]]; then printf '%s\t%s\n' "$cur${rest%%/*}/" folder
+            elif [[ -z $folders ]]; then printf '%s\t%s\n' "$name" "$what"
+            fi
+        done \
+        | LC_ALL=C sort -u \
+        | awk -F'\t' '$1 == last { kinds = kinds ", " $2 ; next }
+                      NR > 1     { print last "\t" kinds }
+                                 { last = $1 ; kinds = $2 }
+                      END        { if (NR) print last "\t" kinds }'
 }
 
 #== Common Functions ===========================================================
