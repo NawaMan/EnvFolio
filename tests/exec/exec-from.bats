@@ -39,7 +39,7 @@ make-export() {
     "$FOLIO" text insert -t "nawa-user"        "@nawa/gh/user" < /dev/null
     "$FOLIO" secret insert -m gh/token         < <(printf 'shared-token\n') >/dev/null
     "$FOLIO" secret insert -m "@nawa/gh/token" < <(printf 'nawa-token\n')   >/dev/null
-    "$FOLIO" export -o "$FILE" --secrets --passphrase-stdin gh git @nawa \
+    "$FOLIO" export -o "$FILE" --secrets --file-passphrase-stdin gh git @nawa \
         < <(printf 'export pass\n') >/dev/null 2>&1
     [ -f "$FILE" ]
 }
@@ -61,7 +61,7 @@ left-clean() {
 
 @test "MANUAL: exec — from an export file" {
     make-export ; go-there
-    run --separate-stderr "$FOLIO" exec --from "$FILE" --passphrase-fd 3 gh git \
+    run --separate-stderr "$FOLIO" exec --from "$FILE" --file-passphrase-fd 3 gh git \
         -- sh -c 'echo "$GH_USER|$GIT_EMAIL|${GH_TOKEN-unset}"' 3< <(printf 'export pass\n')
     [ "$status" -eq 0 ]
     [ "$output" = "shared-user|test@example.com|unset" ]
@@ -71,11 +71,11 @@ left-clean() {
 
 @test "exec --from: --secrets loads secrets; --all and a namespace layer as from a store" {
     make-export ; go-there
-    run --separate-stderr "$FOLIO" exec --from="$FILE" --passphrase-fd=3 --secrets gh \
+    run --separate-stderr "$FOLIO" exec --from="$FILE" --file-passphrase-fd=3 --secrets gh \
         -- sh -c 'echo "$GH_USER|$GH_TOKEN"' 3< <(printf 'export pass\n')
     [ "$status" -eq 0 ]
     [ "$output" = "shared-user|shared-token" ]
-    run --separate-stderr "$FOLIO" exec --from "$FILE" --passphrase-fd 3 --all --secrets @nawa \
+    run --separate-stderr "$FOLIO" exec --from "$FILE" --file-passphrase-fd 3 --all --secrets @nawa \
         -- sh -c 'echo "$GH_USER|$GH_TOKEN|$GIT_EMAIL"' 3< <(printf 'export pass\n')
     [ "$status" -eq 0 ]
     [ "$output" = "nawa-user|nawa-token|test@example.com" ]
@@ -84,7 +84,7 @@ left-clean() {
 
 @test "exec --from: the unpacked export is gone before the command starts" {
     make-export ; go-there
-    run --separate-stderr "$FOLIO" exec --from "$FILE" --passphrase-fd 3 -s gh \
+    run --separate-stderr "$FOLIO" exec --from "$FILE" --file-passphrase-fd 3 -s gh \
         -- sh -c 'ls -A "$TMPDIR"; echo "count=$(ls -A "$TMPDIR" | wc -l | tr -d " ")"' 3< <(printf 'export pass\n')
     [ "$status" -eq 0 ]
     [ "$output" = "count=0" ]
@@ -92,7 +92,7 @@ left-clean() {
 
 @test "exec --from --names: shows the names, runs nothing; the file is still opened" {
     make-export ; go-there
-    run --separate-stderr "$FOLIO" exec --from "$FILE" --passphrase-fd 3 --names --secrets gh @nawa \
+    run --separate-stderr "$FOLIO" exec --from "$FILE" --file-passphrase-fd 3 --names --secrets gh @nawa \
         3< <(printf 'export pass\n')
     [ "$status" -eq 0 ]
     [ "$output" = "$(printf 'GH_TOKEN <- @nawa/gh/token (S)\nGH_USER  <- @nawa/gh/user (T)')" ]
@@ -115,7 +115,7 @@ left-clean() {
 
 @test "exec --from: a wrong passphrase stops everything; the command does not run" {
     make-export ; go-there
-    run --separate-stderr "$FOLIO" exec --from "$FILE" --passphrase-fd 3 gh \
+    run --separate-stderr "$FOLIO" exec --from "$FILE" --file-passphrase-fd 3 gh \
         -- sh -c 'echo ran' 3< <(printf 'wrong pass\n')
     [ "$status" -eq 1 ]
     [ -z "$output" ]
@@ -125,7 +125,7 @@ left-clean() {
 
 @test "exec --from: an entry the export does not have is refused" {
     make-export ; go-there
-    run --separate-stderr "$FOLIO" exec --from "$FILE" --passphrase-fd 3 VAR=nope \
+    run --separate-stderr "$FOLIO" exec --from "$FILE" --file-passphrase-fd 3 VAR=nope \
         -- sh -c 'echo ran' 3< <(printf 'export pass\n')
     [ "$status" -eq 1 ]
     [ -z "$output" ]
@@ -142,22 +142,22 @@ left-clean() {
     [ "$status" -eq 1 ]
     run "$FOLIO" exec --from gh -- sh -c 'echo ran'
     [ "$status" -eq 1 ]
-    run "$FOLIO" exec --from "$FILE" --passphrase-fd 7 gh -- sh -c 'echo ran'
+    run "$FOLIO" exec --from "$FILE" --file-passphrase-fd 7 gh -- sh -c 'echo ran'
     [ "$status" -eq 1 ]
     [[ $output == *"no such file descriptor is open"* ]]
-    run "$FOLIO" exec --from "$FILE" --passphrase-fd 3 gh -- sh -c 'echo ran' 3< /dev/null
+    run "$FOLIO" exec --from "$FILE" --file-passphrase-fd 3 gh -- sh -c 'echo ran' 3< /dev/null
     [ "$status" -eq 1 ]
     [[ $output == *"No passphrase on file descriptor 3."* ]]
-    run "$FOLIO" exec --passphrase-fd 3 gh -- sh -c 'echo ran' 3< <(printf 'export pass\n')
+    run "$FOLIO" exec --file-passphrase-fd 3 gh -- sh -c 'echo ran' 3< <(printf 'export pass\n')
     [ "$status" -eq 1 ]
-    [[ $output == *"--passphrase-fd is for opening a --from file."* ]]
+    [[ $output == *"--file-passphrase-fd is for opening a --from file."* ]]
     [[ $output != *ran* ]]
     left-clean
 }
 
 @test "MANUAL: shell — from an export file" {
     make-export ; go-there
-    SHELL=/bin/sh run --separate-stderr "$FOLIO" shell --from "$FILE" --passphrase-fd 3 --secrets gh @nawa \
+    SHELL=/bin/sh run --separate-stderr "$FOLIO" shell --from "$FILE" --file-passphrase-fd 3 --secrets gh @nawa \
         3< <(printf 'export pass\n') < <(printf 'echo "$FOLIO_SHELL|$GH_TOKEN|$GH_USER"\n')
     [ "$status" -eq 0 ]
     [ "$output" = "1|nawa-token|nawa-user" ]

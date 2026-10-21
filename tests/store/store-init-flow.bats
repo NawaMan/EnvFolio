@@ -120,16 +120,16 @@ assert-nothing-made() {
     assert-new-key-store "Jane Doe" jane@example.com pw-three
 }
 
-@test "init flow 4: --name --email --passphrase-fd — asks nothing" {
+@test "init flow 4: --name --email --store-passphrase-fd — asks nothing" {
     # bats keeps fd 3 for itself: fd 5 carries the passphrase.
-    run "$FOLIO" init --name "Jane Doe" --email jane@example.com --passphrase-fd 5 \
+    run "$FOLIO" init --name "Jane Doe" --email jane@example.com --store-passphrase-fd 5 \
         < /dev/null 5< <(printf '%s\n' pw-four)
     [[ $output != *"Your name"* && $output != *"Your email"* && $output != *"Next, gpg asks you to choose the new key's passphrase"* ]]
     assert-new-key-store "Jane Doe" jane@example.com pw-four
 }
 
-@test "init flow 5: --name --email --passphrase-stdin — asks nothing" {
-    init-answering pw-five -- --name "Jane Doe" --email jane@example.com --passphrase-stdin
+@test "init flow 5: --name --email --store-passphrase-stdin — asks nothing" {
+    init-answering pw-five -- --name "Jane Doe" --email jane@example.com --store-passphrase-stdin
     [[ $output != *"Your name"* && $output != *"Your email"* && $output != *"Next, gpg asks you to choose the new key's passphrase"* ]]
     assert-new-key-store "Jane Doe" jane@example.com pw-five
 }
@@ -173,7 +173,7 @@ assert-nothing-made() {
 }
 
 @test "init flow: an empty passphrase on stdin — nothing made" {
-    init-answering "" -- --name "Jane Doe" --email jane@example.com --passphrase-stdin
+    init-answering "" -- --name "Jane Doe" --email jane@example.com --store-passphrase-stdin
     [[ $output == *"No passphrase on stdin"* ]]
     assert-nothing-made 0
 }
@@ -184,8 +184,8 @@ assert-nothing-made() {
     assert-nothing-made 0
 }
 
-@test "init flow: --passphrase-fd on a closed fd — nothing made" {
-    init-answering -- --name "Jane Doe" --email jane@example.com --passphrase-fd 7
+@test "init flow: --store-passphrase-fd on a closed fd — nothing made" {
+    init-answering -- --name "Jane Doe" --email jane@example.com --store-passphrase-fd 7
     [[ $output == *"no such file descriptor"* ]]
     assert-nothing-made 0
 }

@@ -40,7 +40,7 @@ teardown() {
 @test "MANUAL: init — create a new key, no prompts" {
     (umask 077; printf 'correct horse\n' > "$SANDBOX/passphrase-file")
     run timeout 120 "$FOLIO" init --name "Jane Doe" --email jane@example.com \
-        --passphrase-stdin < "$SANDBOX/passphrase-file"
+        --store-passphrase-stdin < "$SANDBOX/passphrase-file"
     [ "$status" -eq 0 ]
     local fpr
     fpr=$(cat "$FOLIO_STORE_DIR/.gpg-id")

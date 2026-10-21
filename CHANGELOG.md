@@ -4,6 +4,23 @@ User-visible changes to EnvFolio. Newest first.
 
 ## Unreleased
 
+### Added
+
+- `--store-passphrase-fd <n>`: the store key's passphrase from the first line of file descriptor
+  `<n>`, instead of gpg's prompt, for every command that may need it — `backup`, `export`, `import`,
+  `exec`, `shell`, `text insert`/`edit`/`generate` and `secret show`/`grep`/`edit`/`generate`. EnvFolio
+  hands it to gpg-agent once (a wrong one stops the command before anything changes); the agent
+  then keeps it for its cache time, as when it is typed.
+- `--file-passphrase-fd <n>` for `backup --encrypt` and `restore` too.
+
+### Changed
+
+- The passphrase options are named by whose passphrase they give: `--passphrase-stdin` and
+  `--passphrase-fd` are now `--store-passphrase-stdin` / `--store-passphrase-fd` for `init`, and
+  `--file-passphrase-stdin` / `--file-passphrase-fd` for `backup`, `restore`, `export`, `import` and
+  `exec`/`shell --from`. The old names stop and say the new one.
+- The fd a passphrase is read from is closed after, so a command `folio exec` runs never gets it.
+
 ## 0.6.0 — 2026-10-19
 
 ### Added

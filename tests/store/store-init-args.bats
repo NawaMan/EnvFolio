@@ -52,8 +52,8 @@ teardown() {
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 
-@test "store-init: --passphrase-stdin needs --name and --email" {
-    run Init --passphrase-stdin --name Someone
+@test "store-init: --store-passphrase-stdin needs --name and --email" {
+    run Init --store-passphrase-stdin --name Someone
     [ "$status" -eq 1 ]
     [[ $output == *"needs --name and --email"* ]]
 }
@@ -78,8 +78,8 @@ teardown() {
     [ "$(cat "$FOLIO_STORE_DIR/.gpg-id")" = "$TEST_FPR" ]
 }
 
-@test "store-init: a new key from --name, --email and --passphrase-stdin" {
-    run Init --name "New User" --email new@example.com --passphrase-stdin <<< "correct horse"
+@test "store-init: a new key from --name, --email and --store-passphrase-stdin" {
+    run Init --name "New User" --email new@example.com --store-passphrase-stdin <<< "correct horse"
     [ "$status" -eq 0 ]
     local fpr
     fpr=$(cat "$FOLIO_STORE_DIR/.gpg-id")
@@ -93,7 +93,7 @@ teardown() {
 }
 
 @test "store-init: an empty passphrase on stdin fails" {
-    run Init --name "New User" --email new@example.com --passphrase-stdin < /dev/null
+    run Init --name "New User" --email new@example.com --store-passphrase-stdin < /dev/null
     [ "$status" -eq 1 ]
     [[ $output == *"No passphrase on stdin"* ]]
     [ ! -e "$FOLIO_STORE_DIR/.gpg-id" ]

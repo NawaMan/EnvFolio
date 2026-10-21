@@ -46,6 +46,17 @@ Main() {
 
     local category="${1:-}" ; (( $# > 0 )) && shift
     case "$category" in
+        init|backup|restore|export|import|exec|shell) passphrase-option-is-renamed "$category" "$@" ;;
+    esac
+    # --store-passphrase-fd <n> means the same for every command that may need the store key's
+    # passphrase, so it is taken here; require-store unlocks the key with it.
+    case "$category ${1:-}" in
+        "backup "*|"export "*|"import "*|"exec "*|"shell "*|"text insert"|"text edit"|"text generate"|\
+        "secret show"|"secret grep"|"secret edit"|"secret generate")
+            take-store-passphrase-fd "$@"
+            set -- "${ARGS[@]}" ;;
+    esac
+    case "$category" in
         init)    Init    "$@" ;;
         path)    Path    "$@" ;;
         backup)  Backup  "$@" ;;
@@ -166,6 +177,25 @@ function store-is-gone() {
     esac
 }
 
+# passphrase-option-is-renamed <command> [args...]: --passphrase-stdin and --passphrase-fd were
+# renamed in 0.7.0, by whose passphrase they give: --store-… for the store key's (init), --file-…
+# for a backup's or an export's (the others). Not an alias: it says what to use instead.
+function passphrase-option-is-renamed() {
+    local command=$1 arg kind=file ; shift
+    [[ $command == init ]] && kind=store
+    for arg in "$@"; do
+        case $arg in
+            --) return 0 ;;
+            --passphrase-stdin|--passphrase-fd|--passphrase-fd=*) ;;
+            *)  continue ;;
+        esac
+        # exec and shell never had --passphrase-stdin: for them it is just an unknown option.
+        [[ $arg == --passphrase-stdin && ( $command == exec || $command == shell ) ]] && continue
+        arg=${arg%%=*}
+        die "$command: $arg is now --$kind-${arg#--}."
+    done
+}
+
 # --- path ---------------------------------------------------------------------
 
 function path-help() {
@@ -265,8 +295,8 @@ function accept-unsafe-store() {
 function store-init-usage() {
     cat <<'EOF'
 Usage: folio init [--key <id>] [--allow-unsafe-folder]
-       folio init [--new-key] [--name <name>] [--email <email>] [--passphrase-stdin|--passphrase-fd <n>]
-                        [--allow-unsafe-folder]
+       folio init [--new-key] [--name <name>] [--email <email>]
+                  [--store-passphrase-stdin|--store-passphrase-fd <n>] [--allow-unsafe-folder]
 EOF
 }
 
@@ -285,11 +315,13 @@ Options:
   --new-key           Create a new key. Implied by any option below.
   --name <name>       The new key's name.
   --email <email>     The new key's email.
-  --passphrase-stdin  Read the new key's passphrase from the first line of stdin.
+  --store-passphrase-stdin
+                      Read the new key's passphrase from the first line of stdin.
                       Needs --name and --email. An empty passphrase is refused.
-  --passphrase-fd <n> Read the new key's passphrase from the first line of file descriptor <n>,
-                      e.g. --passphrase-fd 3 3< pass.txt. stdin stays free, so anything not given
-                      is still asked for. An empty passphrase is refused.
+  --store-passphrase-fd <n>
+                      Read the new key's passphrase from the first line of file descriptor <n>,
+                      e.g. --store-passphrase-fd 3 3< pass.txt. stdin stays free, so anything not
+                      given is still asked for. An empty passphrase is refused.
   --allow-unsafe-folder
                       Use an existing folder that is someone else's or open to other users without
                       asking (still with the warning).
@@ -301,7 +333,7 @@ EOF
 }
 
 # folio init [--key <id>] | [--new-key] [--name <name>] [--email <email>]
-#                     [--passphrase-stdin|--passphrase-fd <n>] [--allow-unsafe-folder]
+#                     [--store-passphrase-stdin|--store-passphrase-fd <n>] [--allow-unsafe-folder]
 # Anything not given is asked for. An existing key needs no passphrase: the store only encrypts to it.
 Init() {
     # Process the command-line options
@@ -311,19 +343,17 @@ Init() {
         # --opt=value is the same as --opt value
         if [[ $arg == --*=* ]]; then set -- "${arg#*=}" "$@" ; arg=${arg%%=*} ; fi
         case $arg in
-            --key|--name|--email|--passphrase-fd)
+            --key|--name|--email|--store-passphrase-fd)
                 [[ $# -gt 0 && -n $1 ]] || die "$arg needs a value."
                 case $arg in
                     --key)   key_id=$1 ;;
                     --name)  name=$1   ;;
                     --email) email=$1  ;;
-                    --passphrase-fd)
-                        [[ $1 =~ ^[0-9]+$ ]] || die "--passphrase-fd needs a file descriptor number, not '$1'."
-                        passphrase_fd=$1 ;;
+                    --store-passphrase-fd) passphrase_fd=$1 ;;
                 esac
                 shift ;;
             --new-key)          new_key=1          ;;
-            --passphrase-stdin) passphrase_stdin=1 ;;
+            --store-passphrase-stdin) passphrase_stdin=1 ;;
             --allow-unsafe-folder) allow_unsafe=1 ;;
             -h|--help)          init-help ; return 0 ;;
             *) die "init: unknown option: $arg${EXTRA_LINE}$(store-init-usage)" ;;
@@ -367,20 +397,18 @@ EOF
         info "The store path is available: the folder will be made (private, 700)." >&2
     fi
 
-    # --name / --email / --passphrase-stdin / --passphrase-fd imply --new-key
+    # --name / --email / --store-passphrase-stdin / --store-passphrase-fd imply --new-key
     [[ -n $name || -n $email || -n $passphrase_fd ]] || (( passphrase_stdin )) && new_key=1
     if [[ -n $key_id ]] && (( new_key )); then
-        die "--key cannot be used with --new-key, --name, --email, --passphrase-stdin or --passphrase-fd."
+        die "--key cannot be used with --new-key, --name, --email, --store-passphrase-stdin or --store-passphrase-fd."
     fi
     if (( passphrase_stdin )) && [[ -n $passphrase_fd ]]; then
-        die "--passphrase-stdin and --passphrase-fd cannot be used together."
+        die "--store-passphrase-stdin and --store-passphrase-fd cannot be used together."
     fi
-    if [[ -n $passphrase_fd ]] && ! { : <&"$passphrase_fd" ; } 2>/dev/null; then
-        die "--passphrase-fd $passphrase_fd: no such file descriptor is open."
-    fi
+    [[ -z $passphrase_fd ]] || check-passphrase-fd --store-passphrase-fd "$passphrase_fd"
     # stdin carries the passphrase, so nothing else can be asked for.
     if (( passphrase_stdin )) && [[ -z $name || -z $email ]]; then
-        die "--passphrase-stdin needs --name and --email too."
+        die "--store-passphrase-stdin needs --name and --email too."
     fi
 
     # Input: the key — --key; otherwise picked from the keyring's secret keys, or a new one.
@@ -400,14 +428,15 @@ EOF
         [[ -n $email ]] || email=$(ask-text "Your email" "e.g. jane@example.com" "$(guess-email)") || exit 1
         [[ -n $email ]] || die "An email is needed to create a key."
         show-answer "Email" "$email"
-        # Input: the new key's passphrase — the first line of stdin with --passphrase-stdin, or of
-        # fd <n> with --passphrase-fd <n>; otherwise gpg asks for it when it makes the key.
+        # Input: the new key's passphrase — the first line of stdin with --store-passphrase-stdin, or
+        # of fd <n> with --store-passphrase-fd <n>; otherwise gpg asks for it when it makes the key.
         if (( passphrase_stdin )); then
             IFS= read -rs passphrase || true
             [[ -n $passphrase ]] || die "No passphrase on stdin."
         elif [[ -n $passphrase_fd ]]; then
-            IFS= read -rs -u "$passphrase_fd" passphrase || true
-            [[ -n $passphrase ]] || die "No passphrase on file descriptor $passphrase_fd."
+            read-passphrase-fd "$passphrase_fd"
+            passphrase=$PASSPHRASE
+            unset PASSPHRASE
         fi
         if [[ -n $passphrase ]]; then
             show-answer "Passphrase" "************"
@@ -503,12 +532,15 @@ function store-summary() {
 
 # Die unless the store is ready; commands that read or write items call this first.
 # Warns (once) when the store's folder is someone else's or other users can get into it.
+# With --store-passphrase-fd, unlocks the store's key.
 STORE_MODE_CHECKED=0
 function require-store() {
     store-exists || die "No ready EnvFolio store at $STORE_PATH. Create one with: folio init"
-    (( STORE_MODE_CHECKED )) && return 0
-    STORE_MODE_CHECKED=1
-    warn-unsafe-store
+    if (( ! STORE_MODE_CHECKED )); then
+        STORE_MODE_CHECKED=1
+        warn-unsafe-store
+    fi
+    unlock-store-key
 }
 
 # --- backup -------------------------------------------------------------------
@@ -519,7 +551,10 @@ BACKUP_SUFFIX=--folio.tar.gz
 ENCRYPTED_BACKUP_SUFFIX=--folio.gpg
 
 function store-backup-usage() {
-    echo "Usage: folio backup [--history] [--encrypt [--passphrase-stdin]] [<file>|<folder>]"
+    cat <<'EOF'
+Usage: folio backup [--history] [--encrypt [--file-passphrase-stdin|--file-passphrase-fd <n>]]
+                    [--store-passphrase-fd <n>] [<file>|<folder>]
+EOF
 }
 
 function backup-help() {
@@ -539,20 +574,32 @@ Options:
   --encrypt           Encrypt the backup with a passphrase of its own; the file ends in
                       --folio.gpg. Without it, the texts and the names of the secrets can be read by anyone
                       who has the file (the secrets themselves stay encrypted).
-  --passphrase-stdin  Read that passphrase from the first line of stdin. Needs --encrypt.
+  --file-passphrase-stdin
+                      Read that passphrase from the first line of stdin. Needs --encrypt.
                       An empty passphrase is refused.
+  --file-passphrase-fd <n>
+                      The same, from the first line of file descriptor <n>, e.g.
+                      --file-passphrase-fd 3 3< pass.txt.
+  --store-passphrase-fd <n>
+                      The store key's passphrase, from the first line of file descriptor <n>,
+                      instead of gpg's prompt.
   -h, --help          Show this help.
 EOF
 }
 
-# folio backup [--history] [--encrypt [--passphrase-stdin]] [<file>|<folder>]
+# folio backup [--history] [--encrypt [--file-passphrase-stdin|--file-passphrase-fd <n>]]
+#              [--store-passphrase-fd <n>] [<file>|<folder>]
 Backup() {
-    local history=0 encrypt=0 passphrase_stdin=0 target=""
+    local history=0 encrypt=0 passphrase_stdin=0 passphrase_fd="" target=""
     while (( $# > 0 )); do
         case $1 in
             --history)          history=1          ;;
             --encrypt)          encrypt=1          ;;
-            --passphrase-stdin) passphrase_stdin=1 ;;
+            --file-passphrase-stdin) passphrase_stdin=1 ;;
+            --file-passphrase-fd)
+                [[ $# -gt 1 && -n $2 ]] || die "$1 needs a value."
+                passphrase_fd=$2 ; shift ;;
+            --file-passphrase-fd=*) passphrase_fd=${1#*=} ;;
             -h|--help)          backup-help ; return 0 ;;
             -*) die "backup: unknown option: $1${EXTRA_LINE}$(store-backup-usage)" ;;
             *)  [[ -z $target ]] || die "backup: one file or folder only.${EXTRA_LINE}$(store-backup-usage)"
@@ -560,7 +607,12 @@ Backup() {
         esac
         shift
     done
-    (( encrypt || ! passphrase_stdin )) || die "--passphrase-stdin needs --encrypt."
+    (( encrypt || ! passphrase_stdin )) || die "--file-passphrase-stdin needs --encrypt."
+    (( encrypt )) || [[ -z $passphrase_fd ]] || die "--file-passphrase-fd needs --encrypt."
+    if (( passphrase_stdin )) && [[ -n $passphrase_fd ]]; then
+        die "--file-passphrase-stdin and --file-passphrase-fd cannot be used together."
+    fi
+    [[ -z $passphrase_fd ]] || check-passphrase-fd --file-passphrase-fd "$passphrase_fd"
     require-store
 
     local suffix=$BACKUP_SUFFIX file=${target:-.}
@@ -574,6 +626,10 @@ Backup() {
     if (( passphrase_stdin )); then
         IFS= read -rs passphrase || true
         [[ -n $passphrase ]] || die "No passphrase on stdin."
+    elif [[ -n $passphrase_fd ]]; then
+        read-passphrase-fd "$passphrase_fd"
+        passphrase=$PASSPHRASE
+        unset PASSPHRASE
     fi
 
     # The store's keys, by primary fingerprint; each must have its secret part here.
@@ -599,10 +655,17 @@ Backup() {
         printf 'key %s\n' "${keys[@]}"
     } > "$stage/folio-backup.txt"
 
+    # gpg-agent asks for the passphrase to export a key even when it has it already: with
+    # --store-passphrase-fd, it is given here too, on fd 3 as for the backup's own.
     section "Export the key (gpg may ask for its passphrase)"
-    if ! gpg --armor --output "$stage/key.asc" --export-secret-keys "${keys[@]}" || [[ ! -s $stage/key.asc ]]; then
+    local take_key=(gpg)
+    [[ -n $STORE_PASSPHRASE ]] && take_key=(gpg --batch --pinentry-mode loopback --passphrase-fd 3)
+    if ! "${take_key[@]}" --armor --output "$stage/key.asc" --export-secret-keys "${keys[@]}" \
+             3< <(printf '%s\n' "$STORE_PASSPHRASE") \
+           || [[ ! -s $stage/key.asc ]]; then
         die "Exporting the key failed."
     fi
+    unset STORE_PASSPHRASE
     show-answer "Key" "${keys[*]}"
 
     section "Pack the backup"
@@ -611,7 +674,7 @@ Backup() {
     pack+=(-C "$stage" folio-backup.txt key.asc -C "$(dirname "$store")" "${store##*/}")
     if (( encrypt )); then
         seal=(gpg --symmetric --compress-algo none --output -)
-        (( passphrase_stdin )) && seal=(gpg --batch --pinentry-mode loopback --passphrase-fd 3 "${seal[@]:1}")
+        [[ -n $passphrase ]] && seal=(gpg --batch --pinentry-mode loopback --passphrase-fd 3 "${seal[@]:1}")
     fi
     # The passphrase reaches gpg on fd 3 (printf is a builtin: never in argv). COPYFILE_DISABLE
     # keeps macOS tar from adding ._ files.
@@ -641,7 +704,7 @@ Backup() {
 # --- restore ------------------------------------------------------------------
 
 function store-restore-usage() {
-    echo "Usage: folio restore [--passphrase-stdin] <file>"
+    echo "Usage: folio restore [--file-passphrase-stdin|--file-passphrase-fd <n>] [--allow-unsafe-folder] <file>"
 }
 
 function restore-help() {
@@ -655,8 +718,12 @@ in it. An existing empty folder is used as it is (a folder made here is private,
 someone else's or other users can get in, EnvFolio warns and asks before using it.
 
 Options:
-  --passphrase-stdin  Read the passphrase of an encrypted backup (--folio.gpg) from the first
+  --file-passphrase-stdin
+                      Read the passphrase of an encrypted backup (--folio.gpg) from the first
                       line of stdin, instead of gpg's prompt.
+  --file-passphrase-fd <n>
+                      The same, from the first line of file descriptor <n>, e.g.
+                      --file-passphrase-fd 3 3< pass.txt.
   --allow-unsafe-folder
                       Use an existing empty folder that is someone else's or open to other users
                       without asking (still with the warning).
@@ -664,12 +731,16 @@ Options:
 EOF
 }
 
-# folio restore [--passphrase-stdin] <file>
+# folio restore [--file-passphrase-stdin|--file-passphrase-fd <n>] [--allow-unsafe-folder] <file>
 Restore() {
-    local passphrase_stdin=0 allow_unsafe=0 file=""
+    local passphrase_stdin=0 passphrase_fd="" allow_unsafe=0 file=""
     while (( $# > 0 )); do
         case $1 in
-            --passphrase-stdin) passphrase_stdin=1 ;;
+            --file-passphrase-stdin) passphrase_stdin=1 ;;
+            --file-passphrase-fd)
+                [[ $# -gt 1 && -n $2 ]] || die "$1 needs a value."
+                passphrase_fd=$2 ; shift ;;
+            --file-passphrase-fd=*) passphrase_fd=${1#*=} ;;
             --allow-unsafe-folder) allow_unsafe=1 ;;
             -h|--help)          restore-help ; return 0 ;;
             -*) die "restore: unknown option: $1${EXTRA_LINE}$(store-restore-usage)" ;;
@@ -680,15 +751,21 @@ Restore() {
     done
     [[ -n $file ]] || die "$(store-restore-usage)"
     [[ -f $file ]] || die "There is no file $file."
+    if (( passphrase_stdin )) && [[ -n $passphrase_fd ]]; then
+        die "--file-passphrase-stdin and --file-passphrase-fd cannot be used together."
+    fi
+    [[ -z $passphrase_fd ]] || check-passphrase-fd --file-passphrase-fd "$passphrase_fd"
     warn-if-gpg-cannot-import restore
 
     local open=(cat)
     case $file in
         *"$ENCRYPTED_BACKUP_SUFFIX")
             open=(gpg --decrypt --output -)
-            (( passphrase_stdin )) && open=(gpg --batch --pinentry-mode loopback --passphrase-fd 3 "${open[@]:1}") ;;
+            (( passphrase_stdin )) || [[ -n $passphrase_fd ]] \
+                && open=(gpg --batch --pinentry-mode loopback --passphrase-fd 3 "${open[@]:1}") ;;
         *"$BACKUP_SUFFIX")
-            (( ! passphrase_stdin )) || die "--passphrase-stdin is only for an encrypted backup ($ENCRYPTED_BACKUP_SUFFIX)." ;;
+            [[ $passphrase_stdin == 0 && -z $passphrase_fd ]] \
+                || die "--file-passphrase-stdin and --file-passphrase-fd are only for an encrypted backup ($ENCRYPTED_BACKUP_SUFFIX)." ;;
         *)  die "$file is not an EnvFolio backup: its name ends in neither $BACKUP_SUFFIX nor $ENCRYPTED_BACKUP_SUFFIX." ;;
     esac
     # An empty folder is as good as none: the store is moved inside it (it may be a mount point),
@@ -705,6 +782,10 @@ Restore() {
     if (( passphrase_stdin )); then
         IFS= read -rs passphrase || true
         [[ -n $passphrase ]] || die "No passphrase on stdin."
+    elif [[ -n $passphrase_fd ]]; then
+        read-passphrase-fd "$passphrase_fd"
+        passphrase=$PASSPHRASE
+        unset PASSPHRASE
     fi
 
     # Unpack next to the store's place, so the last step is one rename.
@@ -783,8 +864,8 @@ EXPORT_SUFFIX=.folio
 
 function store-export-usage() {
     cat <<'EOF'
-Usage: folio export [-s|--secrets] [--to <key>|--passphrase-stdin|--passphrase-fd <n>]
-                          [-o|--output <file>|<folder>] [<name>...]
+Usage: folio export [-s|--secrets] [--to <key>|--file-passphrase-stdin|--file-passphrase-fd <n>]
+                    [--store-passphrase-fd <n>] [-o|--output <file>|<folder>] [<name>...]
 EOF
 }
 
@@ -803,25 +884,30 @@ With no <name>, EnvFolio lists every item and asks which ones.
 
 The file is <file> (.folio added when missing), or store-<date>.folio in <folder> —
 never inside the store. An existing file is never replaced. With no -o, EnvFolio asks, offering
-store-<date>.folio in the current folder (taken as it is with --passphrase-stdin).
+store-<date>.folio in the current folder (taken as it is with --file-passphrase-stdin).
 
 Options:
   -s, --secrets       Take the secrets in a folder too. A secret named on its own always goes.
   --to <key>          Lock the file to this public key: a key file (.asc) or a key in your
                       keyring (fingerprint, key id or email). Only its secret key can open it.
-  --passphrase-stdin  Read the file's passphrase from the first line of stdin, instead of gpg's
+  --file-passphrase-stdin
+                      Read the file's passphrase from the first line of stdin, instead of gpg's
                       prompt. Not with --to. Needs a <name>. An empty passphrase is refused.
-  --passphrase-fd <n> Read the file's passphrase from the first line of file descriptor <n>,
-                      e.g. --passphrase-fd 3 3< pass.txt. Not with --to. stdin stays free, so the
-                      items can still be picked. An empty passphrase is refused.
+  --file-passphrase-fd <n>
+                      Read the file's passphrase from the first line of file descriptor <n>,
+                      e.g. --file-passphrase-fd 3 3< pass.txt. Not with --to. stdin stays free,
+                      so the items can still be picked. An empty passphrase is refused.
+  --store-passphrase-fd <n>
+                      The store key's passphrase (to read the secrets), from the first line of
+                      file descriptor <n>, instead of gpg's prompt.
   -o, --output <file>|<folder>
                       Where to write the file.
   -h, --help          Show this help.
 EOF
 }
 
-# folio export [-s|--secrets] [--to <key>|--passphrase-stdin|--passphrase-fd <n>]
-#                       [-o|--output <file>|<folder>] [<name>...]
+# folio export [-s|--secrets] [--to <key>|--file-passphrase-stdin|--file-passphrase-fd <n>]
+#              [--store-passphrase-fd <n>] [-o|--output <file>|<folder>] [<name>...]
 # Anything not given is asked for: the items, and how to lock the file.
 Export() {
     # Process the command-line options
@@ -830,18 +916,18 @@ Export() {
         arg=$1 ; shift
         case $arg in
             -s|--secrets)       secrets=1 ;;
-            --to|-o|--output|--passphrase-fd)
+            --to|-o|--output|--file-passphrase-fd)
                                 [[ $# -gt 0 && -n $1 ]] || die "$arg needs a value."
                                 case $arg in
-                                    --to)            to=$1 ;;
-                                    --passphrase-fd) passphrase_fd=$1 ;;
-                                    *)               target=$1 ;;
+                                    --to)                 to=$1 ;;
+                                    --file-passphrase-fd) passphrase_fd=$1 ;;
+                                    *)                    target=$1 ;;
                                 esac
                                 shift ;;
             --to=*)             to=${arg#*=} ;;
             --output=*)         target=${arg#*=} ;;
-            --passphrase-fd=*)  passphrase_fd=${arg#*=} ;;
-            --passphrase-stdin) passphrase_stdin=1 ;;
+            --file-passphrase-fd=*)  passphrase_fd=${arg#*=} ;;
+            --file-passphrase-stdin) passphrase_stdin=1 ;;
             -h|--help)          export-help ; return 0 ;;
             --)                 names+=("$@") ; break ;;
             -*)                 die "export: unknown option: $arg${EXTRA_LINE}$(store-export-usage)" ;;
@@ -849,18 +935,13 @@ Export() {
         esac
     done
     if (( passphrase_stdin )) && [[ -n $passphrase_fd ]]; then
-        die "--passphrase-stdin and --passphrase-fd cannot be used together."
+        die "--file-passphrase-stdin and --file-passphrase-fd cannot be used together."
     fi
     [[ -z $to ]] || { (( ! passphrase_stdin )) && [[ -z $passphrase_fd ]] ; } \
-        || die "--passphrase-stdin and --passphrase-fd are for a passphrase; a file locked --to needs none."
+        || die "--file-passphrase-stdin and --file-passphrase-fd are for a passphrase; a file locked --to needs none."
     (( ! passphrase_stdin || ${#names[@]} > 0 )) \
-        || die "--passphrase-stdin needs the items named: stdin cannot also answer which ones."
-    if [[ -n $passphrase_fd ]]; then
-        [[ $passphrase_fd =~ ^[0-9]+$ ]] \
-            || die "--passphrase-fd needs a file descriptor number, not '$passphrase_fd'."
-        { : <&"$passphrase_fd" ; } 2>/dev/null \
-            || die "--passphrase-fd $passphrase_fd: no such file descriptor is open."
-    fi
+        || die "--file-passphrase-stdin needs the items named: stdin cannot also answer which ones."
+    [[ -z $passphrase_fd ]] || check-passphrase-fd --file-passphrase-fd "$passphrase_fd"
     require-store
 
     section "Overview"
@@ -904,7 +985,7 @@ EOF
         || die "$file is inside the store; write the export somewhere else."
     show-answer "File" "$(tilde-path "$file")"
 
-    # Input: the lock — --to <key>, or a passphrase (--passphrase-stdin / --passphrase-fd);
+    # Input: the lock — --to <key>, or a passphrase (--file-passphrase-stdin / --file-passphrase-fd);
     # with neither, asked: a passphrase (gpg asks for it later), or a public key.
     local choice to_key="With a public key"
     if [[ -z $to && -z $passphrase_fd ]] && (( ! passphrase_stdin )); then
@@ -942,8 +1023,9 @@ EOF
             IFS= read -rs passphrase || true
             [[ -n $passphrase ]] || die "No passphrase on stdin."
         elif [[ -n $passphrase_fd ]]; then
-            IFS= read -rs -u "$passphrase_fd" passphrase || true
-            [[ -n $passphrase ]] || die "No passphrase on file descriptor $passphrase_fd."
+            read-passphrase-fd "$passphrase_fd"
+            passphrase=$PASSPHRASE
+            unset PASSPHRASE
         fi
         if [[ -n $passphrase ]]; then
             show-answer "Lock" "a passphrase: ************"
@@ -1030,8 +1112,8 @@ EOF
 function store-import-usage() {
     cat <<'EOF'
 Usage: folio import [-a|--all] [--overwrite|--skip-existing] [--key <id>]
-                          [--passphrase-stdin|--passphrase-fd <n>] [--allow-unsafe-folder]
-                          [<file> [<name>...]]
+                    [--file-passphrase-stdin|--file-passphrase-fd <n>] [--store-passphrase-fd <n>]
+                    [--allow-unsafe-folder] [<file> [<name>...]]
 EOF
 }
 
@@ -1054,12 +1136,18 @@ Options:
   --overwrite         Replace the items already in the store.
   --skip-existing     Keep the items already in the store; take only the new ones.
   --key <id>          With no store yet: make it with this key, as `folio init --key`.
-  --passphrase-stdin  Read the file's passphrase (or your key's, for a file locked to it) from the
+  --file-passphrase-stdin
+                      Read the file's passphrase (or your key's, for a file locked to it) from the
                       first line of stdin. Needs <file>, and --all or a <name>; with no store
                       yet, --key too.
-  --passphrase-fd <n> The same, from the first line of file descriptor <n>, e.g.
-                      --passphrase-fd 3 3< pass.txt. stdin stays free, so anything not given is
-                      still asked for.
+  --file-passphrase-fd <n>
+                      The same, from the first line of file descriptor <n>, e.g.
+                      --file-passphrase-fd 3 3< pass.txt. stdin stays free, so anything not given
+                      is still asked for.
+  --store-passphrase-fd <n>
+                      The store key's passphrase (to sign the texts), from the first line of file
+                      descriptor <n>, instead of gpg's prompt. With no store yet and a new key
+                      made for it, that new key's passphrase.
   --allow-unsafe-folder
                       Use a store folder that is someone else's or open to other users without
                       asking (still with the warning).
@@ -1068,7 +1156,8 @@ EOF
 }
 
 # folio import [-a|--all] [--overwrite|--skip-existing] [--key <id>]
-#                       [--passphrase-stdin|--passphrase-fd <n>] [--allow-unsafe-folder] [<file> [<name>...]]
+#              [--file-passphrase-stdin|--file-passphrase-fd <n>] [--store-passphrase-fd <n>]
+#              [--allow-unsafe-folder] [<file> [<name>...]]
 # Anything not given is asked for: the file, a new store's key, the items, what to do with clashes.
 Import() {
     # Process the command-line options
@@ -1079,13 +1168,13 @@ Import() {
             -a|--all)           all=1 ;;
             --overwrite)        clash=overwrite ;;
             --skip-existing)    clash=skip ;;
-            --key|--passphrase-fd)
+            --key|--file-passphrase-fd)
                                 [[ $# -gt 0 && -n $1 ]] || die "$arg needs a value."
                                 if [[ $arg == --key ]]; then key_id=$1 ; else passphrase_fd=$1 ; fi
                                 shift ;;
             --key=*)            key_id=${arg#*=} ;;
-            --passphrase-fd=*)  passphrase_fd=${arg#*=} ;;
-            --passphrase-stdin) passphrase_stdin=1 ;;
+            --file-passphrase-fd=*)  passphrase_fd=${arg#*=} ;;
+            --file-passphrase-stdin) passphrase_stdin=1 ;;
             --allow-unsafe-folder) allow_unsafe=1 ;;
             -h|--help)          import-help ; return 0 ;;
             -*) die "import: unknown option: $arg${EXTRA_LINE}$(store-import-usage)" ;;
@@ -1094,20 +1183,15 @@ Import() {
     done
     (( ! all || ${#names[@]} == 0 )) || die "--all takes every item; give no <name> with it."
     if (( passphrase_stdin )) && [[ -n $passphrase_fd ]]; then
-        die "--passphrase-stdin and --passphrase-fd cannot be used together."
+        die "--file-passphrase-stdin and --file-passphrase-fd cannot be used together."
     fi
     # stdin carries the passphrase, so it cannot also answer the questions.
     if (( passphrase_stdin )); then
-        [[ -n $file ]] || die "--passphrase-stdin needs the file given: stdin cannot also answer which one."
+        [[ -n $file ]] || die "--file-passphrase-stdin needs the file given: stdin cannot also answer which one."
         (( all || ${#names[@]} > 0 )) \
-            || die "--passphrase-stdin needs --all or the items named: stdin cannot also answer which ones."
+            || die "--file-passphrase-stdin needs --all or the items named: stdin cannot also answer which ones."
     fi
-    if [[ -n $passphrase_fd ]]; then
-        [[ $passphrase_fd =~ ^[0-9]+$ ]] \
-            || die "--passphrase-fd needs a file descriptor number, not '$passphrase_fd'."
-        { : <&"$passphrase_fd" ; } 2>/dev/null \
-            || die "--passphrase-fd $passphrase_fd: no such file descriptor is open."
-    fi
+    [[ -z $passphrase_fd ]] || check-passphrase-fd --file-passphrase-fd "$passphrase_fd"
     [[ -z $file ]] || check-export-file "$file"
     warn-if-gpg-cannot-import import
     # The store's folder: one there is, or none yet (missing, or an empty folder) to make one in.
@@ -1121,7 +1205,7 @@ Import() {
     (( status == 0 )) || new_store=1
     (( new_store )) || [[ -z $key_id ]] || die "--key is only for making a new store, and $STORE_PATH is one already."
     if (( new_store && passphrase_stdin )) && [[ -z $key_id ]]; then
-        die "--passphrase-stdin with no store yet needs --key: stdin cannot also answer which key."
+        die "--file-passphrase-stdin with no store yet needs --key: stdin cannot also answer which key."
     fi
 
     section "Overview"
@@ -1143,15 +1227,16 @@ EOF
     check-export-file "$file"
     show-answer "File" "$(tilde-path "$file")"
 
-    # Input: what opens the file — its passphrase (--passphrase-stdin / --passphrase-fd, or gpg
-    # asks), or your key it is locked to (gpg may ask for that key's passphrase).
+    # Input: what opens the file — its passphrase (--file-passphrase-stdin / --file-passphrase-fd,
+    # or gpg asks), or your key it is locked to (gpg may ask for that key's passphrase).
     local passphrase=""
     if (( passphrase_stdin )); then
         IFS= read -rs passphrase || true
         [[ -n $passphrase ]] || die "No passphrase on stdin."
     elif [[ -n $passphrase_fd ]]; then
-        IFS= read -rs -u "$passphrase_fd" passphrase || true
-        [[ -n $passphrase ]] || die "No passphrase on file descriptor $passphrase_fd."
+        read-passphrase-fd "$passphrase_fd"
+        passphrase=$PASSPHRASE
+        unset PASSPHRASE
     fi
 
     if [[ -z $passphrase ]] && is-passphrase-locked "$file"; then
@@ -1201,8 +1286,13 @@ EOF
             [[ -n $name  ]] || die "A name is needed to create a key."
             email=$(ask-text "Your email" "e.g. jane@example.com" "$(guess-email)") || exit 1
             [[ -n $email ]] || die "An email is needed to create a key."
-            show-answer "Store key" "a new one for $name <$email> — gpg asks for its passphrase"
             init_args=(--name "$name" --email "$email")
+            if [[ -n $STORE_PASSPHRASE_FD ]]; then
+                show-answer "Store key" "a new one for $name <$email>, its passphrase from --store-passphrase-fd"
+                init_args+=(--store-passphrase-fd 4)
+            else
+                show-answer "Store key" "a new one for $name <$email> — gpg asks for its passphrase"
+            fi
         fi
     fi
 
@@ -1228,7 +1318,10 @@ EOF
 
     if (( new_store )); then
         section "Make the store"
-        Init "${init_args[@]}"
+        # A new key's passphrase reaches Init on fd 4 (printf is a builtin: never in argv); it is
+        # kept for require-store, which unlocks the new key with it.
+        load-store-passphrase
+        Init "${init_args[@]}" 4< <(printf '%s\n' "$STORE_PASSPHRASE")
     fi
     require-store
 
@@ -1613,7 +1706,8 @@ TextShow() {
 
 function text-insert-help() {
     cat <<'EOF'
-Usage: folio text insert [-m|--multiline] [-f|--force] [-t|--text <text>] <name>
+Usage: folio text insert [-m|--multiline] [-f|--force] [-t|--text <text>] [--store-passphrase-fd <n>]
+                         <name>
 
 Add a text to the EnvFolio store — kept plain, not encrypted — and sign it with the store's key
 (gpg may ask for the key's passphrase). The text is asked for once, with echo; piped in, it is
@@ -1623,6 +1717,9 @@ Options:
   -t, --text <text>   The text itself, instead of asking.
   -m, --multiline     The text is several lines; end it with Ctrl-D. Piped in, all of stdin.
   -f, --force         Overwrite an existing text without asking (only asked at a terminal).
+  --store-passphrase-fd <n>
+                      The store key's passphrase (to sign), from the first line of file
+                      descriptor <n>, instead of gpg's prompt.
   -h, --help          Show this help and stop.
 EOF
 }
@@ -1673,12 +1770,15 @@ TextInsert() {
 
 function text-edit-help() {
     cat <<'EOF'
-Usage: folio text edit <name>
+Usage: folio text edit [--store-passphrase-fd <n>] <name>
 
 Edit a text in $EDITOR (vi if unset), or add it if it is new; then sign and commit it. The text's
 signature is checked first: a text changed outside EnvFolio is not opened.
 
 Options:
+  --store-passphrase-fd <n>
+                      The store key's passphrase (to sign), from the first line of file
+                      descriptor <n>, instead of gpg's prompt.
   -h, --help          Show this help and stop.
 EOF
 }
@@ -1714,7 +1814,8 @@ TextEdit() {
 
 function text-generate-help() {
     cat <<'EOF'
-Usage: folio text generate [-n|--no-symbols] [-i|--in-place|-f|--force] <name> [<length>]
+Usage: folio text generate [-n|--no-symbols] [-i|--in-place|-f|--force] [--store-passphrase-fd <n>]
+                           <name> [<length>]
 
 Generate a random text (25 characters unless <length> is given), save and sign it, and print it.
 It is a text, kept plain — for a random password, use `folio secret generate`.
@@ -1723,6 +1824,9 @@ Options:
   -n, --no-symbols    Letters and digits only.
   -i, --in-place      Replace only the first line of an existing text; keep the rest.
   -f, --force         Overwrite an existing text without asking (only asked at a terminal).
+  --store-passphrase-fd <n>
+                      The store key's passphrase (to sign), from the first line of file
+                      descriptor <n>, instead of gpg's prompt.
   -h, --help          Show this help and stop.
 EOF
 }
@@ -1996,13 +2100,16 @@ SecretFind() {
 
 function secret-grep-help() {
     cat <<'EOF'
-Usage: folio secret grep [<grep-option>...] <pattern>
+Usage: folio secret grep [--store-passphrase-fd <n>] [<grep-option>...] <pattern>
 
 Decrypt every secret and print the lines that match <pattern>, under each secret's name.
 The matching lines are secret values: they are shown on screen.
 
 Options:
   <grep-option>       Any option of grep, e.g. -i to ignore case, -v to invert the match.
+  --store-passphrase-fd <n>
+                      The store key's passphrase, from the first line of file descriptor <n>,
+                      instead of gpg's prompt.
   -h, --help          Show this help and stop (not grep's -h).
 EOF
 }
@@ -2014,13 +2121,16 @@ SecretGrep() { call-pass secret-grep-help grep "$@" ; }
 
 function secret-show-help() {
     cat <<'EOF'
-Usage: folio secret show [-c|--clip[=<line>]] <name>
+Usage: folio secret show [-c|--clip[=<line>]] [--store-passphrase-fd <n>] <name>
 
 Show a secret: decrypt it and print it. With --clip, copy its first line to the clipboard
 instead; the clipboard is cleared after 45 seconds (PASSWORD_STORE_CLIP_TIME).
 
 Options:
   -c, --clip[=<line>] Copy the first line — or line <line> — to the clipboard; print nothing.
+  --store-passphrase-fd <n>
+                      The store key's passphrase, from the first line of file descriptor <n>,
+                      instead of gpg's prompt.
   -h, --help          Show this help and stop.
 EOF
 }
@@ -2079,12 +2189,15 @@ SecretInsert() {
 
 function secret-edit-help() {
     cat <<'EOF'
-Usage: folio secret edit <name>
+Usage: folio secret edit [--store-passphrase-fd <n>] <name>
 
 Edit a secret in $EDITOR, or add it if it is new. The secret is decrypted to a temporary file
 for the editor (in /dev/shm, a RAM disk, where there is one) and removed afterwards.
 
 Options:
+  --store-passphrase-fd <n>
+                      The store key's passphrase, from the first line of file descriptor <n>,
+                      instead of gpg's prompt.
   -h, --help          Show this help and stop.
 EOF
 }
@@ -2096,7 +2209,8 @@ SecretEdit() { call-pass secret-edit-help edit "$@" ; }
 
 function secret-generate-help() {
     cat <<'EOF'
-Usage: folio secret generate [-n|--no-symbols] [-c|--clip] [-i|--in-place|-f|--force] <name> [<length>]
+Usage: folio secret generate [-n|--no-symbols] [-c|--clip] [-i|--in-place|-f|--force]
+                             [--store-passphrase-fd <n>] <name> [<length>]
 
 Generate a random secret (25 characters unless <length> is given), save it, and print it.
 With --clip, copy it to the clipboard instead of printing it; the clipboard is cleared after
@@ -2107,7 +2221,11 @@ Options:
   -c, --clip          Copy the secret to the clipboard; do not print it.
   -i, --in-place      Replace only the first line of an existing secret; keep the rest.
   -f, --force         Overwrite an existing secret without asking (only asked at a terminal).
+  --store-passphrase-fd <n>
+                      The store key's passphrase (needed by --in-place, to read the rest), from
+                      the first line of file descriptor <n>, instead of gpg's prompt.
   -h, --help          Show this help and stop.
+
 EOF
 }
 
@@ -2209,8 +2327,8 @@ Ls() {
 
 function run-exec-help() {
     cat <<'HELP'
-Usage: folio exec [-s|--secrets] [-a|--all] [-n|--names] [--from <file> [--passphrase-fd <n>]]
-                  <entry>... -- <command> [<arg>...]
+Usage: folio exec [-s|--secrets] [-a|--all] [-n|--names] [--store-passphrase-fd <n>]
+                  [--from <file> [--file-passphrase-fd <n>]] <entry>... -- <command> [<arg>...]
 
 Run a command with entries from the store as environment variables. Texts load by default;
 secrets only with --secrets. Values are never printed.
@@ -2229,16 +2347,20 @@ Options:
                       which is then not needed. gpg asks for the file's passphrase, or uses your
                       key the file is locked to. Nothing is kept: the file is opened in a private
                       temporary folder, removed before the command starts.
-  --passphrase-fd <n> With --from: the file's passphrase, from the first line of file descriptor
-                      <n>, e.g. --passphrase-fd 3 3< pass.txt.
+  --file-passphrase-fd <n>
+                      With --from: the file's passphrase, from the first line of file descriptor
+                      <n>, e.g. --file-passphrase-fd 3 3< pass.txt.
+  --store-passphrase-fd <n>
+                      Without --from: the store key's passphrase (to read the secrets), from the
+                      first line of file descriptor <n>, instead of gpg's prompt.
   -h, --help          Show this help and stop.
 HELP
 }
 
 function run-shell-help() {
     cat <<'HELP'
-Usage: folio shell [-s|--secrets] [-a|--all] [-n|--names] [--from <file> [--passphrase-fd <n>]]
-                   <entry>...
+Usage: folio shell [-s|--secrets] [-a|--all] [-n|--names] [--store-passphrase-fd <n>]
+                   [--from <file> [--file-passphrase-fd <n>]] <entry>...
 
 Start your shell ($SHELL) with entries from the store as environment variables, and say which
 names were loaded (never their values). FOLIO_SHELL=1 is set. Type `exit` to leave.
@@ -2250,7 +2372,10 @@ Options:
   -n, --names         Only show which variable would get which entry, and stop: nothing is read,
                       nothing runs.
   --from <file>       Take the entries from a file made by `folio export`, as in `folio exec`.
-  --passphrase-fd <n> With --from: the file's passphrase, from the first line of file descriptor <n>.
+  --file-passphrase-fd <n>
+                      With --from: the file's passphrase, from the first line of file descriptor <n>.
+  --store-passphrase-fd <n>
+                      Without --from: the store key's passphrase, as in `folio exec`.
   -h, --help          Show this help and stop.
 HELP
 }
@@ -2262,7 +2387,7 @@ VAR_NAME_PATTERN='^[A-Za-z_][A-Za-z0-9_]*$'
 # Where the entries come from, in messages: the store, or with --from, the export.
 ENTRIES_IN="the store"
 
-# exec-with-entries <exec|shell> [-s|--secrets] [--from <file> [--passphrase-fd <n>]] <entry>...
+# exec-with-entries <exec|shell> [-s|--secrets] [--from <file> [--file-passphrase-fd <n>]] <entry>...
 #                   [-- <command> [<arg>...]]
 # Read every entry first, then export them all at once and exec: no `pass` or `gpg` call made
 # while reading ever sees a value already loaded. With --from, the entries come from an export
@@ -2276,18 +2401,18 @@ function exec-with-entries() {
             -s|--secrets) secrets=1 ;;
             -a|--all)     all=1 ;;
             -n|--names)   only_names=1 ;;
-            --from|--passphrase-fd)
+            --from|--file-passphrase-fd)
                           [[ $# -gt 0 && -n $1 ]] || die "$arg needs a value."
                           if [[ $arg == --from ]]; then from_file=$1 ; else passphrase_fd=$1 ; fi
                           shift ;;
             --from=*)          from_file=${arg#*=} ;;
-            --passphrase-fd=*) passphrase_fd=${arg#*=} ;;
+            --file-passphrase-fd=*) passphrase_fd=${arg#*=} ;;
             --)           dashes=1 ; break ;;
             -*)           die "$how: unknown option: $arg" ;;
             *)            entries+=("$arg") ;;
         esac
     done
-    local from_usage="[--from <file> [--passphrase-fd <n>]]"
+    local from_usage="[--store-passphrase-fd <n>] [--from <file> [--file-passphrase-fd <n>]]"
     if [[ $how == exec ]]; then
         (( (${#entries[@]} > 0 || all) && (only_names || (dashes && $# > 0)) )) \
             || die "Usage: folio exec [-s|--secrets] [-a|--all] [-n|--names] $from_usage <entry>... -- <command> [<arg>...]"
@@ -2297,10 +2422,11 @@ function exec-with-entries() {
         set -- "${SHELL:-/bin/sh}"
     fi
     if [[ -n $from_file ]]; then
+        [[ -z $STORE_PASSPHRASE_FD ]] || die "$how: --store-passphrase-fd is for the store; --from does not use it."
         (( secrets )) && warn-if-gpg-cannot-import "$how"
         open-export-for "$how" "$from_file" "$passphrase_fd"
     else
-        [[ -z $passphrase_fd ]] || die "$how: --passphrase-fd is for opening a --from file."
+        [[ -z $passphrase_fd ]] || die "$how: --file-passphrase-fd is for opening a --from file."
         require-store
     fi
     # --all is the store's root (""), loaded first wherever it was typed.
@@ -2340,7 +2466,7 @@ function exec-with-entries() {
     fi
     # Arrays would swallow a loaded name of theirs (export makes it element 0, never exported).
     set -- "${pairs[@]}" -- "$@"
-    unset pairs entries EXEC_VARS EXEC_FILES
+    unset pairs entries EXEC_VARS EXEC_FILES STORE_PASSPHRASE
     export-and-exec "$@"
 }
 
@@ -2352,11 +2478,12 @@ function open-export-for() {
     local how=$1 file=$2 fd=$3 passphrase=""
     check-export-file "$file"
     if [[ -n $fd ]]; then
-        [[ $fd =~ ^[0-9]+$ ]] || die "--passphrase-fd needs a file descriptor number, not '$fd'."
-        { : <&"$fd" ; } 2>/dev/null || die "--passphrase-fd $fd: no such file descriptor is open."
-        IFS= read -rs -u "$fd" passphrase || true
-        [[ -n $passphrase ]] || die "No passphrase on file descriptor $fd."
-    elif is-passphrase-locked "$file"; then
+        check-passphrase-fd --file-passphrase-fd "$fd"
+        read-passphrase-fd "$fd"
+        passphrase=$PASSPHRASE
+        unset PASSPHRASE
+    elif
+ is-passphrase-locked "$file"; then
         info "folio $how: gpg asks for the passphrase of $(tilde-path "$file")." >&2
     fi
     open-export "$file" "$passphrase" quiet
@@ -2510,6 +2637,75 @@ function set-entry-var() {
 }
 
 #== Common Functions ===========================================================
+
+# --- Passphrases --------------------------------------------------------------
+
+# check-passphrase-fd <option> <fd>: die unless <fd> is a file descriptor number that is open.
+function check-passphrase-fd() {
+    [[ $2 =~ ^[0-9]+$ ]]          || die "$1 needs a file descriptor number, not '$2'."
+    { : <&"$2" ; } 2>/dev/null    || die "$1 $2: no such file descriptor is open."
+}
+
+# read-passphrase-fd <fd>: set PASSPHRASE to the first line of fd <fd>, then close it (unless it is
+# stdin, stdout or stderr), so nothing EnvFolio starts — the command `folio exec` runs — gets it.
+# Dies when the line is empty.
+function read-passphrase-fd() {
+    PASSPHRASE=""
+    IFS= read -rs -u "$1" PASSPHRASE || true
+    (( $1 <= 2 )) || eval "exec $1<&-"    # <fd> is digits only (check-passphrase-fd)
+    [[ -n $PASSPHRASE ]] || die "No passphrase on file descriptor $1."
+}
+
+# take-store-passphrase-fd [args...]: take --store-passphrase-fd <n> (or =<n>) out of the args
+# (up to a --), checked, into STORE_PASSPHRASE_FD; the rest go into ARGS.
+STORE_PASSPHRASE_FD="" STORE_PASSPHRASE=""
+function take-store-passphrase-fd() {
+    local arg
+    ARGS=()
+    while (( $# > 0 )); do
+        arg=$1 ; shift
+        case $arg in
+            --)  ARGS+=("$arg" "$@") ; break ;;
+            --store-passphrase-fd)
+                 [[ $# -gt 0 && -n $1 ]] || die "$arg needs a value."
+                 STORE_PASSPHRASE_FD=$1 ; shift ;;
+            --store-passphrase-fd=*)
+                 STORE_PASSPHRASE_FD=${arg#*=} ;;
+            *)   ARGS+=("$arg") ;;
+        esac
+    done
+    [[ -z $STORE_PASSPHRASE_FD ]] || check-passphrase-fd --store-passphrase-fd "$STORE_PASSPHRASE_FD"
+}
+
+# load-store-passphrase: with --store-passphrase-fd, read the store key's passphrase into
+# STORE_PASSPHRASE — once: the fd is closed after.
+function load-store-passphrase() {
+    [[ -n $STORE_PASSPHRASE_FD && -z $STORE_PASSPHRASE ]] || return 0
+    read-passphrase-fd "$STORE_PASSPHRASE_FD"
+    STORE_PASSPHRASE=$PASSPHRASE
+    unset PASSPHRASE
+}
+
+# unlock-store-key: with --store-passphrase-fd, hand the store key's passphrase to gpg-agent once,
+# by signing and decrypting a word with it (gpg's loopback mode). The agent keeps it for its cache
+# time, as when it is typed, so the gpg calls after — pass's too — ask nothing. Signing and
+# decrypting use different subkeys: each is unlocked. A wrong passphrase stops here, before
+# anything changes.
+STORE_UNLOCKED=0
+function unlock-store-key() {
+    [[ -n $STORE_PASSPHRASE_FD ]] && (( ! STORE_UNLOCKED )) || return 0
+    local key unlock=(gpg --batch --quiet --pinentry-mode loopback --passphrase-fd 3)
+    load-store-passphrase
+    key=$(head -n 1 "$STORE_PATH/.gpg-id")
+    # The passphrase reaches gpg on fd 3 (printf is a builtin: never in argv).
+    if ! printf 'folio\n' | "${unlock[@]}" --local-user "$key" --sign > /dev/null \
+             3< <(printf '%s\n' "$STORE_PASSPHRASE") \
+       || ! printf 'folio\n' | gpg --batch --quiet --trust-model always --encrypt --recipient "$key" \
+             | "${unlock[@]}" --decrypt > /dev/null 3< <(printf '%s\n' "$STORE_PASSPHRASE"); then
+        die "The passphrase on file descriptor $STORE_PASSPHRASE_FD does not unlock the store's key $key."
+    fi
+    STORE_UNLOCKED=1
+}
 
 # --- Pass ---------------------------------------------------------------------
 
