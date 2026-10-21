@@ -100,17 +100,17 @@ is-restored() {
 
 @test "MANUAL: backup — encrypted" {
     make-store
-    run "$FOLIO" backup --encrypt --passphrase-stdin "$SANDBOX/out" < <(printf 'backup pass\n')
+    run "$FOLIO" backup --encrypt --file-passphrase-stdin "$SANDBOX/out" < <(printf 'backup pass\n')
     [ "$status" -eq 0 ]
     local file ; file=$(backup-file)
     [[ $file == *--folio.gpg ]]
     run tar -tzf "$file"
     [ "$status" -ne 0 ]
     new-machine
-    run "$FOLIO" restore --passphrase-stdin "$file" < <(printf 'wrong\n')
+    run "$FOLIO" restore --file-passphrase-stdin "$file" < <(printf 'wrong\n')
     [ "$status" -eq 1 ]
     [ ! -e "$FOLIO_STORE_DIR" ]
-    run "$FOLIO" restore --passphrase-stdin "$file" < <(printf 'backup pass\n')
+    run "$FOLIO" restore --file-passphrase-stdin "$file" < <(printf 'backup pass\n')
     [ "$status" -eq 0 ]
     is-restored
 }
@@ -126,7 +126,7 @@ is-restored() {
 
 @test "backup: bad arguments fail and write nothing" {
     make-store
-    run "$FOLIO" backup --passphrase-stdin "$SANDBOX/out"
+    run "$FOLIO" backup --file-passphrase-stdin "$SANDBOX/out"
     [ "$status" -eq 1 ]
     [[ $output == *"needs --encrypt"* ]]
     run "$FOLIO" backup --nope
@@ -134,7 +134,7 @@ is-restored() {
     [[ $output == *"unknown option: --nope"* ]]
     run "$FOLIO" backup "$SANDBOX/out/a" "$SANDBOX/out/b"
     [ "$status" -eq 1 ]
-    run "$FOLIO" backup --encrypt --passphrase-stdin "$SANDBOX/out" < /dev/null
+    run "$FOLIO" backup --encrypt --file-passphrase-stdin "$SANDBOX/out" < /dev/null
     [ "$status" -eq 1 ]
     [[ $output == *"No passphrase"* ]]
     run "$FOLIO" backup "$SANDBOX/nowhere/x"
