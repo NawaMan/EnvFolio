@@ -10,6 +10,15 @@ User-visible changes to EnvFolio. Newest first.
   and secrets (names only: nothing is read or decrypted), plus file names where a file goes. zsh
   gets its own, with a description beside each choice; bash's works with the 3.2 macOS ships.
   Load it with `eval "$(folio completion bash)"` in `~/.bashrc`, or `zsh` in `~/.zshrc`.
+- `folio exec` and `folio shell` take `--vars <file>`: a file saying which variables to set and
+  where each value comes from — `LOG_LEVEL=debug`, `HOST=${HOSTNAME:-localhost}` (the environment),
+  `TOKEN=@{gh/token:-none}` (a text or secret), several in one value
+  (`DB_URL=postgres://@{db/user}:@{db/pass}@${DB_HOST:-db}/app`), fallbacks chained either way, and
+  `@{folder/*}` for every entry under a folder. It holds no secret, so it can be committed with a
+  project. Nothing in it runs; a mistake stops everything, saying the file and line. `--names`
+  shows where each variable would come from, reading no value.
+- `folio vars check <file>...`: check vars files for mistakes, every one with its line, without a
+  store.
 
 ## 0.7.0 — 2026-10-21
 

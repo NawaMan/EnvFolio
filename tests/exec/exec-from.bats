@@ -164,3 +164,13 @@ left-clean() {
     [ "$stderr" = "folio shell: loaded GH_TOKEN, GH_USER (texts: 1, secrets: 1). Type 'exit' to leave." ]
     left-clean
 }
+
+@test "exec --from --vars: the vars file takes its entries from the export" {
+    make-export ; go-there
+    printf '%s\n' "LOGIN=@{gh/user}" 'TOKEN=@{@nawa/gh/token:-none}' > "$SANDBOX/a.vars"
+    run --separate-stderr "$FOLIO" exec -s --from "$FILE" --file-passphrase-fd 3 --vars "$SANDBOX/a.vars" \
+        -- sh -c 'echo "$LOGIN|$TOKEN"' 3< <(printf 'export pass\n')
+    [ "$status" -eq 0 ]
+    [ "$output" = "shared-user|nawa-token" ]
+    left-clean
+}
