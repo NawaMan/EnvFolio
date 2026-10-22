@@ -10,4 +10,4 @@ if [[ -n ${1:-} && ${BASH_VERSINFO[0]} != "$1" ]]; then
     exit 1
 fi
 echo "# bash $BASH_VERSION"
-cd "$(dirname "$0")" && exec bats --recursive .
+cd "$(dirname "$0")" && exec bats --print-output-on-failure --recursive .
