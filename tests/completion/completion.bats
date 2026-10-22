@@ -82,7 +82,7 @@ bash-tab() {
 # --- Commands and options --------------------------------------------------------
 
 @test "completion: commands, and a group's own commands" {
-    [ "$(words "")" = "init,path,backup,restore,export,import,text,secret,ls,exec,shell,completion,version,help" ]
+    [ "$(words "")" = "init,path,backup,restore,export,import,text,secret,vars,ls,exec,shell,completion,version,help" ]
     words "" >/dev/null ; [ "$how" = words ]
     [ "$(words te)" = "text" ]
     [ "$(words secret "")" = "ls,find,grep,show,insert,edit,generate,rm,mv,cp" ]
