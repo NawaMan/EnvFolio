@@ -84,7 +84,7 @@ forget() { gpgconf --kill gpg-agent ; }
 @test "store passphrase: secret generate --in-place keeps the rest" {
     "$FOLIO" secret insert -m -f web/github < <(printf 'old\nuser: jane\n') >/dev/null
     forget
-    run "$FOLIO" secret generate --in-place --store-passphrase-fd 3 web/github 12 3< <(printf 'pw\n')
+    run --separate-stderr "$FOLIO" secret generate --in-place --store-passphrase-fd 3 web/github 12 3< <(printf 'pw\n')
     [ "$status" -eq 0 ]
     forget
     run --separate-stderr "$FOLIO" secret show --store-passphrase-fd 3 web/github 3< <(printf 'pw\n')
@@ -115,7 +115,7 @@ forget() { gpgconf --kill gpg-agent ; }
 
 @test "store passphrase: exec --secrets, and the command does not get the fd" {
     forget
-    run "$FOLIO" exec --secrets --store-passphrase-fd 5 web -- \
+    run --separate-stderr "$FOLIO" exec --secrets --store-passphrase-fd 5 web -- \
         sh -c 'printf "%s %s\n" "$WEB_GITHUB" "$WEB_HOME"; [ ! -e /dev/fd/5 ] && echo closed' 5< <(printf 'pw\n')
     [ "$status" -eq 0 ]
     [ "${lines[0]}" = "s3cr3t https://example.com" ]

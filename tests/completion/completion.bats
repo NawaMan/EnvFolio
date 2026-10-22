@@ -209,20 +209,33 @@ bash-tab() {
 @test "MANUAL: completion — zsh" {
     make-names
     # A real interactive zsh, with its completion system, driven through a pseudo-terminal.
+    # Ctrl-X prints the line as Tab left it (BUF:[…]), without running it; the driver waits for
+    # that, up to 10 seconds, rather than a fixed sleep (too short on macOS). Escapes are taken
+    # out in zsh: BSD sed has no \x1b.
+    cat > "$SANDBOX/setup.zsh" <<'EOF'
+PS1="> "
+autoload -Uz compinit; compinit -u -d $HOME/.zcompdump
+eval "$(folio completion zsh)"
+show-buffer() { zle -I; print -r -- "BUF:[$BUFFER]" ; }
+zle -N show-buffer; bindkey '^X' show-buffer
+EOF
     cat > "$SANDBOX/drive.zsh" <<'EOF'
+setopt extendedglob
 zmodload zsh/zpty
 zpty z zsh -f -i
-zpty -w z 'PS1="> "; autoload -Uz compinit; compinit -u -d $HOME/.zcompdump; eval "$(folio completion zsh)"'
-zpty -w -n z $1$'\t'
-sleep 1
-zpty -w -n z $'\n'
-sleep 1
-out= ; while zpty -r -t z line; do out+=$line; done
+zpty -w z "source ${0:h}/setup.zsh"
+zpty -w -n z $1$'\t\C-x'
+out= ; integer i
+for (( i = 0; i < 100; i++ )); do
+    while zpty -r -t z line; do out+=$line; done
+    [[ $out == *BUF:\[*\]* ]] && break
+    sleep 0.1
+done
 zpty -d z
-print -r -- "$out" | sed 's/\x1b\[[0-9;?]*[a-zA-Z]//g' | tr -d '\r'
+out=${out//$'\e'\[[0-9;?]#[a-zA-Z]/} ; print -r -- ${out//$'\r'/}
 EOF
     run zsh -f "$SANDBOX/drive.zsh" "folio secret sh"
-    [[ $output == *"folio secret show "* ]]
+    [[ $output == *"BUF:[folio secret show ]"* ]]
     run zsh -f "$SANDBOX/drive.zsh" "folio secret show web/d"
-    [[ $output == *"folio secret show web/deep/down/key"* ]]
+    [[ $output == *"BUF:[folio secret show web/deep/down/key"* ]]
 }
