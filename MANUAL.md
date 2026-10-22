@@ -366,22 +366,23 @@ Copies some items into one file, to bring them into another store with `folio im
 a server, in a booth, or on another machine. Your store's key never leaves this machine.
 
 ```
-folio export [-s|--secrets] [--to <key>|--file-passphrase-stdin|--file-passphrase-fd <n>] [--store-passphrase-fd <n>] [-o|--output <file>|<folder>] [<name>...]
+folio export [-s|--secrets] [--to <key>|--file-passphrase-stdin|--file-passphrase-fd <n>] [--store-passphrase-fd <n>] [--vars <file>]... [-o|--output <file>|<folder>] [<name>...]
 ```
 
 | Option | Meaning |
 | --- | --- |
-| `-s`, `--secrets` | Take the secrets in a folder too. A secret named on its own always goes. |
+| `-s`, `--secrets` | Take the secrets in a folder too. A secret named on its own always goes; one a vars file names needs it. |
 | `--to <key>` | Lock the file to this public key — a key file (`.asc`) or a key in your keyring (fingerprint, key id or email) — instead of a passphrase. Only its secret key can open the file. A key file is never added to your keyring. |
-| `--file-passphrase-stdin` | Read the file's passphrase from the first line of stdin instead of gpg's prompt. Not with `--to`. Needs a `<name>`. An empty passphrase is refused. |
+| `--file-passphrase-stdin` | Read the file's passphrase from the first line of stdin instead of gpg's prompt. Not with `--to`. Needs a `<name>` or `--vars`. An empty passphrase is refused. |
 | `--file-passphrase-fd <n>` | Read the file's passphrase from the first line of file descriptor `<n>`. Not with `--to`. stdin stays free, so the items can still be picked. An empty passphrase is refused. |
 | `--store-passphrase-fd <n>` | The store key's passphrase (to read the secrets), from the first line of file descriptor `<n>`, instead of gpg's prompt. See [Passphrases without a prompt](#passphrases-without-a-prompt). |
+| `--vars <file>` | Take the items a [vars file](#from-a-vars-file) names. Can be given more than once. See [The items a vars file names](#the-items-a-vars-file-names). |
 | `-o`, `--output <file>\|<folder>` | Where to write the file. With no `-o`, EnvFolio asks. |
 | `-h`, `--help` | Show the options and stop. |
 
 A `<name>` is a text or a secret, or a folder: every text under it, and its secrets with
-`--secrets`. With no `<name>`, EnvFolio lists every item, numbered, and asks which ones
-(`1 3 5-7`, or `all`).
+`--secrets`. With `--vars`, the items a vars file names are taken too. With no `<name>` and no
+`--vars`, EnvFolio lists every item, numbered, and asks which ones (`1 3 5-7`, or `all`).
 
 With neither `--to` nor a passphrase option, EnvFolio asks how to lock the file: with a passphrase
 (gpg asks for it, after EnvFolio says so and waits for Enter), or with a public key — picked from the
@@ -425,6 +426,27 @@ folio export --secrets --to server.asc web
 
 Only the server's secret key can open the file, so it can travel through places you do not trust
 (a provider, a chat, a shared drive).
+
+### The items a vars file names
+
+```bash
+folio export -s --vars prod-deploy.vars -o deploy.folio
+# there, with the same vars file — no store needed:
+folio exec -s --from deploy.folio --vars prod-deploy.vars -- ./deploy
+```
+
+Takes every item the [vars file](#from-a-vars-file) names — each `@{name}` and `@{folder/*}`,
+wherever it is — and nothing else; `${…}` and constants are not items, and stay in the file. An
+`@{…}` in a fallback is taken too when it is there (whether it is needed depends on the
+environment where the command runs), and left out with a note when it is not:
+
+```
+folio export: prod-deploy.vars:4: 'gh/token' is not a text or secret in the store; left out (it has a fallback or is one).
+```
+
+One with no fallback that is not there stops the export, as it would stop `folio exec`. Any secret
+in the file needs `--secrets`, as in `folio exec`. `<name>`s can be given too; each item goes
+once. The closing box shows the `folio exec --from` line.
 
 ---
 
@@ -1410,7 +1432,8 @@ earlier one. The value goes only to the command, as any entry's does.
 The file holds where the values are, not the values, so it can be committed with the project it is
 for. A constant is in it as written: put a secret in the store, and `@{…}` it — never a constant.
 `folio vars check` checks a file's writing without a store (in CI, say); `--names` shows where each
-variable would come from.
+variable would come from. To run the command elsewhere, `folio export --vars` takes just the items
+the file names — see [The items a vars file names](#the-items-a-vars-file-names).
 
 ### Check a vars file against the store first
 

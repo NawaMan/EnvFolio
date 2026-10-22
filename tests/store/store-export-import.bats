@@ -188,6 +188,68 @@ left-clean() {
     [ ! -e "$FOLIO_STORE_DIR/web/github.gpg" ]
 }
 
+@test "MANUAL: export — the items a vars file names; there, exec --from runs with the same file" {
+    make-store
+    cat > "$SANDBOX/deploy.vars" <<'V'
+HOME_URL=@{web/home}
+TOKEN=${NO_SUCH_ENV_FOR_TEST:-@{web/github}}
+KEY=@{no/such:-@{aws/key}}
+@{web/user}
+V
+    run "$FOLIO" export -s -o "$SANDBOX/out" --vars "$SANDBOX/deploy.vars" --file-passphrase-stdin \
+        < <(printf 'export pass\n')
+    [ "$status" -eq 0 ]
+    [[ $output == *"Vars files: $SANDBOX/deploy.vars"* ]]
+    [[ $output == *"Items:  4 (texts: 2, secrets: 2)"* ]]
+    [[ $output == *"deploy.vars:3: 'no/such' is not a text or secret in the store; left out"* ]]
+    [[ $output == *"folio exec -s --from $SANDBOX/out/"*".folio --vars $SANDBOX/deploy.vars -- <command>"* ]]
+    local file ; file=$(export-file)
+    left-clean
+    go-there
+    run --separate-stderr "$FOLIO" exec -s --from "$file" --file-passphrase-fd 3 --vars "$SANDBOX/deploy.vars" \
+        -- sh -c 'echo "$HOME_URL $TOKEN $KEY $WEB_USER"' 3< <(printf 'export pass\n')
+    [ "$status" -eq 0 ]
+    [ "$output" = "https://example.com s3cr3t AKIA jane" ]
+    [ ! -e "$FOLIO_STORE_DIR" ]
+}
+
+@test "export --vars: with <name>s too, each item once; only texts, no -s in the exec line" {
+    make-store
+    printf '%s\n' 'A=@{web/home}' 'B=@{web/home}-again' > "$SANDBOX/a.vars"
+    run "$FOLIO" export -o "$SANDBOX/out" --vars="$SANDBOX/a.vars" web/user web/home --file-passphrase-stdin \
+        < <(printf 'p\n')
+    [ "$status" -eq 0 ]
+    [[ $output == *"Items:  2 (texts: 2, secrets: 0)"* ]]
+    [[ $output == *"folio exec --from "* ]]
+    left-clean
+}
+
+@test "export --vars: a secret needs -s anywhere; a missing entry with no fallback stops it; nothing written" {
+    make-store
+    printf '%s\n' 'A=@{web/home}' 'T=${NO_SUCH_ENV_FOR_TEST:-@{web/github}}' > "$SANDBOX/a.vars"
+    run "$FOLIO" export -o "$SANDBOX/out" --vars "$SANDBOX/a.vars" --file-passphrase-stdin < <(printf 'p\n')
+    [ "$status" -eq 1 ]
+    [[ $output == *"a.vars:2: 'web/github' is a secret; add --secrets to load it."* ]]
+    printf '%s\n' '@{aws/*}' > "$SANDBOX/a.vars"
+    run "$FOLIO" export -o "$SANDBOX/out" --vars "$SANDBOX/a.vars" --file-passphrase-stdin < <(printf 'p\n')
+    [ "$status" -eq 1 ]
+    [[ $output == *"a.vars:1: 'aws' has 1 secret(s); add --secrets to load them."* ]]
+    printf '%s\n' 'A=@{web/home}' 'B=x-@{web}' > "$SANDBOX/a.vars"
+    run "$FOLIO" export -s -o "$SANDBOX/out" --vars "$SANDBOX/a.vars" --file-passphrase-stdin < <(printf 'p\n')
+    [ "$status" -eq 1 ]
+    [[ $output == *"a.vars:2: 'web' is not a text or secret in the store, and there is no fallback."* ]]
+    printf '%s\n' 'A=@{no/such:-x}' 'B=${HOME}' > "$SANDBOX/a.vars"
+    run "$FOLIO" export -o "$SANDBOX/out" --vars "$SANDBOX/a.vars" --file-passphrase-stdin < <(printf 'p\n')
+    [ "$status" -eq 1 ]
+    [[ $output == *"the vars files name no item that is there."* ]]
+    printf '%s\n' 'A=$(touch x)' > "$SANDBOX/a.vars"
+    run "$FOLIO" export -o "$SANDBOX/out" --vars "$SANDBOX/a.vars" --file-passphrase-stdin < <(printf 'p\n')
+    [ "$status" -eq 1 ]
+    [[ $output == *"a.vars:1: a \$ starts"* ]]
+    [ -z "$(ls -A "$SANDBOX/out")" ]
+    left-clean
+}
+
 @test "export: bad arguments fail and write nothing" {
     make-store
     run "$FOLIO" export -o "$SANDBOX/out" --file-passphrase-stdin < <(printf 'p\n')

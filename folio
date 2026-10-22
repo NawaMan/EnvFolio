@@ -874,7 +874,8 @@ EXPORT_SUFFIX=.folio
 function store-export-usage() {
     cat <<'EOF'
 Usage: folio export [-s|--secrets] [--to <key>|--file-passphrase-stdin|--file-passphrase-fd <n>]
-                    [--store-passphrase-fd <n>] [-o|--output <file>|<folder>] [<name>...]
+                    [--store-passphrase-fd <n>] [--vars <file>]... [-o|--output <file>|<folder>]
+                    [<name>...]
 EOF
 }
 
@@ -889,19 +890,22 @@ or with --to, to the public key of where it is going. With neither given, EnvFol
 gpg may ask for your store key's passphrase to read the secrets.
 
 A <name> is a text or secret, or a folder: every text under it, and its secrets with --secrets.
-With no <name>, EnvFolio lists every item and asks which ones.
+With --vars, the items a vars file names are taken too. With no <name> and no --vars, EnvFolio
+lists every item and asks which ones.
 
 The file is <file> (.folio added when missing), or store-<date>.folio in <folder> —
 never inside the store. An existing file is never replaced. With no -o, EnvFolio asks, offering
 store-<date>.folio in the current folder (taken as it is with --file-passphrase-stdin).
 
 Options:
-  -s, --secrets       Take the secrets in a folder too. A secret named on its own always goes.
+  -s, --secrets       Take the secrets in a folder too. A secret named on its own always goes;
+                      one a vars file names needs it.
   --to <key>          Lock the file to this public key: a key file (.asc) or a key in your
                       keyring (fingerprint, key id or email). Only its secret key can open it.
   --file-passphrase-stdin
                       Read the file's passphrase from the first line of stdin, instead of gpg's
-                      prompt. Not with --to. Needs a <name>. An empty passphrase is refused.
+                      prompt. Not with --to. Needs a <name> or --vars. An empty passphrase is
+                      refused.
   --file-passphrase-fd <n>
                       Read the file's passphrase from the first line of file descriptor <n>,
                       e.g. --file-passphrase-fd 3 3< pass.txt. Not with --to. stdin stays free,
@@ -909,6 +913,10 @@ Options:
   --store-passphrase-fd <n>
                       The store key's passphrase (to read the secrets), from the first line of
                       file descriptor <n>, instead of gpg's prompt.
+  --vars <file>       Take the items a vars file names (the one `folio exec --vars` reads), to
+                      run the same command with `folio exec --from`: every @{…} in it, also one
+                      in a fallback (left out, with a note, when it is not there). Any secret in
+                      it needs --secrets. Can be given more than once.
   -o, --output <file>|<folder>
                       Where to write the file.
   -h, --help          Show this help.
@@ -920,19 +928,21 @@ EOF
 # Anything not given is asked for: the items, and how to lock the file.
 Export() {
     # Process the command-line options
-    local secrets=0 to="" passphrase_stdin=0 passphrase_fd="" target="" names=() arg
+    local secrets=0 to="" passphrase_stdin=0 passphrase_fd="" target="" names=() vars_files=() arg
     while (( $# > 0 )); do
         arg=$1 ; shift
         case $arg in
             -s|--secrets)       secrets=1 ;;
-            --to|-o|--output|--file-passphrase-fd)
+            --to|-o|--output|--file-passphrase-fd|--vars)
                                 [[ $# -gt 0 && -n $1 ]] || die "$arg needs a value."
                                 case $arg in
                                     --to)                 to=$1 ;;
                                     --file-passphrase-fd) passphrase_fd=$1 ;;
+                                    --vars)               read-vars-file export "$1" ; vars_files+=("$1") ;;
                                     *)                    target=$1 ;;
                                 esac
                                 shift ;;
+            --vars=*)           read-vars-file export "${arg#*=}" ; vars_files+=("${arg#*=}") ;;
             --to=*)             to=${arg#*=} ;;
             --output=*)         target=${arg#*=} ;;
             --file-passphrase-fd=*)  passphrase_fd=${arg#*=} ;;
@@ -948,8 +958,8 @@ Export() {
     fi
     [[ -z $to ]] || { (( ! passphrase_stdin )) && [[ -z $passphrase_fd ]] ; } \
         || die "--file-passphrase-stdin and --file-passphrase-fd are for a passphrase; a file locked --to needs none."
-    (( ! passphrase_stdin || ${#names[@]} > 0 )) \
-        || die "--file-passphrase-stdin needs the items named: stdin cannot also answer which ones."
+    (( ! passphrase_stdin || ${#names[@]} + ${#vars_files[@]} > 0 )) \
+        || die "--file-passphrase-stdin needs the items named (or --vars): stdin cannot also answer which ones."
     [[ -z $passphrase_fd ]] || check-passphrase-fd --file-passphrase-fd "$passphrase_fd"
     require-store
 
@@ -970,9 +980,30 @@ EOF
     # Input: the store — FOLIO_STORE_DIR, default ~/.folio (see STORE_PATH at the top)
     show-answer "Store path" "$(tilde-path "$STORE_PATH")"
 
-    # Input: the items — the <name>s (a folder's secrets too with --secrets), or picked from a list
-    select-items export "$STORE_PATH" "$secrets" 0 "${names[@]}"
+    # Input: the items — the <name>s (a folder's secrets too with --secrets) and the ones the vars
+    # files name, or with neither, picked from a list
     local item texts=0
+    if (( ${#vars_files[@]} == 0 )); then
+        select-items export "$STORE_PATH" "$secrets" 0 "${names[@]}"
+    else
+        local vars_list
+        vars_list=$(printf ', %s' "${vars_files[@]}")
+        show-answer "Vars files" "${vars_list#, }"
+        # The <name>s first, as select-items takes them; then each item the vars files name, once.
+        SELECTED=()
+        if (( ${#names[@]} > 0 )); then
+            select-items export "$STORE_PATH" "$secrets" 0 "${names[@]}"
+        fi
+        vars-items export "$secrets"
+        local seen=$'\n'
+        for item in ${SELECTED[@]+"${SELECTED[@]}"}; do seen+=$item$'\n' ; done
+        for item in ${VARS_ITEMS[@]+"${VARS_ITEMS[@]}"}; do
+            [[ $seen == *$'\n'"$item"$'\n'* ]] && continue
+            SELECTED+=("$item")
+            seen+=$item$'\n'
+        done
+        (( ${#SELECTED[@]} > 0 )) || die "export: the vars files name no item that is there."
+    fi
     for item in "${SELECTED[@]}"; do [[ $item == *.gpg ]] || texts=$(( texts + 1 )) ; done
     show-answer "Items" "${#SELECTED[@]} (texts: $texts, secrets: $(( ${#SELECTED[@]} - texts )))"
     for item in "${SELECTED[@]}"; do printf '    %s\n' "$(item-label "$item")" >&2 ; done
@@ -1104,16 +1135,26 @@ EOF
         lock="to $recipient"
         opens="the secret key of $(GNUPGHOME=$home key-uid "$recipient")"
     fi
+    local box=("Your items are exported."
+               ""
+               "File:   $(tilde-path "$file")"
+               "Items:  ${#SELECTED[@]} (texts: $texts, secrets: $(( ${#SELECTED[@]} - texts )))"
+               "Locked: $lock"
+               ""
+               "To bring them into a store (a new one, or one that is there):"
+               "  folio import $file")
+    # With --vars: how to run the command there, with the same vars files, straight from the file.
+    if (( ${#vars_files[@]} > 0 )); then
+        local exec_line="  folio exec" vars_file
+        (( texts == ${#SELECTED[@]} )) || exec_line+=" -s"
+        exec_line+=" --from $file"
+        for vars_file in "${vars_files[@]}"; do exec_line+=" --vars $vars_file" ; done
+        box+=("" "Or to run a command with them, with the same vars file(s), no store needed:")
+        box+=("$exec_line -- <command>")
+    fi
+    box+=("That needs $opens.")
     echo ""
-    show-box "Your items are exported." \
-             "" \
-             "File:   $(tilde-path "$file")" \
-             "Items:  ${#SELECTED[@]} (texts: $texts, secrets: $(( ${#SELECTED[@]} - texts )))" \
-             "Locked: $lock" \
-             "" \
-             "To bring them into a store (a new one, or one that is there):" \
-             "  folio import $file" \
-             "That needs $opens."
+    show-box "${box[@]}"
 }
 
 # --- import -------------------------------------------------------------------
@@ -2461,6 +2502,22 @@ function exec-with-entries() {
     check-vars-entries "$how" "$secrets"
     # In order: --all (the store's root, wherever it was typed), the vars files, the entries typed.
     EXEC_VARS=() EXEC_FILES=() VAR_VALUES=()
+    # The vars files' values are made line by line, reading entries as they go. So first a dry
+    # run, as --names does it: it reads no value, and stops at an entry that is not there before
+    # any value is read. It runs in a subshell, so nothing it sets is kept. What it says goes to
+    # the screen only when it fails; when it does not, the real run below says the same notes.
+    if (( ! only_names && ${#VARS_KIND[@]} > 0 )); then
+        local dry_run_errors
+        if ! dry_run_errors=$(
+                {
+                    if (( all )); then add-folder "$how" "$secrets" "" " " ; fi
+                    apply-vars "$how" "$secrets" 1
+                } 2>&1
+            ); then
+            printf '%s\n' "$dry_run_errors" >&2
+            exit 1
+        fi
+    fi
     (( all )) && add-folder "$how" "$secrets" "" " "
     apply-vars "$how" "$secrets" "$only_names"
     (( ${#entries[@]} == 0 )) || resolve-entries "$how" "$secrets" "${entries[@]}"
@@ -2810,12 +2867,13 @@ function check-vars-name() {
 # --- Making a value -----------------------------------------------------------
 
 # scan-value <text>: read a VAR=<value>'s value into SCAN_OUT. SCAN_MODE says what for:
-#   check  only see that it is well written, collecting the @{…} names in SCAN_NAMES;
+#   check  only see that it is well written, collecting the @{…} names in SCAN_NAMES — and in
+#          SCAN_OPTIONAL, 1 for one that has a fallback or is in one (it may not be needed), else 0;
 #   eval   make the value: look each ${…} and @{…} up, a fallback only when needed;
 #   names  the same, but each part shows where it is from ([$HOME], [gh/token (S)]): no value read.
 # Fails with SCAN_ERROR.
 function scan-value() {
-    SCAN_TEXT=$1 SCAN_POS=0 SCAN_LEN=${#1} SCAN_NAMES=()
+    SCAN_TEXT=$1 SCAN_POS=0 SCAN_LEN=${#1} SCAN_NAMES=() SCAN_OPTIONAL=() SCAN_DEPTH=0
     scan-text ""
 }
 
@@ -2826,12 +2884,14 @@ function scan-value() {
 # ones, ${…} and @{…} are still put in; \ keeps the character after it as it is.
 # shellcheck disable=SC2016  # the ${…} in the messages are what to write, not to expand
 function scan-text() {
-    local end=$1 out="" keep=0 c next quote="" part
+    # blank: the character just read was a blank as it is (not quoted, not after a \).
+    local end=$1 out="" keep=0 c next quote="" part blank=0 after_blank
     if [[ -z $end ]]; then
-        while [[ ${SCAN_TEXT:SCAN_POS:1} == [[:blank:]] ]]; do SCAN_POS=$(( SCAN_POS + 1 )) ; done
+        while [[ ${SCAN_TEXT:SCAN_POS:1} == [[:blank:]] ]]; do SCAN_POS=$(( SCAN_POS + 1 )) blank=1 ; done
     fi
     while (( SCAN_POS < SCAN_LEN )); do
         c=${SCAN_TEXT:SCAN_POS:1} next=${SCAN_TEXT:SCAN_POS+1:1}
+        after_blank=$blank blank=0
         if [[ -n $quote ]]; then
             if [[ $c == '"' ]]; then quote= ; SCAN_POS=$(( SCAN_POS + 1 )) ; keep=${#out} ; continue ; fi
         elif [[ $c == "'" ]]; then
@@ -2844,7 +2904,7 @@ function scan-text() {
             quote='"' ; SCAN_POS=$(( SCAN_POS + 1 )) ; continue
         elif [[ -n $end && $c == "}" ]]; then
             SCAN_POS=$(( SCAN_POS + 1 )) ; SCAN_OUT=$out ; return 0
-        elif [[ -z $end && $c == "#" ]] && (( SCAN_POS > 0 )) && [[ ${SCAN_TEXT:SCAN_POS-1:1} == [[:blank:]] ]]; then
+        elif [[ -z $end && $c == "#" ]] && (( after_blank )); then
             break
         fi
         case $c in
@@ -2862,6 +2922,7 @@ function scan-text() {
                 fi ;;
             \`) SCAN_ERROR='a ` is refused: nothing in a vars file runs.' ; return 1 ;;
         esac
+        [[ -z $quote && $c == [[:blank:]] ]] && blank=1
         out+=$c ; SCAN_POS=$(( SCAN_POS + 1 ))
     done
     [[ -z $quote ]] || { SCAN_ERROR='a " is not closed.' ; return 1 ; }
@@ -2887,15 +2948,18 @@ function scan-placeholder() {
         check-vars-name "$name" || return 1
     fi
     if [[ $c == "}" ]]; then SCAN_POS=$(( SCAN_POS + 1 )) ; else SCAN_POS=$(( SCAN_POS + 2 )) fallback=1 ; fi
-    [[ $kind == entry && $mode == check ]] && SCAN_NAMES+=("$name")
+    if [[ $kind == entry && $mode == check ]]; then
+        SCAN_NAMES+=("$name") SCAN_OPTIONAL+=("$(( fallback || SCAN_DEPTH > 0 ))")
+    fi
     if [[ $mode == eval || $mode == names ]] && "look-up-$kind" "$name"; then
         found=1 value=$LOOKED_UP
     fi
     if (( fallback )); then
         # Read even when not needed, to get past it; only made when needed.
         (( found )) && SCAN_MODE=skip
+        SCAN_DEPTH=$(( SCAN_DEPTH + 1 ))
         scan-text "}" || { SCAN_MODE=$mode ; return 1 ; }
-        SCAN_MODE=$mode
+        SCAN_MODE=$mode SCAN_DEPTH=$(( SCAN_DEPTH - 1 ))
         (( found )) || value=$SCAN_OUT
     elif (( ! found )) && [[ $kind == entry && ( $mode == eval || $mode == names ) ]]; then
         SCAN_ERROR="'$name' is not a text or secret in $ENTRIES_IN, and there is no fallback." ; return 1
@@ -3004,6 +3068,53 @@ function apply-vars() {
         set-entry-var "$name" "=$(( ${#VAR_VALUES[@]} - 1 ))"
     done
     unset SCAN_OUT LOOKED_UP ENTRY_VALUE
+}
+
+# vars-items <how> <secrets>: VARS_ITEMS gets the file of every item the vars files name
+# (<name>.txt or <name>.gpg), in order; one named twice is there twice. Only names are looked at:
+# nothing is read or decrypted. For export, which takes them all, not only the ones needed here
+# today. Stops as check-vars-entries does (a secret without --secrets, wherever it is), and at an
+# @{…} that is not there with nothing to fall back to; one that has a fallback, or is in one, is
+# left out with a note.
+function vars-items() {
+    local how=$1 secrets=$2 i j name file
+    VARS_ITEMS=()
+    check-vars-entries "$how" "$secrets"
+    for (( i = 0; i < ${#VARS_KIND[@]}; i++ )); do
+        name=${VARS_NAME[i]}
+
+        # An @{folder/*} line: every item under the folder.
+        if [[ ${VARS_KIND[i]} == entries && $name == */\* ]]; then
+            while IFS= read -r file; do
+                VARS_ITEMS+=("${file#"$STORE_PATH"/}")
+            done < <(entries-under "$secrets" "$STORE_PATH/${name%/\*}")
+            continue
+        fi
+
+        # An @{name} line: that item (check-vars-entries made sure it is there).
+        if [[ ${VARS_KIND[i]} == entries ]]; then
+            entry-file "$how" "$secrets" "$name"
+            VARS_ITEMS+=("$ENTRY_FILE")
+            continue
+        fi
+
+        # A VAR=<value> line: every @{…} in the value, also in a fallback.
+        SCAN_MODE=check
+        scan-value "${VARS_TEXT[i]}"
+        for (( j = 0; j < ${#SCAN_NAMES[@]}; j++ )); do
+            name=${SCAN_NAMES[j]}
+            if [[ -f $STORE_PATH/$name.gpg ]] && (( secrets )); then
+                VARS_ITEMS+=("$name.gpg")
+            elif [[ -f $STORE_PATH/$name.txt ]]; then
+                VARS_ITEMS+=("$name.txt")
+            elif (( SCAN_OPTIONAL[j] )); then
+                printf "folio %s: %s: '%s' is not a text or secret in the store; left out (it has a fallback or is one).\n" \
+                    "$how" "${VARS_AT[i]}" "$name" >&2
+            else
+                die "$how: ${VARS_AT[i]}: '$name' is not a text or secret in the store, and there is no fallback."
+            fi
+        done
+    done
 }
 
 #== Command: Completion ========================================================
