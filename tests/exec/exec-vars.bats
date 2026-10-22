@@ -93,15 +93,19 @@ F=[was empty]" ]
          'E=cost \$5, \@{not} \\ done' \
          'C=#ff0000' \
          'T=   trimmed   # comment' \
-         'H=a#b'
-    run "$FOLIO" exec --vars "$SANDBOX/a.vars" -- sh -c "$(show Q D E C T H)"
+         'H=a#b' \
+         'S=a\ #b' \
+         'B=a\\ # comment'
+    run "$FOLIO" exec --vars "$SANDBOX/a.vars" -- sh -c "$(show Q D E C T H S B)"
     [ "$status" -eq 0 ]
     [ "$output" = 'Q=[${HOME} @{gh/token} # kept]
 D=[  dbuser "in"  ]
 E=[cost $5, @{not} \ done]
 C=[#ff0000]
 T=[trimmed]
-H=[a#b]' ]
+H=[a#b]
+S=[a #b]
+B=[a\]' ]
 }
 
 @test "exec --vars: \${NAME} sees earlier lines first; a later line overrides; typed entries override the file" {
@@ -180,6 +184,24 @@ ATL_NAME  <- atl/name (T)' ]
     run "$FOLIO" exec --vars "$SANDBOX/a.vars" -- touch "$SANDBOX/ran"
     [[ $output == *"a.vars:1: 'no' is not a folder in the store."* ]]
     [ ! -e "$SANDBOX/ran" ]
+}
+
+@test "exec --vars: an entry that is not there stops it before any value is read, after a secret too" {
+    make-store
+    # A pass that logs each call, so a decryption shows.
+    mkdir -p "$SANDBOX/bin"
+    printf '#!/usr/bin/env bash\necho "$*" >> "%s"\nexec "%s" "$@"\n' "$SANDBOX/pass.log" "$(command -v pass)" > "$SANDBOX/bin/pass"
+    chmod +x "$SANDBOX/bin/pass"
+    vars 'A=@{gh/token}'
+    PATH="$SANDBOX/bin:$PATH" run "$FOLIO" exec -s --vars "$SANDBOX/a.vars" -- true
+    [ "$status" -eq 0 ]
+    [ "$(cat "$SANDBOX/pass.log")" = "show -- gh/token" ]
+    rm "$SANDBOX/pass.log"
+    vars 'A=@{gh/token}' 'B=${UNSET_FOR_TEST:-@{no/such}}'
+    PATH="$SANDBOX/bin:$PATH" run "$FOLIO" exec -s --vars "$SANDBOX/a.vars" -- touch "$SANDBOX/ran"
+    [ "$status" -eq 1 ]
+    [[ $output == *"a.vars:2: 'no/such' is not a text or secret in the store, and there is no fallback."* ]]
+    [ ! -e "$SANDBOX/pass.log" ] && [ ! -e "$SANDBOX/ran" ]
 }
 
 @test "exec --vars: a mistake in the file stops it before anything is read; nothing runs" {

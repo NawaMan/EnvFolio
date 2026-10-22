@@ -19,6 +19,9 @@ User-visible changes to EnvFolio. Newest first.
   shows where each variable would come from, reading no value.
 - `folio vars check <file>...`: check vars files for mistakes, every one with its line, without a
   store.
+- `folio export --vars <file>`: export the items a vars file names, instead of picking them, to run
+  the same command elsewhere with `folio exec --from <export> --vars <file>`. An item in a fallback
+  is taken when it is there and left out with a note when not; any secret needs `--secrets`.
 
 ## 0.7.0 — 2026-10-21
 
