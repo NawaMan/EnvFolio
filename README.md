@@ -25,7 +25,8 @@ A command-line tool for password management. It is built heavily on top of [`pas
 - `folio text ...`   to deal with text-related actions like: show, insert, generate, edit, find, ...
 - `folio secret ...` to deal with secret-related actions like: show, insert, generate, edit, find, ...
 - `folio ls`         to list both types of items (texts/secrets) together, as a tree or flat.
-- `folio exec ...`   to run a command with items as environment variables (secrets only with `--secrets`).
+- `folio exec ...`   to run a command with items as environment variables (secrets only with `--secrets`),
+  named on the command line or in a vars file (`--vars prod-deploy.vars`; `folio vars check` checks one).
 - `folio shell ...`  to start a shell with items as environment variables.
 - `folio completion bash|zsh` for Tab completion of commands, options and item names.
 

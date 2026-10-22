@@ -1222,8 +1222,8 @@ Runs a command with entries from the EnvFolio store as environment variables, th
 on a command line, into a file, or on the screen.
 
 ```
-folio exec [-s|--secrets] [-a|--all] [-n|--names] [--store-passphrase-fd <n>] [--from <file> [--file-passphrase-fd <n>]]
-           <entry>... -- <command> [<arg>...]
+folio exec [-s|--secrets] [-a|--all] [-n|--names] [--vars <file>]... [--store-passphrase-fd <n>]
+           [--from <file> [--file-passphrase-fd <n>]] <entry>... -- <command> [<arg>...]
 ```
 
 | Option | Meaning |
@@ -1231,6 +1231,7 @@ folio exec [-s|--secrets] [-a|--all] [-n|--names] [--store-passphrase-fd <n>] [-
 | `-s`, `--secrets` | Also load secrets. Without it, a secret named directly is refused, and the secrets in a folder are left out, with a note on stderr saying how many. |
 | `-a`, `--all` | Load every entry outside the namespaces (top `@` folders) first, wherever it is typed; the entries given then layer over it. With it, `<entry>` is optional. |
 | `-n`, `--names` | Only show which variable would get which entry, in the order they are set, marked (S)ecret or (T)ext, and stop. Nothing is read or decrypted (no passphrase, no signature check), and the command, if given, does not run. With `--from`, the file is still opened to see what is in it. |
+| `--vars <file>` | Set the variables a vars file says: constants, values from your environment, entries, with fallbacks. Can be given more than once. With it, `<entry>` is optional. See [From a vars file](#from-a-vars-file). |
 | `--from <file>` | Take the entries from a file made by `folio export`, not from the store. No store is needed, and none is made or touched. See [From an export file](#from-an-export-file). |
 | `--file-passphrase-fd <n>` | With `--from`: the file's passphrase, from the first line of file descriptor `<n>`, e.g. `--file-passphrase-fd 3 3< pass.txt`. stdin stays the command's. |
 | `--store-passphrase-fd <n>` | Without `--from`: the store key's passphrase (to read the secrets), from the first line of file descriptor `<n>`, instead of gpg's prompt. See [Passphrases without a prompt](#passphrases-without-a-prompt). |
@@ -1244,7 +1245,7 @@ An `<entry>` is one of:
 | `<folder>` | Every text under the folder, at any depth; with `--secrets`, every secret too. |
 | `VAR=<name>` | One entry, as the variable `VAR`, exactly as written. |
 
-At least one `<entry>` is needed, unless `--all` is given; the whole store is never loaded by
+At least one `<entry>` is needed, unless `--all` or `--vars` is given; the whole store is never loaded by
 default. The `--` is
 needed, and everything after it is the command, which EnvFolio never parses. It needs a ready store
 (`folio init`), unless the entries come from a file with `--from`.
@@ -1351,6 +1352,85 @@ folio exec --secrets GITHUB_TOKEN=gh/token gh -- ./deploy
 Sets `GITHUB_TOKEN` from `gh/token`, and loads the rest of `gh/` by the rule. `gh/token` is
 claimed, so it does not also give `GH_TOKEN`.
 
+### From a vars file
+
+Write down once what a command needs, and where each value comes from:
+
+```bash
+# prod-deploy.vars
+LOG_LEVEL=debug                                     # a constant
+HOST_NAME=${HOSTNAME:-localhost}                    # from your environment, else a constant
+GH_TOKEN=@{gh/token:-none}                          # a secret, else a constant
+DB_URL=postgres://@{prod/db/user}:@{prod/db/pass}@${DB_HOST:-db}:5432/app
+@{atlassian/*}                                      # every entry under atlassian/, named by its path
+```
+
+```bash
+folio exec -s --vars prod-deploy.vars -- ./deploy
+```
+
+Each line is one of:
+
+| Line | Sets |
+| --- | --- |
+| `VAR=<value>` | `VAR`, to the value: text, with any number of `${NAME}` and `@{name}` put in. |
+| `@{name}` | The text or secret `name`, as a variable named by its path (as an `<entry>` is: `@{gh/token}` gives `GH_TOKEN`). |
+| `@{folder/*}` | Every entry under `folder`, each named by its path; `@{@prod/*}` for a namespace. |
+
+In a value:
+
+| Write | For |
+| --- | --- |
+| `${NAME}` | The variable `NAME`: set by an earlier line (or `--all`), else from your environment. Empty when it is neither. |
+| `@{name}` | The text or secret `name`. One that is not there stops everything. |
+| `${NAME:-<fallback>}`, `@{name:-<fallback>}` | The same, but the fallback when the variable is unset or empty, or the entry is not there. A fallback is a value too, so they chain, either way round: `${GH_TOKEN:-@{gh/token}}`, `@{gh/token:-${GH_TOKEN:-none}}`. A fallback is only made when needed: `${GH_TOKEN:-@{gh/token}}` reads nothing from the store when `GH_TOKEN` is set. |
+| `'…'` | Text as it is: `'${HOME}'` is `${HOME}`. |
+| `"…"` | Text with its blanks kept; `${…}` and `@{…}` are still put in. |
+| `\` | The next character as it is: `\$`, `\@{`, `\}`, `\#`, `\\`. |
+
+Blank lines, and comments — `#` at the start of a line, or after a blank (`#ff0000` is a value)
+— are left out, and so are the blanks around a value. Nothing in a vars file ever runs: it is read
+by EnvFolio a character at a time, never handed to a shell; `$(…)`, `` ` `` and any other use of `$`
+are refused.
+
+A mistake stops everything before anything is read, saying the file and line:
+
+```
+folio: exec: prod-deploy.vars:4: 'prod/db/pas' is not a text or secret in the store, and there is no fallback.
+```
+
+So does a secret without `--secrets`, wherever it is in the file — also in a fallback that is not
+needed today, so a forgotten `-s` never slips through as a fallback — and an `@{folder/*}` with a
+secret under it (typed on the command line, a folder's secrets are left out with a note instead).
+
+Lines are set in order, a later one overriding an earlier one; `--all` loads before the file, and
+the entries typed after it, so they override it. With several `--vars`, a later file overrides an
+earlier one. The value goes only to the command, as any entry's does.
+
+The file holds where the values are, not the values, so it can be committed with the project it is
+for. A constant is in it as written: put a secret in the store, and `@{…}` it — never a constant.
+`folio vars check` checks a file's writing without a store (in CI, say); `--names` shows where each
+variable would come from.
+
+### Check a vars file against the store first
+
+```bash
+folio exec -s --names --vars prod-deploy.vars
+```
+
+```
+LOG_LEVEL <- debug
+HOST_NAME <- [$HOSTNAME]
+GH_TOKEN  <- [gh/token (S)]
+DB_URL    <- postgres://[prod/db/user (T)]:[prod/db/pass (S)]@db:5432/app
+JIRA_HOST <- atlassian/jira/host (T)
+```
+
+Each value as it would be made, each part shown by where it would come from — `[$NAME]` from the
+environment (`[$NAME (unset)]` when it would be empty), `[name (S)]` or `[name (T)]` from the
+store, or the constant — never a value. A mistake, or an entry that is not there, stops it as the
+real run would.
+
 ### From an export file
 
 ```bash
@@ -1393,7 +1473,7 @@ Starts your shell (`$SHELL`, or `/bin/sh`) with entries from the EnvFolio store 
 variables. It is `folio exec <entry>... -- "$SHELL"`, plus a line saying what was loaded.
 
 ```
-folio shell [-s|--secrets] [-a|--all] [-n|--names] [--store-passphrase-fd <n>] [--from <file> [--file-passphrase-fd <n>]] <entry>...
+folio shell [-s|--secrets] [-a|--all] [-n|--names] [--vars <file>]... [--store-passphrase-fd <n>] [--from <file> [--file-passphrase-fd <n>]] <entry>...
 ```
 
 | Option | Meaning |
@@ -1401,12 +1481,13 @@ folio shell [-s|--secrets] [-a|--all] [-n|--names] [--store-passphrase-fd <n>] [
 | `-s`, `--secrets` | Also load secrets. |
 | `-a`, `--all` | Load every entry outside the namespaces first, as in `folio exec`. |
 | `-n`, `--names` | Only show which variable would get which entry, as in `folio exec`; no shell starts. |
+| `--vars <file>` | Set the variables a vars file says, as in `folio exec`; can be given more than once. |
 | `--from <file>` | Take the entries from a file made by `folio export`, as in `folio exec`. |
 | `--file-passphrase-fd <n>` | With `--from`: the file's passphrase, from file descriptor `<n>`, as in `folio exec`. |
 | `--store-passphrase-fd <n>` | Without `--from`: the store key's passphrase, as in `folio exec`. |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
-Entries, variable names, values and errors are as in `folio exec`. Before the shell starts, EnvFolio
+Entries, vars files, variable names, values and errors are as in `folio exec`. Before the shell starts, EnvFolio
 prints the loaded variable names, never their values, to stderr. It sets `FOLIO_SHELL=1`, so your
 own prompt can show it; EnvFolio does not change the prompt. `exit` leaves the shell. It needs a
 ready store (`folio init`), unless the entries come from a file with `--from`.
@@ -1421,7 +1502,56 @@ folio shell --secrets gh @nawa
 folio shell: loaded GH_TOKEN, GH_USER (texts: 1, secrets: 1). Type 'exit' to leave.
 ```
 
+### From a vars file
+
+```bash
+folio shell -s --vars work.vars
+```
+
+A shell with the variables `work.vars` sets — see [From a vars file](#from-a-vars-file). The line
+it prints counts them as `from vars files`.
+
 ---
+
+## `folio vars check`
+
+Checks vars files — the ones `folio exec --vars` and `folio shell --vars` read — for mistakes in
+how they are written: every line a `VAR=<value>` or an `@{…}` of its own, every `${…}` and `@{…}`
+whole, nothing that would run. Needs no store and reads nothing from one, so it fits in CI or an
+editor's save hook. Whether the entries are there, and where each variable would come from, is
+what [`folio exec --names --vars`](#check-a-vars-file-against-the-store-first) shows.
+
+```
+folio vars check <file>...
+```
+
+| Option | Meaning |
+| --- | --- |
+| `-h`, `--help` | Show the options and stop. |
+
+### A good file
+
+```bash
+folio vars check prod-deploy.vars
+```
+
+```
+prod-deploy.vars: fine (5 line(s) to load).
+```
+
+### Every mistake, with its line
+
+```bash
+folio vars check bad.vars
+```
+
+```
+folio: vars check: bad.vars:2: not VAR=<value>, nor @{<entry>}: 'BAD LINE'.
+folio: vars check: bad.vars:3: a $ starts ${NAME} or ${NAME:-<fallback>}; write \$ for a $ itself.
+folio: vars check: bad.vars:5: ${HOME is not closed with }.
+```
+
+Every mistake in every file is shown, not only the first; it fails when there is any.
 
 ## `folio completion`
 
