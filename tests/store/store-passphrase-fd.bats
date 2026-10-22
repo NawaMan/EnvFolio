@@ -5,6 +5,7 @@
 # here got the passphrase from the fd, never from a prompt. The agent is restarted before each
 # command, so nothing is left in its cache from the one before.
 
+bats_require_minimum_version 1.5.0    # run --separate-stderr
 load fake-pinentry
 
 setup() {
@@ -51,14 +52,14 @@ forget() { gpgconf --kill gpg-agent ; }
 
 @test "MANUAL: passphrases without a prompt — secret show with --store-passphrase-fd" {
     forget
-    run "$FOLIO" secret show --store-passphrase-fd 3 web/github 3< <(printf 'pw\n')
+    run --separate-stderr "$FOLIO" secret show --store-passphrase-fd 3 web/github 3< <(printf 'pw\n')
     [ "$status" -eq 0 ]
     [ "$output" = "s3cr3t" ]
 }
 
 @test "store passphrase: --store-passphrase-fd=<n> works too" {
     forget
-    run "$FOLIO" secret show --store-passphrase-fd=3 web/github 3< <(printf 'pw\n')
+    run --separate-stderr "$FOLIO" secret show --store-passphrase-fd=3 web/github 3< <(printf 'pw\n')
     [ "$status" -eq 0 ]
     [ "$output" = "s3cr3t" ]
 }
@@ -86,7 +87,7 @@ forget() { gpgconf --kill gpg-agent ; }
     run "$FOLIO" secret generate --in-place --store-passphrase-fd 3 web/github 12 3< <(printf 'pw\n')
     [ "$status" -eq 0 ]
     forget
-    run "$FOLIO" secret show --store-passphrase-fd 3 web/github 3< <(printf 'pw\n')
+    run --separate-stderr "$FOLIO" secret show --store-passphrase-fd 3 web/github 3< <(printf 'pw\n')
     [ "${#lines[0]}" -eq 12 ] && [ "${lines[1]}" = "user: jane" ]
 }
 
@@ -167,7 +168,7 @@ forget() { gpgconf --kill gpg-agent ; }
     run "$FOLIO" export --secrets -o "$SANDBOX/out/items" --file-passphrase-fd 3 --store-passphrase-fd 4 web \
         3< <(printf 'file-pw\n') 4< <(printf 'pw\n') < /dev/null
     [ "$status" -eq 0 ]
-    run "$FOLIO" exec --secrets --from "$SANDBOX/out/items.folio" --file-passphrase-fd 3 web -- \
+    run --separate-stderr "$FOLIO" exec --secrets --from "$SANDBOX/out/items.folio" --file-passphrase-fd 3 web -- \
         sh -c 'echo "$WEB_GITHUB"' 3< <(printf 'file-pw\n')
     [ "$output" = "s3cr3t" ]
 }
