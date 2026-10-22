@@ -2,7 +2,7 @@
 
 User-visible changes to EnvFolio. Newest first.
 
-## Unreleased
+## 1.0.0 — 2026-10-22
 
 ### Changed
 
