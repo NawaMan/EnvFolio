@@ -3208,7 +3208,8 @@ _folio() {
     esac
     return 0
 }
-(( $+functions[compdef] )) || { autoload -Uz compinit && compinit ; }
+# -i: skip completion files zsh does not trust, rather than ask (no one may be there to answer).
+(( $+functions[compdef] )) || { autoload -Uz compinit && compinit -i ; }
 compdef _folio folio
 EOF
 }

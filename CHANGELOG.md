@@ -10,6 +10,13 @@ User-visible changes to EnvFolio. Newest first.
   in green, on a screen that shows colour. Sent to a pipe or a file, or with `NO_COLOR` set or
   `TERM=dumb`, they now print no colour codes at all (folders used to keep theirs).
 
+### Fixed
+
+- `folio completion zsh` no longer fails with `compinit: initialization aborted` and
+  `command not found: compdef` when zsh finds a completion file it does not trust (one owned by
+  another user, or in a world-writable folder) and no one can answer its question — as at
+  Powerlevel10k's instant prompt. It skips that file instead.
+
 ## 1.0.0 — 2026-10-22
 
 ### Changed
