@@ -1621,13 +1621,14 @@ function verify-text() {
 
 function text-ls-help() {
     cat <<'EOF'
-Usage: folio text ls [--flat] [<subfolder>]
+Usage: folio text ls [--flat] [--plain] [<subfolder>]
 
 List the texts in the EnvFolio store as a tree — names only. Give a subfolder to list only what is
 under it.
 
 Options:
       --flat          Full names, one per line, sorted, instead of a tree.
+      --plain         No colour, even on a screen.
   -h, --help          Show this help and stop.
 EOF
 }
@@ -1644,21 +1645,30 @@ TextLs() {
 
 function text-find-help() {
     cat <<'EOF'
-Usage: folio text find <part>...
+Usage: folio text find [--plain] <part>...
 
 List the texts whose names contain any of the parts (ignoring case), as a tree — names only.
 
 Options:
+      --plain         No colour, even on a screen.
   -h, --help          Show this help and stop.
 EOF
 }
 
-# folio text find <part>...
+# folio text find [--plain] <part>...
 # As `secret find`: `pass find`, for the texts.
 TextFind() {
     local arg terms
-    for arg in "$@"; do case $arg in -h|--help) text-find-help ; return 0 ;; esac ; done
-    (( $# > 0 )) || die "Usage: folio text find <part>..."
+    local parts=()
+    for arg in "$@"; do
+        case $arg in
+            -h|--help) text-find-help ; return 0 ;;
+            --plain)   PLAIN=1 ;;
+            *)         parts+=("$arg") ;;
+        esac
+    done
+    set -- ${parts[@]+"${parts[@]}"}
+    (( $# > 0 )) || die "Usage: folio text find [--plain] <part>..."
     require-store
     terms="*$(printf '%s*|*' "$@")"
     printf 'Search Terms: %s\n' "$*"
@@ -2103,13 +2113,14 @@ Secret() {
 
 function secret-ls-help() {
     cat <<'EOF'
-Usage: folio secret ls [--flat] [<subfolder>]
+Usage: folio secret ls [--flat] [--plain] [<subfolder>]
 
 List the secrets in the EnvFolio store as a tree — names only, never their values.
 Give a subfolder to list only what is under it.
 
 Options:
       --flat          Full names, one per line, sorted, instead of a tree.
+      --plain         No colour, even on a screen.
   -h, --help          Show this help and stop.
 EOF
 }
@@ -2125,22 +2136,31 @@ SecretLs() {
 
 function secret-find-help() {
     cat <<'EOF'
-Usage: folio secret find <part>...
+Usage: folio secret find [--plain] <part>...
 
 List the secrets whose names contain any of the parts (ignoring case), as a tree — names only,
 never their values.
 
 Options:
+      --plain         No colour, even on a screen.
   -h, --help          Show this help and stop.
 EOF
 }
 
-# folio secret find <part>...
+# folio secret find [--plain] <part>...
 # `pass find`, minus the texts.
 SecretFind() {
     local arg terms
-    for arg in "$@"; do case $arg in -h|--help) secret-find-help ; return 0 ;; esac ; done
-    (( $# > 0 )) || die "Usage: folio secret find <part>..."
+    local parts=()
+    for arg in "$@"; do
+        case $arg in
+            -h|--help) secret-find-help ; return 0 ;;
+            --plain)   PLAIN=1 ;;
+            *)         parts+=("$arg") ;;
+        esac
+    done
+    set -- ${parts[@]+"${parts[@]}"}
+    (( $# > 0 )) || die "Usage: folio secret find [--plain] <part>..."
     terms="*$(printf '%s*|*' "$@")"
     printf 'Search Terms: %s\n' "$*"
     store-tree gpg "$STORE_PATH" -P "${terms%|*}" --matchdirs --ignore-case
@@ -2353,14 +2373,15 @@ SecretCp() { call-pass secret-cp-help cp "$@" ; }
 
 function list-help() {
     cat <<'EOF'
-Usage: folio ls [--flat] [<subfolder>]
+Usage: folio ls [--flat] [--plain] [<subfolder>]
 
 List the texts and secrets in the EnvFolio store together as a tree — names only, never values.
-Each name is marked (S) for a secret or (T) for a text; on a screen, secrets are yellow and texts
-green (not with NO_COLOR set). Give a subfolder to list only what is under it.
+Each name is marked (S) for a secret or (T) for a text — on a screen, 🔑 and 📄, secrets yellow
+and texts green (no colour with NO_COLOR set). Give a subfolder to list only what is under it.
 
 Options:
       --flat          Full names, one per line, sorted, instead of a tree.
+      --plain         Mark secrets (S) and texts (T), with no colour, even on a screen.
   -h, --help          Show this help and stop.
 EOF
 }
@@ -2377,8 +2398,9 @@ Ls() {
 
 function run-exec-help() {
     cat <<'HELP'
-Usage: folio exec [-s|--secrets] [-a|--all] [-n|--names] [--vars <file>]... [--store-passphrase-fd <n>]
-                  [--from <file> [--file-passphrase-fd <n>]] <entry>... -- <command> [<arg>...]
+Usage: folio exec [-s|--secrets] [-a|--all] [-n|--names] [--plain] [--vars <file>]...
+                  [--store-passphrase-fd <n>] [--from <file> [--file-passphrase-fd <n>]]
+                  <entry>... -- <command> [<arg>...]
 
 Run a command with entries from the store as environment variables. Texts load by default;
 secrets only with --secrets. Values are never printed.
@@ -2402,6 +2424,8 @@ Options:
   -a, --all           Load every entry outside the @namespaces first; <entry> is then optional.
   -n, --names         Only show which variable would get which entry, and stop: nothing is read,
                       nothing runs.
+      --plain         With --names: mark secrets (S) and texts (T), with no colour, even on a
+                      screen.
   --vars <file>       Set the variables a vars file says (e.g. prod-deploy.vars); can be given
                       more than once. <entry> is then optional.
   --from <file>       Take the entries from a file made by `folio export`, not from the store,
@@ -2420,8 +2444,8 @@ HELP
 
 function run-shell-help() {
     cat <<'HELP'
-Usage: folio shell [-s|--secrets] [-a|--all] [-n|--names] [--vars <file>]... [--store-passphrase-fd <n>]
-                   [--from <file> [--file-passphrase-fd <n>]] <entry>...
+Usage: folio shell [-s|--secrets] [-a|--all] [-n|--names] [--plain] [--vars <file>]...
+                   [--store-passphrase-fd <n>] [--from <file> [--file-passphrase-fd <n>]] <entry>...
 
 Start your shell ($SHELL) with entries from the store as environment variables, and say which
 names were loaded (never their values). FOLIO_SHELL=1 is set. Type `exit` to leave.
@@ -2432,6 +2456,8 @@ Options:
   -a, --all           Load every entry outside the @namespaces first; <entry> is then optional.
   -n, --names         Only show which variable would get which entry, and stop: nothing is read,
                       nothing runs.
+      --plain         With --names: mark secrets (S) and texts (T), with no colour, even on a
+                      screen.
   --vars <file>       Set the variables a vars file says, as in `folio exec`; can be given more
                       than once. <entry> is then optional.
   --from <file>       Take the entries from a file made by `folio export`, as in `folio exec`.
@@ -2464,6 +2490,7 @@ function exec-with-entries() {
             -s|--secrets) secrets=1 ;;
             -a|--all)     all=1 ;;
             -n|--names)   only_names=1 ;;
+            --plain)      PLAIN=1 ;;
             --from|--file-passphrase-fd|--vars)
                           [[ $# -gt 0 && -n $1 ]] || die "$arg needs a value."
                           case $arg in
@@ -2481,13 +2508,14 @@ function exec-with-entries() {
         esac
     done
     local from_usage="[--vars <file>]... [--store-passphrase-fd <n>] [--from <file> [--file-passphrase-fd <n>]]"
+    set-marks    # for --names, here: what it shows of a vars file is made in $(…)
     local given=$(( ${#entries[@]} + all + ${#VARS_KIND[@]} ))
     if [[ $how == exec ]]; then
         (( given > 0 && (only_names || (dashes && $# > 0)) )) \
-            || die "Usage: folio exec [-s|--secrets] [-a|--all] [-n|--names] $from_usage <entry>... -- <command> [<arg>...]"
+            || die "Usage: folio exec [-s|--secrets] [-a|--all] [-n|--names] [--plain] $from_usage <entry>... -- <command> [<arg>...]"
     else
         (( given > 0 && ! dashes )) \
-            || die "Usage: folio shell [-s|--secrets] [-a|--all] [-n|--names] $from_usage <entry>..."
+            || die "Usage: folio shell [-s|--secrets] [-a|--all] [-n|--names] [--plain] $from_usage <entry>..."
         set -- "${SHELL:-/bin/sh}"
     fi
     if [[ -n $from_file ]]; then
@@ -2646,22 +2674,31 @@ function add-folder() {
 }
 
 # print-entry-names: what --names shows — each variable and the entry it would get, in order,
-# (S)ecret or (T)ext; for one a vars file sets, how its value is made. Nothing is read or decrypted.
+# marked (entry-mark); for one a vars file sets, how its value is made. Nothing is read or decrypted.
 function print-entry-names() {
-    local i width=0 file kind
+    local i width=0 file
     for (( i = 0; i < ${#EXEC_VARS[@]}; i++ )); do
         (( ${#EXEC_VARS[i]} > width )) && width=${#EXEC_VARS[i]}
     done
     for (( i = 0; i < ${#EXEC_VARS[@]}; i++ )); do
-        file=${EXEC_FILES[i]} kind=T
+        file=${EXEC_FILES[i]}
         # Set by a vars file: its value as it would be made, each part shown by where it is from.
         if [[ $file == =* ]]; then
             printf '%-*s <- %s\n' "$width" "${EXEC_VARS[i]}" "${VAR_VALUES[${file#=}]}"
             continue
         fi
-        [[ $file == *.gpg ]] && kind=S
-        printf '%-*s <- %s (%s)\n' "$width" "${EXEC_VARS[i]}" "${file%.*}" "$kind"
+        printf '%-*s <- %s\n' "$width" "${EXEC_VARS[i]}" "$(entry-mark "$file")"
     done
+}
+
+# entry-mark <name>.gpg|<name>.txt: the name marked as set-marks says — "🔑 <name>" in yellow on a
+# screen, "<name> (S)" elsewhere; for a text, 📄, green and (T).
+function entry-mark() {
+    local name=${1%.*} on=$TEXT_ON mark=$TEXT_MARK
+    [[ $1 != *.gpg ]] || on=$SECRET_ON mark=$SECRET_MARK
+    if (( EMOJI )); then echo "$on$mark $name$COLOR_OFF"
+    else                 echo "$on$name $mark$COLOR_OFF"
+    fi
 }
 
 # is-explicit <entry>: true for VAR=<name> (no / or [ before the =).
@@ -3000,7 +3037,7 @@ function look-up-entry() {
     else return 1
     fi
     if [[ $SCAN_MODE == names ]]; then
-        LOOKED_UP="[$1 (T)]" ; [[ $file == *.gpg ]] && LOOKED_UP="[$1 (S)]"
+        LOOKED_UP="[$(entry-mark "$file")]"
         return 0
     fi
     read-entry-value "$VARS_HOW" "$file"
@@ -3539,18 +3576,19 @@ function call-pass() {
     pass "$command" "$@"
 }
 
-# list-store <gpg|txt|all> <title> <command> [--flat] [<subfolder>]: what `folio ls`, `text ls`
+# list-store <gpg|txt|all> <title> <command> [--flat] [--plain] [<subfolder>]: what `folio ls`, `text ls`
 # and `secret ls` share — the tree under <title>, or with --flat, the full names one per line.
 function list-store() {
     local kind=$1 title=$2 command=$3 flat=0 args=() arg ; shift 3
     for arg in "$@"; do
         case $arg in
-            --flat) flat=1 ;;
-            *)      args+=("$arg") ;;
+            --flat)  flat=1 ;;
+            --plain) PLAIN=1 ;;
+            *)       args+=("$arg") ;;
         esac
     done
     set -- "${args[@]}"
-    (( $# <= 1 )) || die "Usage: folio $command [--flat] [<subfolder>]"
+    (( $# <= 1 )) || die "Usage: folio $command [--flat] [--plain] [<subfolder>]"
     [[ $# -eq 0 || ( $1 != -* && /$1/ != */../* && -d $STORE_PATH/$1 ) ]] \
         || die "$command: '$1' is not a folder in the store."
     if (( flat )); then store-flat "$kind" "$STORE_PATH${1:+/${1%/}}" ; return ; fi
@@ -3560,47 +3598,67 @@ function list-store() {
 }
 
 # store-flat <gpg|txt|all> <folder>: as store-tree, but full names one per line, sorted. With all,
-# each name gets (S) or (T) in front. Follows links, as tree -l does; hidden ones (.git) left out.
+# each name gets its mark (set-marks) in front. Follows links, as tree -l does; hidden ones (.git)
+# left out.
 function store-flat() {
-    local kind=$1 file secret='' text='' off=''
-    if use-color; then secret=$SECRET_COLOR text=$TEXT_COLOR off=$COLOR_OFF; fi
+    local kind=$1 file
+    set-marks
     find -L "$2" -mindepth 1 -name '.*' -prune -o -type f \( -name '*.gpg' -o -name '*.txt' \) -print \
         | LC_ALL=C sort \
         | while IFS= read -r file; do
             file=${file#"$STORE_PATH"/}
             case $kind:$file in
-                gpg:*.gpg) echo "$secret${file%.gpg}$off" ;;
-                txt:*.txt) echo "$text${file%.txt}$off" ;;
-                all:*.gpg) echo "$secret(S) ${file%.gpg}$off" ;;
-                all:*.txt) echo "$text(T) ${file%.txt}$off" ;;
+                gpg:*.gpg) echo "$SECRET_ON${file%.gpg}$COLOR_OFF" ;;
+                txt:*.txt) echo "$TEXT_ON${file%.txt}$COLOR_OFF" ;;
+                all:*.gpg) echo "$SECRET_ON$SECRET_MARK ${file%.gpg}$COLOR_OFF" ;;
+                all:*.txt) echo "$TEXT_ON$TEXT_MARK ${file%.txt}$COLOR_OFF" ;;
             esac
         done
 }
 
 # store-tree <gpg|txt|all> <folder> [tree-option...]: the secrets (gpg), the texts (txt) or both
 # (all) under <folder> as a tree, names only. pass's own `tree` line (ls, find), plus leaving out
-# signatures, the other kind, and folders left empty. With all, each name gets (S) or (T) in front.
-# On a screen with colour, secrets are yellow and texts green; elsewhere, no colour at all.
+# signatures, the other kind, and folders left empty. With all, each name gets its mark in front.
+# Marks and colours as set-marks says; tree colours (its folders) only when there are colours.
 function store-tree() {
-    local kind=$1 folder=$2 others color=-n secret='' text='' off='' s='(S) ' t='(T) ' esc=$'\e' ; shift 2
+    local kind=$1 folder=$2 others color=-n s='' t='' esc=$'\e' ; shift 2
     case $kind in
         gpg) others='*.txt|*.txt.sig' ;;
         txt) others='*.gpg|*.txt.sig' ;;
         all) others='*.txt.sig'       ;;
     esac
-    [[ $kind == all ]] || s='' t=''
-    if use-color; then color=-C secret=$SECRET_COLOR text=$TEXT_COLOR off=$COLOR_OFF; fi
+    set-marks
+    [[ $kind != all ]] || s="$SECRET_MARK " t="$TEXT_MARK "
+    [[ -z $COLOR_OFF ]] || color=-C
     # "├── name.gpg" -> "├── (S) name", tree's own colour for the name swapped for ours; tree draws
     # "|-- " instead outside UTF-8. A real ESC, not \x1B, which BSD sed (macOS) does not know.
     tree -N "$color" -l --noreport -I "$others" --prune "$@" "$folder" | tail -n +2 \
-        | sed -E -e "s/^(.*(── |-- ))($esc\[[0-9;]*m)?(.*)\.gpg($esc\[[0-9;]*m)?( ->.*)?\$/\1$secret$s\4$off\6/" \
-                 -e "s/^(.*(── |-- ))($esc\[[0-9;]*m)?(.*)\.txt($esc\[[0-9;]*m)?( ->.*)?\$/\1$text$t\4$off\6/"
+        | sed -E -e "s/^(.*(── |-- ))($esc\[[0-9;]*m)?(.*)\.gpg($esc\[[0-9;]*m)?( ->.*)?\$/\1$SECRET_ON$s\4$COLOR_OFF\6/" \
+                 -e "s/^(.*(── |-- ))($esc\[[0-9;]*m)?(.*)\.txt($esc\[[0-9;]*m)?( ->.*)?\$/\1$TEXT_ON$t\4$COLOR_OFF\6/"
 }
 
+# --plain: (S)/(T) and no colour, even on a screen.
+PLAIN=0
+# on-screen: stdout is a terminal.
+function on-screen() { [[ -t 1 ]] ; }
 # use-color: true when stdout is a screen that shows colour — a terminal, not TERM=dumb, and no
-# NO_COLOR (https://no-color.org).
-SECRET_COLOR=$'\e[33m' TEXT_COLOR=$'\e[32m' COLOR_OFF=$'\e[0m'
-function use-color() { [[ -t 1 && -z ${NO_COLOR:-} && ${TERM:-dumb} != dumb ]] ; }
+# NO_COLOR (https://no-color.org) or --plain.
+function use-color() { (( ! PLAIN )) && on-screen && [[ -z ${NO_COLOR:-} && ${TERM:-dumb} != dumb ]] ; }
+# use-emoji: true when stdout is a screen that can draw emoji — a terminal, a UTF-8 locale, not
+# TERM=dumb or the Linux console (TERM=linux), and no --plain. A guess: no terminal can be asked.
+function use-emoji() {
+    (( ! PLAIN )) && on-screen && [[ ${TERM:-dumb} != dumb && $TERM != linux ]] || return 1
+    case ${LC_ALL:-${LC_CTYPE:-${LANG:-}}} in *[Uu][Tt][Ff]-8*|*[Uu][Tt][Ff]8*) return 0 ;; esac
+    return 1
+}
+# set-marks: how a secret and a text are marked, for this stdout — SECRET_MARK and TEXT_MARK (🔑
+# and 📄 on a screen with emoji, else (S) and (T)), SECRET_ON and TEXT_ON (yellow and green on a
+# screen with colour, else nothing) and COLOR_OFF. Call it outside $(…), where stdout is not the screen.
+function set-marks() {
+    SECRET_MARK='(S)' TEXT_MARK='(T)' SECRET_ON='' TEXT_ON='' COLOR_OFF='' EMOJI=0
+    if use-emoji; then SECRET_MARK='🔑' TEXT_MARK='📄' EMOJI=1; fi
+    if use-color; then SECRET_ON=$'\e[33m' TEXT_ON=$'\e[32m' COLOR_OFF=$'\e[0m'; fi
+}
 
 # --- Requirements -------------------------------------------------------------
 

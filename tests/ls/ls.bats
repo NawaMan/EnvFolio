@@ -81,7 +81,7 @@ web
     [[ $output != *"s3cr3t"* && $output != *".sig"* && $output != *".gpg-id"* && $output != *".git"* ]]
     run "$FOLIO" ls --flat web extra
     [ "$status" -eq 1 ]
-    [[ $output == *"Usage: folio ls [--flat] [<subfolder>]"* ]]
+    [[ $output == *"Usage: folio ls [--flat] [--plain] [<subfolder>]"* ]]
 }
 
 @test "ls: never shows values, signatures or extensions" {
@@ -140,23 +140,57 @@ web
     done
 }
 
-@test "ls: on a screen with colour, secrets are yellow and texts green, (S)/(T) kept" {
+# Run folio as if stdout were a screen (on-screen says yes); TERM and the locale as given around it.
+on-screen() { bash -c 'source "$1"; shift; function on-screen() { return 0; }; Main "$@"' _ "$FOLIO" "$@" ; }
+
+@test "ls: on a screen with colour, secrets are yellow and texts green, (S)/(T) kept outside UTF-8" {
     make-store
     local y=$'\e[33m' g=$'\e[32m' off=$'\e[0m'
-    # As if to a terminal: use-color says yes.
-    in-color() { bash -c 'source "$1"; shift; function use-color() { return 0; }; Main "$@"' _ "$FOLIO" "$@" ; }
-    run in-color ls
+    TERM=xterm LC_ALL=C run on-screen ls
     [ "$status" -eq 0 ]
-    [[ $output == *"── $g(T) note$off"* && $output == *"── $y(S) github$off"* && $output == *"── $g(T) home$off"* ]]
-    run in-color ls --flat
+    [[ $output == *"-- $g(T) note$off"* && $output == *"-- $y(S) github$off"* && $output == *"-- $g(T) home$off"* ]]
+    TERM=xterm LC_ALL=C run on-screen ls --flat
     [ "$output" = "$g(T) note$off
 $y(S) web/github$off
 $g(T) web/github$off
 $g(T) web/home$off" ]
-    run in-color secret ls
-    [[ $output == *"── $y""github$off"* ]]
-    run in-color text find home
-    [[ $output == *"── $g""home$off"* ]]
+    TERM=xterm LC_ALL=C run on-screen secret ls
+    [[ $output == *"-- $y""github$off"* ]]
+    TERM=xterm LC_ALL=C run on-screen text find home
+    [[ $output == *"-- $g""home$off"* ]]
     # No extension left behind, colour or not.
     [[ $(plain) != *".txt"* && $(plain) != *".gpg"* ]]
+}
+
+@test "ls: on a screen with UTF-8, 🔑 for a secret and 📄 for a text; NO_COLOR keeps them, no colour" {
+    make-store
+    local y=$'\e[33m' g=$'\e[32m' off=$'\e[0m' esc=$'\e'
+    TERM=xterm LC_ALL=C.UTF-8 run on-screen ls
+    [[ $output == *"── $g📄 note$off"* && $output == *"── $y🔑 github$off"* ]]
+    [[ $output != *"(S)"* && $output != *"(T)"* ]]
+    TERM=xterm LC_ALL=C.UTF-8 run on-screen ls --flat web
+    [ "$output" = "$y🔑 web/github$off
+$g📄 web/github$off
+$g📄 web/home$off" ]
+    TERM=xterm LC_ALL=C.UTF-8 NO_COLOR=1 run on-screen ls --flat web
+    [ "$output" = $'🔑 web/github\n📄 web/github\n📄 web/home' ]
+}
+
+@test "ls: --plain, TERM=dumb or the Linux console: (S)/(T), and colour only on the console" {
+    make-store
+    local esc=$'\e' cmd
+    for cmd in "ls --plain" "ls --flat --plain" "text ls --plain" "secret find --plain git" "text find git --plain"; do
+        # shellcheck disable=SC2086  # the words of the command
+        TERM=xterm LC_ALL=C.UTF-8 run on-screen $cmd
+        [ "$status" -eq 0 ]
+        [[ $output != *"$esc"* && $output != *"🔑"* && $output != *"📄"* ]]
+    done
+    TERM=xterm LC_ALL=C.UTF-8 run on-screen ls --plain --flat web
+    [ "$output" = $'(S) web/github\n(T) web/github\n(T) web/home' ]
+    TERM=dumb LC_ALL=C.UTF-8 run on-screen ls --flat web
+    [ "$output" = $'(S) web/github\n(T) web/github\n(T) web/home' ]
+    TERM=linux LC_ALL=C.UTF-8 run on-screen ls --flat web
+    [ "$output" = $'\e[33m(S) web/github\e[0m\n\e[32m(T) web/github\e[0m\n\e[32m(T) web/home\e[0m' ]
+    run "$FOLIO" ls --plain web extra
+    [[ $output == *"Usage: folio ls [--flat] [--plain] [<subfolder>]"* ]]
 }
