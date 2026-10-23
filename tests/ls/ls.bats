@@ -128,3 +128,35 @@ web
     [[ $output == *"Usage: folio ls"* ]]
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
+
+@test "ls: not to a screen (a pipe, a file), no colour at all — tree, flat, text, secret, find" {
+    make-store
+    local esc=$'\e' cmd
+    for cmd in "ls" "ls --flat" "text ls" "secret ls --flat" "text find git" "secret find git"; do
+        # shellcheck disable=SC2086  # the words of the command
+        run "$FOLIO" $cmd
+        [ "$status" -eq 0 ]
+        [[ $output != *"$esc"* ]]
+    done
+}
+
+@test "ls: on a screen with colour, secrets are yellow and texts green, (S)/(T) kept" {
+    make-store
+    local y=$'\e[33m' g=$'\e[32m' off=$'\e[0m'
+    # As if to a terminal: use-color says yes.
+    in-color() { bash -c 'source "$1"; shift; function use-color() { return 0; }; Main "$@"' _ "$FOLIO" "$@" ; }
+    run in-color ls
+    [ "$status" -eq 0 ]
+    [[ $output == *"── $g(T) note$off"* && $output == *"── $y(S) github$off"* && $output == *"── $g(T) home$off"* ]]
+    run in-color ls --flat
+    [ "$output" = "$g(T) note$off
+$y(S) web/github$off
+$g(T) web/github$off
+$g(T) web/home$off" ]
+    run in-color secret ls
+    [[ $output == *"── $y""github$off"* ]]
+    run in-color text find home
+    [[ $output == *"── $g""home$off"* ]]
+    # No extension left behind, colour or not.
+    [[ $(plain) != *".txt"* && $(plain) != *".gpg"* ]]
+}
