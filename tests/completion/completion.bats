@@ -206,6 +206,19 @@ bash-tab() {
     zsh -n "$SANDBOX/folio.zsh"
 }
 
+@test "completion: zsh — no compinit yet and a completion file zsh does not trust: still loads" {
+    # A world-writable folder on fpath fails compinit's check. A plain compinit would ask whether
+    # to go on; with no one to answer (stdin is /dev/null, as at instant prompt) it aborts and
+    # takes compdef away. The script must skip that file instead.
+    mkdir -m 777 "$SANDBOX/insecure" && echo '#compdef nothing' > "$SANDBOX/insecure/_nothing"
+    "$FOLIO" completion zsh > "$SANDBOX/folio.zsh"
+    run zsh -f -c "fpath=('$SANDBOX/insecure' \$fpath); source '$SANDBOX/folio.zsh'
+                   print -r -- \"folio: \$_comps[folio]\"" < /dev/null
+    [[ $output != *"initialization aborted"* ]]
+    [[ $output != *"compdef"* ]]
+    [[ $output == *"folio: _folio"* ]]
+}
+
 @test "MANUAL: completion — zsh" {
     make-names
     # A real interactive zsh, with its completion system, driven through a pseudo-terminal.
