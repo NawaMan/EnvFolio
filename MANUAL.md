@@ -508,6 +508,8 @@ Takes `aws/key` and `web/user`; one already in the store stays as it is.
 
 Lists the texts and secrets in the EnvFolio store together as one tree: names only, never values.
 Each name is marked **(S)** for a secret or **(T)** for a text. A name that is both shows twice.
+On a screen that shows colour, secrets are yellow and texts green — in `text ls`, `secret ls` and
+`find` too. Sent to a pipe or a file, or with `NO_COLOR` set or `TERM=dumb`, there is no colour.
 Signatures (`.txt.sig`) are left out.
 
 ```
@@ -1626,7 +1628,8 @@ Works with the bash macOS ships (3.2), without the `bash-completion` package.
 eval "$(folio completion zsh)"
 ```
 
-Uses zsh's own completion system (it runs `compinit` if your `.zshrc` has not), with a description
+Uses zsh's own completion system (it runs `compinit` if your `.zshrc` has not, skipping completion files zsh does not trust
+rather than stopping to ask), with a description
 beside each choice:
 
 ```

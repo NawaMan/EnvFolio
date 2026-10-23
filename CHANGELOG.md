@@ -4,6 +4,12 @@ User-visible changes to EnvFolio. Newest first.
 
 ## Unreleased
 
+### Changed
+
+- `folio ls`, `text ls`, `secret ls` and `text find`/`secret find` show secrets in yellow and texts
+  in green, on a screen that shows colour. Sent to a pipe or a file, or with `NO_COLOR` set or
+  `TERM=dumb`, they now print no colour codes at all (folders used to keep theirs).
+
 ## 1.0.0 — 2026-10-22
 
 ### Changed

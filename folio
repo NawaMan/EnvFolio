@@ -2356,8 +2356,8 @@ function list-help() {
 Usage: folio ls [--flat] [<subfolder>]
 
 List the texts and secrets in the EnvFolio store together as a tree — names only, never values.
-Each name is marked (S) for a secret or (T) for a text. Give a subfolder to list only what is
-under it.
+Each name is marked (S) for a secret or (T) for a text; on a screen, secrets are yellow and texts
+green (not with NO_COLOR set). Give a subfolder to list only what is under it.
 
 Options:
       --flat          Full names, one per line, sorted, instead of a tree.
@@ -3561,16 +3561,17 @@ function list-store() {
 # store-flat <gpg|txt|all> <folder>: as store-tree, but full names one per line, sorted. With all,
 # each name gets (S) or (T) in front. Follows links, as tree -l does; hidden ones (.git) left out.
 function store-flat() {
-    local kind=$1 file
+    local kind=$1 file secret='' text='' off=''
+    if use-color; then secret=$SECRET_COLOR text=$TEXT_COLOR off=$COLOR_OFF; fi
     find -L "$2" -mindepth 1 -name '.*' -prune -o -type f \( -name '*.gpg' -o -name '*.txt' \) -print \
         | LC_ALL=C sort \
         | while IFS= read -r file; do
             file=${file#"$STORE_PATH"/}
             case $kind:$file in
-                gpg:*.gpg) echo "${file%.gpg}" ;;
-                txt:*.txt) echo "${file%.txt}" ;;
-                all:*.gpg) echo "(S) ${file%.gpg}" ;;
-                all:*.txt) echo "(T) ${file%.txt}" ;;
+                gpg:*.gpg) echo "$secret${file%.gpg}$off" ;;
+                txt:*.txt) echo "$text${file%.txt}$off" ;;
+                all:*.gpg) echo "$secret(S) ${file%.gpg}$off" ;;
+                all:*.txt) echo "$text(T) ${file%.txt}$off" ;;
             esac
         done
 }
@@ -3578,22 +3579,27 @@ function store-flat() {
 # store-tree <gpg|txt|all> <folder> [tree-option...]: the secrets (gpg), the texts (txt) or both
 # (all) under <folder> as a tree, names only. pass's own `tree` line (ls, find), plus leaving out
 # signatures, the other kind, and folders left empty. With all, each name gets (S) or (T) in front.
+# On a screen with colour, secrets are yellow and texts green; elsewhere, no colour at all.
 function store-tree() {
-    local kind=$1 folder=$2 others ; shift 2
+    local kind=$1 folder=$2 others color=-n secret='' text='' off='' s='(S) ' t='(T) ' esc=$'\e' ; shift 2
     case $kind in
         gpg) others='*.txt|*.txt.sig' ;;
         txt) others='*.gpg|*.txt.sig' ;;
         all) others='*.txt.sig'       ;;
     esac
-    tree -N -C -l --noreport -I "$others" --prune "$@" "$folder" | tail -n +2 \
-        | if [[ $kind == all ]]; then
-            # "├── name.gpg" -> "├── (S) name"; tree draws "|-- " instead outside UTF-8.
-            sed -E -e 's/^(.*(── |-- ))(.*)\.gpg(\x1B\[[0-9]+m)?( ->.*)?$/\1(S) \3\4\5/' \
-                   -e 's/^(.*(── |-- ))(.*)\.txt(\x1B\[[0-9]+m)?( ->.*)?$/\1(T) \3\4\5/'
-        else
-            sed -E "s/\\.$kind(\x1B\\[[0-9]+m)?( ->|\$)/\\1\\2/g"
-        fi
+    [[ $kind == all ]] || s='' t=''
+    if use-color; then color=-C secret=$SECRET_COLOR text=$TEXT_COLOR off=$COLOR_OFF; fi
+    # "├── name.gpg" -> "├── (S) name", tree's own colour for the name swapped for ours; tree draws
+    # "|-- " instead outside UTF-8. A real ESC, not \x1B, which BSD sed (macOS) does not know.
+    tree -N "$color" -l --noreport -I "$others" --prune "$@" "$folder" | tail -n +2 \
+        | sed -E -e "s/^(.*(── |-- ))($esc\[[0-9;]*m)?(.*)\.gpg($esc\[[0-9;]*m)?( ->.*)?\$/\1$secret$s\4$off\6/" \
+                 -e "s/^(.*(── |-- ))($esc\[[0-9;]*m)?(.*)\.txt($esc\[[0-9;]*m)?( ->.*)?\$/\1$text$t\4$off\6/"
 }
+
+# use-color: true when stdout is a screen that shows colour — a terminal, not TERM=dumb, and no
+# NO_COLOR (https://no-color.org).
+SECRET_COLOR=$'\e[33m' TEXT_COLOR=$'\e[32m' COLOR_OFF=$'\e[0m'
+function use-color() { [[ -t 1 && -z ${NO_COLOR:-} && ${TERM:-dumb} != dumb ]] ; }
 
 # --- Requirements -------------------------------------------------------------
 
