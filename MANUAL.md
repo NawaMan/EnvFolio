@@ -508,17 +508,22 @@ Takes `aws/key` and `web/user`; one already in the store stays as it is.
 
 Lists the texts and secrets in the EnvFolio store together as one tree: names only, never values.
 Each name is marked **(S)** for a secret or **(T)** for a text. A name that is both shows twice.
-On a screen that shows colour, secrets are yellow and texts green — in `text ls`, `secret ls` and
-`find` too. Sent to a pipe or a file, or with `NO_COLOR` set or `TERM=dumb`, there is no colour.
+On a screen, a secret is marked **🔑** and a text **📄** instead, and secrets are yellow and texts
+green — the colours in `text ls`, `secret ls` and `find` too. No terminal can be asked whether it
+draws emoji, so they show only with a UTF-8 locale and not on the Linux console (`TERM=linux`).
+`NO_COLOR` takes the colours away and keeps the emoji. Sent to a pipe or a file, with `TERM=dumb`,
+or with `--plain`, it is always **(S)**/**(T)** and no colour — what scripts and the examples below
+see.
 Signatures (`.txt.sig`) are left out.
 
 ```
-folio ls [--flat] [<subfolder>]
+folio ls [--flat] [--plain] [<subfolder>]
 ```
 
 | Option | Meaning |
 | --- | --- |
 | `--flat` | Full names, one per line, sorted, instead of a tree: `(S) web/github`. |
+| `--plain` | (S)/(T) and no colour, even on a screen. |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
 Only a folder can be listed. It needs a ready store (`folio init`).
@@ -570,12 +575,13 @@ tree as `pass ls`, but with the texts instead of the secrets. Signatures (`.txt.
 holding no texts are left out.
 
 ```
-folio text ls [--flat] [<subfolder>]
+folio text ls [--flat] [--plain] [<subfolder>]
 ```
 
 | Option | Meaning |
 | --- | --- |
 | `--flat` | Full names, one per line, sorted, instead of a tree. |
+| `--plain` | No colour, even on a screen. |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
 Only a folder can be listed; a text's own name is refused (use `folio text show` once it exists).
@@ -611,11 +617,12 @@ Lists the texts whose names contain any of the given parts, ignoring case, as a 
 only. It mirrors `folio secret find`: `pass find`, for the texts.
 
 ```
-folio text find <part>...
+folio text find [--plain] <part>...
 ```
 
 | Option | Meaning |
 | --- | --- |
+| `--plain` | No colour, even on a screen. |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
 It needs a ready store (`folio init`).
@@ -911,12 +918,13 @@ Lists the secrets in the EnvFolio store as a tree: names only, never their value
 without the texts: the same tree, minus `*.txt`/`*.txt.sig` files and folders holding only texts.
 
 ```
-folio secret ls [--flat] [<subfolder>]
+folio secret ls [--flat] [--plain] [<subfolder>]
 ```
 
 | Option | Meaning |
 | --- | --- |
 | `--flat` | Full names, one per line, sorted, instead of a tree. |
+| `--plain` | No colour, even on a screen. |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
 Only a folder can be listed. A secret's own name is refused, because `pass ls <name>` would
@@ -952,11 +960,12 @@ Lists the secrets whose names contain any of the given parts, ignoring case, as 
 names only, never values. It is `pass find` without the texts.
 
 ```
-folio secret find <part>...
+folio secret find [--plain] <part>...
 ```
 
 | Option | Meaning |
 | --- | --- |
+| `--plain` | No colour, even on a screen. |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
 ### Find by name
@@ -1246,15 +1255,17 @@ Runs a command with entries from the EnvFolio store as environment variables, th
 on a command line, into a file, or on the screen.
 
 ```
-folio exec [-s|--secrets] [-a|--all] [-n|--names] [--vars <file>]... [--store-passphrase-fd <n>]
-           [--from <file> [--file-passphrase-fd <n>]] <entry>... -- <command> [<arg>...]
+folio exec [-s|--secrets] [-a|--all] [-n|--names] [--plain] [--vars <file>]...
+           [--store-passphrase-fd <n>] [--from <file> [--file-passphrase-fd <n>]]
+           <entry>... -- <command> [<arg>...]
 ```
 
 | Option | Meaning |
 | --- | --- |
 | `-s`, `--secrets` | Also load secrets. Without it, a secret named directly is refused, and the secrets in a folder are left out, with a note on stderr saying how many. |
 | `-a`, `--all` | Load every entry outside the namespaces (top `@` folders) first, wherever it is typed; the entries given then layer over it. With it, `<entry>` is optional. |
-| `-n`, `--names` | Only show which variable would get which entry, in the order they are set, marked (S)ecret or (T)ext, and stop. Nothing is read or decrypted (no passphrase, no signature check), and the command, if given, does not run. With `--from`, the file is still opened to see what is in it. |
+| `-n`, `--names` | Only show which variable would get which entry, in the order they are set, marked (S)ecret or (T)ext — on a screen, 🔑 or 📄 in front, coloured as in `folio ls` — and stop. Nothing is read or decrypted (no passphrase, no signature check), and the command, if given, does not run. With `--from`, the file is still opened to see what is in it. |
+| `--plain` | With `--names`: (S)/(T) and no colour, even on a screen. |
 | `--vars <file>` | Set the variables a vars file says: constants, values from your environment, entries, with fallbacks. Can be given more than once. With it, `<entry>` is optional. See [From a vars file](#from-a-vars-file). |
 | `--from <file>` | Take the entries from a file made by `folio export`, not from the store. No store is needed, and none is made or touched. See [From an export file](#from-an-export-file). |
 | `--file-passphrase-fd <n>` | With `--from`: the file's passphrase, from the first line of file descriptor `<n>`, e.g. `--file-passphrase-fd 3 3< pass.txt`. stdin stays the command's. |
@@ -1498,7 +1509,7 @@ Starts your shell (`$SHELL`, or `/bin/sh`) with entries from the EnvFolio store 
 variables. It is `folio exec <entry>... -- "$SHELL"`, plus a line saying what was loaded.
 
 ```
-folio shell [-s|--secrets] [-a|--all] [-n|--names] [--vars <file>]... [--store-passphrase-fd <n>] [--from <file> [--file-passphrase-fd <n>]] <entry>...
+folio shell [-s|--secrets] [-a|--all] [-n|--names] [--plain] [--vars <file>]... [--store-passphrase-fd <n>] [--from <file> [--file-passphrase-fd <n>]] <entry>...
 ```
 
 | Option | Meaning |
@@ -1506,6 +1517,7 @@ folio shell [-s|--secrets] [-a|--all] [-n|--names] [--vars <file>]... [--store-p
 | `-s`, `--secrets` | Also load secrets. |
 | `-a`, `--all` | Load every entry outside the namespaces first, as in `folio exec`. |
 | `-n`, `--names` | Only show which variable would get which entry, as in `folio exec`; no shell starts. |
+| `--plain` | With `--names`: (S)/(T) and no colour, even on a screen. |
 | `--vars <file>` | Set the variables a vars file says, as in `folio exec`; can be given more than once. |
 | `--from <file>` | Take the entries from a file made by `folio export`, as in `folio exec`. |
 | `--file-passphrase-fd <n>` | With `--from`: the file's passphrase, from file descriptor `<n>`, as in `folio exec`. |

@@ -145,6 +145,25 @@ ATL_HOST  <- atl/host (T)
 ATL_NAME  <- atl/name (T)' ]
 }
 
+@test "exec --names: on a screen, 🔑/📄 in front and coloured; --plain as before" {
+    make-store
+    vars 'TOKEN=@{gh/token}' 'URL=//@{prod/db/user}' '@{atl/name}'
+    local y=$'\e[33m' g=$'\e[32m' off=$'\e[0m'
+    # As if stdout were a screen (on-screen says yes).
+    on-screen() { bash -c 'source "$1"; shift; function on-screen() { return 0; }; Main "$@"' _ "$FOLIO" "$@" ; }
+    TERM=xterm LC_ALL=C.UTF-8 run on-screen exec -s --names --vars "$SANDBOX/a.vars"
+    [ "$status" -eq 0 ]
+    [ "$output" = "TOKEN    <- [$y🔑 gh/token$off]
+URL      <- //[$g📄 prod/db/user$off]
+ATL_NAME <- $g📄 atl/name$off" ]
+    TERM=xterm LC_ALL=C.UTF-8 run on-screen exec -s --names --plain --vars "$SANDBOX/a.vars"
+    [ "$output" = 'TOKEN    <- [gh/token (S)]
+URL      <- //[prod/db/user (T)]
+ATL_NAME <- atl/name (T)' ]
+    TERM=xterm LC_ALL=C.UTF-8 SHELL=/bin/sh run on-screen shell --names --plain atl/name
+    [ "$output" = 'ATL_NAME <- atl/name (T)' ]
+}
+
 @test "exec --names --vars: never prints a value from the environment or the store" {
     make-store
     vars 'A=${SECRET_ENV}' 'B=@{gh/token}' 'C=@{prod/db/user}'
