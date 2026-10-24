@@ -779,7 +779,6 @@ Restore() {
         die "--file-passphrase-stdin and --file-passphrase-fd cannot be used together."
     fi
     [[ -z $passphrase_fd ]] || check-passphrase-fd --file-passphrase-fd "$passphrase_fd"
-    warn-if-gpg-cannot-import restore
 
     local open=(cat)
     case $file in
@@ -1265,7 +1264,6 @@ Import() {
     fi
     [[ -z $passphrase_fd ]] || check-passphrase-fd --file-passphrase-fd "$passphrase_fd"
     [[ -z $file ]] || check-export-file "$file"
-    warn-if-gpg-cannot-import import
     # The store's folder: one there is, or none yet (missing, or an empty folder) to make one in.
     local status=0 new_store=0
     store-exists || status=$?
@@ -1479,17 +1477,6 @@ function verify-export-text() {
     signer=$(GNUPGHOME=$EXPORT_HOME gpg --status-fd 1 --verify "$item.sig" "$item" 2>/dev/null \
                 | awk '$2 == "VALIDSIG" { print $NF }')
     [[ $signer == "$EXPORT_KEY" ]] || die "$1: the signature of '$2' in the export does not verify."
-}
-
-# warn-if-gpg-cannot-import <how>: say on stderr when this gpg is one known to import a secret key
-# it then cannot decrypt with ("No secret key"): 2.5.24 files the encryption subkey under the wrong
-# keygrip. Only a warning — the command carries on.
-function warn-if-gpg-cannot-import() {
-    local version
-    version=$(gpg --version 2>/dev/null | awk 'NR == 1 { print $NF }')
-    [[ $version == 2.5.24 ]] || return 0
-    printf 'folio %s: warning: gpg %s has a bug: a secret key it imports cannot decrypt\n' "$1" "$version" >&2
-    printf '    (it says "No secret key"), so the secrets here may fail. Use another gpg, e.g. 2.4.\n' >&2
 }
 
 # check-export-file <file>: die unless <file> is there and named as an export.
@@ -2547,7 +2534,6 @@ function exec-with-entries() {
     fi
     if [[ -n $from_file ]]; then
         [[ -z $STORE_PASSPHRASE_FD ]] || die "$how: --store-passphrase-fd is for the store; --from does not use it."
-        (( secrets )) && warn-if-gpg-cannot-import "$how"
         open-export-for "$how" "$from_file" "$passphrase_fd"
         FROM_EXPORT=1
     else

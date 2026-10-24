@@ -19,6 +19,9 @@ User-visible changes to EnvFolio. Newest first.
 
 ### Changed
 
+- No more warning about gpg 2.5.24 from `restore`, `import` and `--from`: on Homebrew's 2.5.24
+  today, they work — with a classical key and a post-quantum one.
+
 - `exec`/`shell --names` colour secrets yellow and texts green on a screen, as `ls` does.
 - `folio ls`, `text ls`, `secret ls` and `text find`/`secret find` show secrets in yellow and texts
   in green, on a screen that shows colour. Sent to a pipe or a file, or with `NO_COLOR` set or
