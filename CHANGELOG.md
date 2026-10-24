@@ -14,12 +14,17 @@ User-visible changes to EnvFolio. Newest first.
 - On a screen that can draw emoji (a UTF-8 locale, not the Linux console), `folio ls` and
   `exec`/`shell --names` mark a secret 🔑 and a text 📄 instead of (S)/(T). In a pipe or a file
   it stays (S)/(T).
+- `exec`/`shell --debug`: show which variable gets which entry, as `--names` does, on stderr, and
+  then run. `--confirm`: show the same and ask on the terminal (not stdin) before anything is read
+  or run.
 - `--plain` for `ls`, `text ls`, `secret ls`, `text find`, `secret find`, `exec` and `shell`:
   (S)/(T) and no colour, even on a screen.
 
 ### Changed
 
 - `exec`/`shell --names` colour secrets yellow and texts green on a screen, as `ls` does.
+- `exec`/`shell --names` put the mark right against the name: `🔑gh/token`, `gh/token(S)`
+  (was `🔑 gh/token`, `gh/token (S)`).
 - `folio ls`, `text ls`, `secret ls` and `text find`/`secret find` show secrets in yellow and texts
   in green, on a screen that shows colour. Sent to a pipe or a file, or with `NO_COLOR` set or
   `TERM=dumb`, they now print no colour codes at all (folders used to keep theirs).

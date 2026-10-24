@@ -95,7 +95,7 @@ left-clean() {
     run --separate-stderr "$FOLIO" exec --from "$FILE" --file-passphrase-fd 3 --names --secrets gh @nawa \
         3< <(printf 'export pass\n')
     [ "$status" -eq 0 ]
-    [ "$output" = "$(printf 'GH_TOKEN <- @nawa/gh/token (S)\nGH_USER  <- @nawa/gh/user (T)')" ]
+    [ "$output" = "$(printf 'GH_TOKEN <- @nawa/gh/token(S)\nGH_USER  <- @nawa/gh/user(T)')" ]
     left-clean
 }
 

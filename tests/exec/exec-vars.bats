@@ -139,13 +139,13 @@ ATL_HOST=[jira.example]" ]
     [ "$status" -eq 0 ]
     [ "$output" = 'LOG_LEVEL <- debug
 HOST      <- [$UNSET_X (unset)]
-TOKEN     <- [gh/token (S)]
-DB_URL    <- postgres://[prod/db/user (T)]:[prod/db/pass (S)]@db/app
-ATL_HOST  <- atl/host (T)
-ATL_NAME  <- atl/name (T)' ]
+TOKEN     <- [gh/token(S)]
+DB_URL    <- postgres://[prod/db/user(T)]:[prod/db/pass(S)]@db/app
+ATL_HOST  <- atl/host(T)
+ATL_NAME  <- atl/name(T)' ]
 }
 
-@test "exec --names: on a screen, 🔑/📄 in front and coloured; --plain as before" {
+@test "exec --names: on a screen, 🔑/📄in front and coloured; --plain as before" {
     make-store
     vars 'TOKEN=@{gh/token}' 'URL=//@{prod/db/user}' '@{atl/name}'
     local y=$'\e[33m' g=$'\e[32m' off=$'\e[0m'
@@ -153,15 +153,15 @@ ATL_NAME  <- atl/name (T)' ]
     on-screen() { bash -c 'source "$1"; shift; function on-screen() { return 0; }; Main "$@"' _ "$FOLIO" "$@" ; }
     TERM=xterm LC_ALL=C.UTF-8 run on-screen exec -s --names --vars "$SANDBOX/a.vars"
     [ "$status" -eq 0 ]
-    [ "$output" = "TOKEN    <- [$y🔑 gh/token$off]
-URL      <- //[$g📄 prod/db/user$off]
-ATL_NAME <- $g📄 atl/name$off" ]
+    [ "$output" = "TOKEN    <- [$y🔑gh/token$off]
+URL      <- //[$g📄prod/db/user$off]
+ATL_NAME <- $g📄atl/name$off" ]
     TERM=xterm LC_ALL=C.UTF-8 run on-screen exec -s --names --plain --vars "$SANDBOX/a.vars"
-    [ "$output" = 'TOKEN    <- [gh/token (S)]
-URL      <- //[prod/db/user (T)]
-ATL_NAME <- atl/name (T)' ]
+    [ "$output" = 'TOKEN    <- [gh/token(S)]
+URL      <- //[prod/db/user(T)]
+ATL_NAME <- atl/name(T)' ]
     TERM=xterm LC_ALL=C.UTF-8 SHELL=/bin/sh run on-screen shell --names --plain atl/name
-    [ "$output" = 'ATL_NAME <- atl/name (T)' ]
+    [ "$output" = 'ATL_NAME <- atl/name(T)' ]
 }
 
 @test "exec --names --vars: never prints a value from the environment or the store" {
@@ -170,6 +170,30 @@ ATL_NAME <- atl/name (T)' ]
     SECRET_ENV=hunter2 run "$FOLIO" exec -s --names --vars "$SANDBOX/a.vars"
     [ "$status" -eq 0 ]
     [[ $output != *hunter2* && $output != *shared-token* && $output != *dbuser* ]]
+}
+
+@test "exec --debug --vars: shows how each value is made, never a value; then runs" {
+    make-store
+    vars 'A=${SECRET_ENV}' 'B=@{gh/token}' 'C=x-@{prod/db/user}'
+    SECRET_ENV=hunter2 run --separate-stderr "$FOLIO" exec -s --debug --vars "$SANDBOX/a.vars" -- sh -c "$(show A B)"
+    [ "$status" -eq 0 ]
+    [ "$output" = "A=[hunter2]
+B=[shared-token]" ]
+    [ "$stderr" = 'A <- [$SECRET_ENV]
+B <- [gh/token(S)]
+C <- x-[prod/db/user(T)]' ]
+}
+
+@test "exec --debug: marked for stderr's screen, not stdout's" {
+    make-store
+    local g=$'\e[32m' off=$'\e[0m'
+    # As if stderr were a screen and stdout not.
+    on-screen() { bash -c 'source "$1"; shift; function on-screen() { (( SCREEN_FD == 2 )); }; Main "$@"' _ "$FOLIO" "$@" ; }
+    TERM=xterm LC_ALL=C.UTF-8 run --separate-stderr on-screen exec --debug atl/name -- true
+    [ "$status" -eq 0 ]
+    [ "$stderr" = "ATL_NAME <- $g📄atl/name$off" ]
+    TERM=xterm LC_ALL=C.UTF-8 run --separate-stderr on-screen exec --debug --plain atl/name -- true
+    [ "$stderr" = "ATL_NAME <- atl/name(T)" ]
 }
 
 @test "exec --vars: a secret needs --secrets — even in a fallback not needed today, or in a folder" {
