@@ -2425,8 +2425,8 @@ Ls() {
 
 function run-exec-help() {
     cat <<'HELP'
-Usage: folio exec [-s|--secrets] [-a|--all] [-n|--names] [--plain] [--vars <file>]...
-                  [--store-passphrase-fd <n>] [--from <file> [--file-passphrase-fd <n>]]
+Usage: folio exec [-s|--secrets] [-a|--all] [-n|--names|--debug|--confirm] [--plain]
+                  [--vars <file>]... [--store-passphrase-fd <n>] [--from <file> [--file-passphrase-fd <n>]]
                   <entry>... -- <command> [<arg>...]
 
 Run a command with entries from the store as environment variables. Texts load by default;
@@ -2451,8 +2451,11 @@ Options:
   -a, --all           Load every entry outside the @namespaces first; <entry> is then optional.
   -n, --names         Only show which variable would get which entry, and stop: nothing is read,
                       nothing runs.
-      --plain         With --names: mark secrets (S) and texts (T), with no colour, even on a
-                      screen.
+      --debug         Show the same on stderr, then go on.
+      --confirm       Show the same on stderr, and go on only when you say yes (asked on the
+                      terminal, not stdin).
+      --plain         With --names, --debug or --confirm: mark secrets (S) and texts (T), with no
+                      colour, even on a screen.
   --vars <file>       Set the variables a vars file says (e.g. prod-deploy.vars); can be given
                       more than once. <entry> is then optional.
   --from <file>       Take the entries from a file made by `folio export`, not from the store,
@@ -2471,8 +2474,8 @@ HELP
 
 function run-shell-help() {
     cat <<'HELP'
-Usage: folio shell [-s|--secrets] [-a|--all] [-n|--names] [--plain] [--vars <file>]...
-                   [--store-passphrase-fd <n>] [--from <file> [--file-passphrase-fd <n>]] <entry>...
+Usage: folio shell [-s|--secrets] [-a|--all] [-n|--names|--debug|--confirm] [--plain]
+                   [--vars <file>]... [--store-passphrase-fd <n>] [--from <file> [--file-passphrase-fd <n>]] <entry>...
 
 Start your shell ($SHELL) with entries from the store as environment variables, and say which
 names were loaded (never their values). FOLIO_SHELL=1 is set. Type `exit` to leave.
@@ -2483,8 +2486,11 @@ Options:
   -a, --all           Load every entry outside the @namespaces first; <entry> is then optional.
   -n, --names         Only show which variable would get which entry, and stop: nothing is read,
                       nothing runs.
-      --plain         With --names: mark secrets (S) and texts (T), with no colour, even on a
-                      screen.
+      --debug         Show the same on stderr, then go on.
+      --confirm       Show the same on stderr, and go on only when you say yes (asked on the
+                      terminal, not stdin).
+      --plain         With --names, --debug or --confirm: mark secrets (S) and texts (T), with no
+                      colour, even on a screen.
   --vars <file>       Set the variables a vars file says, as in `folio exec`; can be given more
                       than once. <entry> is then optional.
   --from <file>       Take the entries from a file made by `folio export`, as in `folio exec`.
@@ -2509,7 +2515,7 @@ ENTRIES_IN="the store"
 # while reading ever sees a value already loaded. With --from, the entries come from an export
 # file instead of the store, which is then not needed at all.
 function exec-with-entries() {
-    local how=$1 secrets=0 all=0 only_names=0 dashes=0 from_file="" passphrase_fd="" entries=() arg ; shift
+    local how=$1 secrets=0 all=0 only_names=0 debug=0 confirm=0 dashes=0 from_file="" passphrase_fd="" entries=() arg ; shift
     while (( $# > 0 )); do
         arg=$1 ; shift
         case $arg in
@@ -2517,6 +2523,8 @@ function exec-with-entries() {
             -s|--secrets) secrets=1 ;;
             -a|--all)     all=1 ;;
             -n|--names)   only_names=1 ;;
+            --debug)      debug=1 ;;
+            --confirm)    debug=1 confirm=1 ;;
             --plain)      PLAIN=1 ;;
             --from|--file-passphrase-fd|--vars)
                           [[ $# -gt 0 && -n $1 ]] || die "$arg needs a value."
@@ -2535,14 +2543,18 @@ function exec-with-entries() {
         esac
     done
     local from_usage="[--vars <file>]... [--store-passphrase-fd <n>] [--from <file> [--file-passphrase-fd <n>]]"
+    (( ! (only_names && debug) )) \
+        || die "$how: --names only shows the names; --debug and --confirm show them and go on."
+    # --debug and --confirm show the names on stderr: marked for that screen, not stdout's.
+    (( ! debug )) || SCREEN_FD=2
     set-marks    # for --names, here: what it shows of a vars file is made in $(…)
     local given=$(( ${#entries[@]} + all + ${#VARS_KIND[@]} ))
     if [[ $how == exec ]]; then
         (( given > 0 && (only_names || (dashes && $# > 0)) )) \
-            || die "Usage: folio exec [-s|--secrets] [-a|--all] [-n|--names] [--plain] $from_usage <entry>... -- <command> [<arg>...]"
+            || die "Usage: folio exec [-s|--secrets] [-a|--all] [-n|--names|--debug|--confirm] [--plain] $from_usage <entry>... -- <command> [<arg>...]"
     else
         (( given > 0 && ! dashes )) \
-            || die "Usage: folio shell [-s|--secrets] [-a|--all] [-n|--names] [--plain] $from_usage <entry>..."
+            || die "Usage: folio shell [-s|--secrets] [-a|--all] [-n|--names|--debug|--confirm] [--plain] $from_usage <entry>..."
         set -- "${SHELL:-/bin/sh}"
     fi
     if [[ -n $from_file ]]; then
@@ -2561,7 +2573,28 @@ function exec-with-entries() {
     # run, as --names does it: it reads no value, and stops at an entry that is not there before
     # any value is read. It runs in a subshell, so nothing it sets is kept. What it says goes to
     # the screen only when it fails; when it does not, the real run below says the same notes.
-    if (( ! only_names && ${#VARS_KIND[@]} > 0 )); then
+    # With --debug, that dry run also shows the names, as --names does, straight to stderr (fd 3);
+    # the notes it says are kept, and shown only when it fails. With --confirm, nothing is read
+    # until the user says yes.
+    if (( debug )); then
+        local names_errors
+        if ! names_errors=$(
+                {
+                    if (( all )); then add-folder "$how" "$secrets" "" " " ; fi
+                    apply-vars "$how" "$secrets" 1
+                    (( ${#entries[@]} == 0 )) || resolve-entries "$how" "$secrets" "${entries[@]}"
+                    (( ${#EXEC_VARS[@]} > 0 )) || die "$how: nothing to load."
+                    print-entry-names >&3
+                } 3>&2 2>&1
+            ); then
+            printf '%s\n' "$names_errors" >&2
+            exit 1
+        fi
+        if (( confirm )); then
+            local question="run $1?" ; [[ $how == exec ]] || question="start $1?"
+            confirm-on-tty "folio $how: $question" || die "Cancelled."
+        fi
+    elif (( ! only_names && ${#VARS_KIND[@]} > 0 )); then
         local dry_run_errors
         if ! dry_run_errors=$(
                 {
@@ -2718,13 +2751,13 @@ function print-entry-names() {
     done
 }
 
-# entry-mark <name>.gpg|<name>.txt: the name marked as set-marks says — "🔑 <name>" in yellow on a
-# screen, "<name> (S)" elsewhere; for a text, 📄, green and (T).
+# entry-mark <name>.gpg|<name>.txt: the name marked as set-marks says — "🔑<name>" in yellow on a
+# screen, "<name>(S)" elsewhere; for a text, 📄, green and (T).
 function entry-mark() {
     local name=${1%.*} on=$TEXT_ON mark=$TEXT_MARK
     [[ $1 != *.gpg ]] || on=$SECRET_ON mark=$SECRET_MARK
-    if (( EMOJI )); then echo "$on$mark $name$COLOR_OFF"
-    else                 echo "$on$name $mark$COLOR_OFF"
+    if (( EMOJI )); then echo "$on$mark$name$COLOR_OFF"
+    else                 echo "$on$name$mark$COLOR_OFF"
     fi
 }
 
@@ -2934,7 +2967,7 @@ function check-vars-name() {
 #   check  only see that it is well written, collecting the @{…} names in SCAN_NAMES — and in
 #          SCAN_OPTIONAL, 1 for one that has a fallback or is in one (it may not be needed), else 0;
 #   eval   make the value: look each ${…} and @{…} up, a fallback only when needed;
-#   names  the same, but each part shows where it is from ([$HOME], [gh/token (S)]): no value read.
+#   names  the same, but each part shows where it is from ([$HOME], [gh/token(S)]): no value read.
 # Fails with SCAN_ERROR.
 function scan-value() {
     SCAN_TEXT=$1 SCAN_POS=0 SCAN_LEN=${#1} SCAN_NAMES=() SCAN_OPTIONAL=() SCAN_DEPTH=0
@@ -3666,8 +3699,9 @@ function store-tree() {
 
 # --plain: (S)/(T) and no colour, even on a screen.
 PLAIN=0
-# on-screen: stdout is a terminal.
-function on-screen() { [[ -t 1 ]] ; }
+# on-screen: stdout (or SCREEN_FD, where the marks are shown) is a terminal.
+SCREEN_FD=1
+function on-screen() { [[ -t $SCREEN_FD ]] ; }
 # use-color: true when stdout is a screen that shows colour — a terminal, not TERM=dumb, and no
 # NO_COLOR (https://no-color.org) or --plain.
 function use-color() { (( ! PLAIN )) && on-screen && [[ -z ${NO_COLOR:-} && ${TERM:-dumb} != dumb ]] ; }
@@ -3847,6 +3881,16 @@ function confirm() {
     local answer
     printf '%s [y/N] ' "$1" >&2
     IFS= read -r answer || { echo >&2; return 1; }
+    [[ $answer == [yY]* ]]
+}
+
+# confirm-on-tty <question>: confirm, asked and answered on the terminal — never stdin, which may be
+# for the command that runs next. Dies when there is no terminal.
+function confirm-on-tty() {
+    local answer
+    { : < /dev/tty ; } 2>/dev/null || die "--confirm needs a terminal to ask on."
+    printf '%s [y/N] ' "$1" > /dev/tty
+    IFS= read -r answer < /dev/tty || { echo > /dev/tty ; return 1 ; }
     [[ $answer == [yY]* ]]
 }
 

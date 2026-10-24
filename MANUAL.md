@@ -1280,8 +1280,8 @@ Runs a command with entries from the EnvFolio store as environment variables, th
 on a command line, into a file, or on the screen.
 
 ```
-folio exec [-s|--secrets] [-a|--all] [-n|--names] [--plain] [--vars <file>]...
-           [--store-passphrase-fd <n>] [--from <file> [--file-passphrase-fd <n>]]
+folio exec [-s|--secrets] [-a|--all] [-n|--names|--debug|--confirm] [--plain]
+           [--vars <file>]... [--store-passphrase-fd <n>] [--from <file> [--file-passphrase-fd <n>]]
            <entry>... -- <command> [<arg>...]
 ```
 
@@ -1290,7 +1290,9 @@ folio exec [-s|--secrets] [-a|--all] [-n|--names] [--plain] [--vars <file>]...
 | `-s`, `--secrets` | Also load secrets. Without it, a secret named directly is refused, and the secrets in a folder are left out, with a note on stderr saying how many. |
 | `-a`, `--all` | Load every entry outside the namespaces (top `@` folders) first, wherever it is typed; the entries given then layer over it. With it, `<entry>` is optional. |
 | `-n`, `--names` | Only show which variable would get which entry, in the order they are set, marked (S)ecret or (T)ext — on a screen, 🔑 or 📄 in front, coloured as in `folio ls` — and stop. Nothing is read or decrypted (no passphrase, no signature check), and the command, if given, does not run. With `--from`, the file is still opened to see what is in it. |
-| `--plain` | With `--names`: (S)/(T) and no colour, even on a screen. |
+| `--debug` | Show the same as `--names`, on stderr, then run the command. The names are shown before any value is read. Not with `--names`. |
+| `--confirm` | Show the same as `--debug`, then ask `run <command>? [y/N]` and run it only on yes. Asked and answered on the terminal (`/dev/tty`), never stdin, which stays the command's; with no terminal it refuses. Nothing is read or decrypted before the yes. |
+| `--plain` | With `--names`, `--debug` or `--confirm`: (S)/(T) and no colour, even on a screen. |
 | `--vars <file>` | Set the variables a vars file says: constants, values from your environment, entries, with fallbacks. Can be given more than once. With it, `<entry>` is optional. See [From a vars file](#from-a-vars-file). |
 | `--from <file>` | Take the entries from a file made by `folio export`, not from the store. No store is needed, and none is made or touched. See [From an export file](#from-an-export-file). |
 | `--file-passphrase-fd <n>` | With `--from`: the file's passphrase, from the first line of file descriptor `<n>`, e.g. `--file-passphrase-fd 3 3< pass.txt`. stdin stays the command's. |
@@ -1397,11 +1399,24 @@ folio exec --names --secrets gh @nawa -- gh repo list
 ```
 
 ```
-GH_TOKEN <- @nawa/gh/token (S)
-GH_USER  <- @nawa/gh/user (T)
+GH_TOKEN <- @nawa/gh/token(S)
+GH_USER  <- @nawa/gh/user(T)
 ```
 
 Shows what the command would get, without running it. Warnings and notes still show on stderr.
+
+To see the same and run it, use `--debug` (the names go to stderr, so the command's output stays
+clean); to see it and be asked first, `--confirm`:
+
+```bash
+folio exec --confirm --secrets gh @nawa -- gh repo list
+```
+
+```
+GH_TOKEN <- @nawa/gh/token(S)
+GH_USER  <- @nawa/gh/user(T)
+folio exec: run gh? [y/N]
+```
 
 ### Pick the variable name
 
@@ -1482,13 +1497,13 @@ folio exec -s --names --vars prod-deploy.vars
 ```
 LOG_LEVEL <- debug
 HOST_NAME <- [$HOSTNAME]
-GH_TOKEN  <- [gh/token (S)]
-DB_URL    <- postgres://[prod/db/user (T)]:[prod/db/pass (S)]@db:5432/app
-JIRA_HOST <- atlassian/jira/host (T)
+GH_TOKEN  <- [gh/token(S)]
+DB_URL    <- postgres://[prod/db/user(T)]:[prod/db/pass(S)]@db:5432/app
+JIRA_HOST <- atlassian/jira/host(T)
 ```
 
 Each value as it would be made, each part shown by where it would come from — `[$NAME]` from the
-environment (`[$NAME (unset)]` when it would be empty), `[name (S)]` or `[name (T)]` from the
+environment (`[$NAME (unset)]` when it would be empty), `[name(S)]` or `[name(T)]` from the
 store, or the constant — never a value. A mistake, or an entry that is not there, stops it as the
 real run would.
 
@@ -1534,7 +1549,7 @@ Starts your shell (`$SHELL`, or `/bin/sh`) with entries from the EnvFolio store 
 variables. It is `folio exec <entry>... -- "$SHELL"`, plus a line saying what was loaded.
 
 ```
-folio shell [-s|--secrets] [-a|--all] [-n|--names] [--plain] [--vars <file>]... [--store-passphrase-fd <n>] [--from <file> [--file-passphrase-fd <n>]] <entry>...
+folio shell [-s|--secrets] [-a|--all] [-n|--names|--debug|--confirm] [--plain] [--vars <file>]... [--store-passphrase-fd <n>] [--from <file> [--file-passphrase-fd <n>]] <entry>...
 ```
 
 | Option | Meaning |
@@ -1542,7 +1557,9 @@ folio shell [-s|--secrets] [-a|--all] [-n|--names] [--plain] [--vars <file>]... 
 | `-s`, `--secrets` | Also load secrets. |
 | `-a`, `--all` | Load every entry outside the namespaces first, as in `folio exec`. |
 | `-n`, `--names` | Only show which variable would get which entry, as in `folio exec`; no shell starts. |
-| `--plain` | With `--names`: (S)/(T) and no colour, even on a screen. |
+| `--debug` | Show the same on stderr, then start the shell. |
+| `--confirm` | Show the same on stderr, and start the shell only when you say yes, as in `folio exec`. |
+| `--plain` | With `--names`, `--debug` or `--confirm`: (S)/(T) and no colour, even on a screen. |
 | `--vars <file>` | Set the variables a vars file says, as in `folio exec`; can be given more than once. |
 | `--from <file>` | Take the entries from a file made by `folio export`, as in `folio exec`. |
 | `--file-passphrase-fd <n>` | With `--from`: the file's passphrase, from file descriptor `<n>`, as in `folio exec`. |
