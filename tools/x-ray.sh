@@ -86,8 +86,8 @@ function show-store() {
     while IFS= read -r file; do
         name=${file#"$dir"/}
         case $name in
-            *.gpg)     echo "  (S) ${name%.gpg}" ; locks  "$file" "$home" | sed 's/^/        /' ;;
-            *.txt)     echo "  (T) ${name%.txt}" ;;
+            *.gpg)     echo "  (S)${name%.gpg}" ; locks  "$file" "$home" | sed 's/^/        /' ;;
+            *.txt)     echo "  (T)${name%.txt}" ;;
             *.txt.sig) signer "$file" "$home" | sed 's/^/        /' ;;
         esac
     done < <(find "$dir" -name .git -prune -o -type f \( -name '*.gpg' -o -name '*.txt' -o -name '*.txt.sig' \) -print \

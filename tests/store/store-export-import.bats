@@ -180,7 +180,7 @@ left-clean() {
     # web/user clashes: "2" skips it.
     run --separate-stderr "$FOLIO" import "$(export-file)" < <(printf '9\n1 3-4\n2\n')
     [ "$status" -eq 0 ]
-    [[ $stderr == *"   4) (T) web/user"* && $stderr == *"Not a choice: '9'"* ]]
+    [[ $stderr == *"   4) (T)web/user"* && $stderr == *"Not a choice: '9'"* ]]
     [[ $output == *"Texts:   1"* && $output == *"Secrets: 1"* && $output == *"Skipped: 1"* ]]
     [ "$("$FOLIO" secret show aws/key)" = "AKIA" ]
     [ "$("$FOLIO" text show web/home)" = "https://example.com" ]
