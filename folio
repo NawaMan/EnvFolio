@@ -1577,12 +1577,12 @@ function parse-picks() {
     printf '%s' "${picked# }" | tr ' ' '\n' | sort -n
 }
 
-# item-label <file>: "(S) <name>" for <name>.gpg, "(T) <name>" for <name>.txt — as
+# item-label <file>: "(S)<name>" for <name>.gpg, "(T)<name>" for <name>.txt — as
 # `folio ls --flat`.
 function item-label() {
     case $1 in
-        *.gpg) echo "(S) ${1%.gpg}" ;;
-        *)     echo "(T) ${1%.txt}" ;;
+        *.gpg) echo "(S)${1%.gpg}" ;;
+        *)     echo "(T)${1%.txt}" ;;
     esac
 }
 

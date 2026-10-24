@@ -137,7 +137,7 @@ ALL=(aws/key.gpg web/github.gpg web/home.txt web/user.txt)
 @test "import flow 5: --all instead of names — a clash is asked; skip keeps what is there" {
     make-there-store
     import-answering 2 -- --file-passphrase-fd 5 --all "$EXPORT" 5< <(printf 'pw\n')
-    [[ $output == *"Already in the store:"*"(T) web/user"* && $output == *"What to do with these 1?"* ]]
+    [[ $output == *"Already in the store:"*"(T)web/user"* && $output == *"What to do with these 1?"* ]]
     assert-imported "${ALL[@]}"
     [ "$("$FOLIO" text show web/user)" = "old" ]
 }

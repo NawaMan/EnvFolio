@@ -583,10 +583,10 @@ folio ls --flat
 ```
 
 ```
-(T) note
-(S) web/github
-(T) web/github
-(T) web/home
+(T)note
+(S)web/github
+(T)web/github
+(T)web/home
 ```
 
 One full name per line, ready for `grep` or a script.
