@@ -41,8 +41,8 @@ shows-nothing-secret() {
 @test "x-ray: a store folder — each secret's key, each text's signer, never a value" {
     run "$XRAY" "$FOLIO_STORE_DIR"
     [ "$status" -eq 0 ]
-    [[ $output == *"(S) web/github"*"encrypted to "*"Test User <test@example.com>"* ]]
-    [[ $output == *"(T) web/home"*"signed by "*"Test User <test@example.com>"*", verifies"* ]]
+    [[ $output == *"(S)web/github"*"encrypted to "*"Test User <test@example.com>"* ]]
+    [[ $output == *"(T)web/home"*"signed by "*"Test User <test@example.com>"*", verifies"* ]]
     shows-nothing-secret
 }
 
@@ -58,7 +58,7 @@ shows-nothing-secret() {
     run "$XRAY" "$SANDBOX"/out/*--folio.tar.gz
     [ "$status" -eq 0 ]
     [[ $output == *"folio-backup 1"* && $output == *"key.asc (a secret key; not shown)"* ]]
-    [[ $output == *"(S) web/github"* && $output == *", verifies"* ]]
+    [[ $output == *"(S)web/github"* && $output == *", verifies"* ]]
     [[ $output != *"BEGIN PGP"* ]]
     shows-nothing-secret
 }
@@ -80,8 +80,8 @@ shows-nothing-secret() {
     GNUPGHOME="$SANDBOX/there" run "$XRAY" --open "$SANDBOX/out/to.folio"
     [ "$status" -eq 0 ]
     [[ $output == *"encrypted to "*"Server <server@example.com>"* && $output == *"folio-export 1"* ]]
-    [[ $output == *"(S) web/github"*"encrypted to "*"EnvFolio export "* ]]
-    [[ $output == *"(T) web/home"*"EnvFolio export "*", verifies"* ]]
+    [[ $output == *"(S)web/github"*"encrypted to "*"EnvFolio export "* ]]
+    [[ $output == *"(T)web/home"*"EnvFolio export "*", verifies"* ]]
     shows-nothing-secret
     # Here, without the server's key, it cannot be opened.
     run "$XRAY" --open "$SANDBOX/out/to.folio"
