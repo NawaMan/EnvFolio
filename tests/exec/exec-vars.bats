@@ -153,9 +153,9 @@ ATL_NAME  <- atl/name(T)' ]
     on-screen() { bash -c 'source "$1"; shift; function on-screen() { return 0; }; Main "$@"' _ "$FOLIO" "$@" ; }
     TERM=xterm LC_ALL=C.UTF-8 run on-screen exec -s --names --vars "$SANDBOX/a.vars"
     [ "$status" -eq 0 ]
-    [ "$output" = "TOKEN    <- [$y🔑gh/token$off]
-URL      <- //[$g📄prod/db/user$off]
-ATL_NAME <- $g📄atl/name$off" ]
+    [ "$output" = "TOKEN    <- [${y}🔑gh/token$off]
+URL      <- //[${g}📄prod/db/user$off]
+ATL_NAME <- ${g}📄atl/name$off" ]
     TERM=xterm LC_ALL=C.UTF-8 run on-screen exec -s --names --plain --vars "$SANDBOX/a.vars"
     [ "$output" = 'TOKEN    <- [gh/token(S)]
 URL      <- //[prod/db/user(T)]
@@ -191,7 +191,7 @@ C <- x-[prod/db/user(T)]' ]
     on-screen() { bash -c 'source "$1"; shift; function on-screen() { (( SCREEN_FD == 2 )); }; Main "$@"' _ "$FOLIO" "$@" ; }
     TERM=xterm LC_ALL=C.UTF-8 run --separate-stderr on-screen exec --debug atl/name -- true
     [ "$status" -eq 0 ]
-    [ "$stderr" = "ATL_NAME <- $g📄atl/name$off" ]
+    [ "$stderr" = "ATL_NAME <- ${g}📄atl/name$off" ]
     TERM=xterm LC_ALL=C.UTF-8 run --separate-stderr on-screen exec --debug --plain atl/name -- true
     [ "$stderr" = "ATL_NAME <- atl/name(T)" ]
 }

@@ -22,6 +22,8 @@ setup() {
     [[ $GNUPGHOME == "$SANDBOX"/* && $FOLIO_STORE_DIR == "$SANDBOX"/* && $HOME == "$SANDBOX"/* ]]
 
     FOLIO="$BATS_TEST_DIRNAME/../../folio"
+    PQC=0
+    if bash -c 'source "$1" && gpg-has-pqc' _ "$FOLIO"; then PQC=1; fi
 }
 
 teardown() {
@@ -32,10 +34,16 @@ teardown() {
 # --- Helpers ------------------------------------------------------------------
 
 # init-answering [<answer>...] -- [<option>...]: run `folio init <option>...` with the
-# answers on stdin, one per line (stdin is empty when there are none).
+# answers on stdin, one per line (stdin is empty when there are none). @kind is the answer to
+# "Which kind of key?": 1 (post-quantum) when this gpg can make one and so asks, else none.
 init-answering() {
     local answers=()
-    while (( $# > 0 )) && [[ $1 != -- ]]; do answers+=("$1") ; shift ; done
+    while (( $# > 0 )) && [[ $1 != -- ]]; do
+        if [[ $1 != @kind ]]; then answers+=("$1")
+        elif (( PQC )); then       answers+=(1)
+        fi
+        shift
+    done
     (( $# > 0 )) && shift
     if (( ${#answers[@]} > 0 )); then
         run "$FOLIO" init "$@" < <(printf '%s\n' "${answers[@]}")
@@ -98,7 +106,7 @@ assert-nothing-made() {
 
 @test "init flow 1: nothing given — asks name, email; gpg asks the passphrase (no picker)" {
     use-pinentry pw-one
-    init-answering "Jane Doe" jane@example.com "" --
+    init-answering "Jane Doe" jane@example.com @kind "" --
     [[ $output == *"Your name"* && $output == *"Your email"* && $output == *"Next, gpg asks you to choose the new key's passphrase"* ]]
     [[ $output != *"Which GPG key"* ]]
     assert-new-key-store "Jane Doe" jane@example.com pw-one
@@ -106,7 +114,7 @@ assert-nothing-made() {
 
 @test "init flow 2: --name — asks email; gpg asks the passphrase" {
     use-pinentry pw-two
-    init-answering jane@example.com "" -- --name "Jane Doe"
+    init-answering jane@example.com @kind "" -- --name "Jane Doe"
     [[ $output != *"Your name"* ]]
     [[ $output == *"Your email"* && $output == *"Next, gpg asks you to choose the new key's passphrase"* ]]
     assert-new-key-store "Jane Doe" jane@example.com pw-two
@@ -114,7 +122,7 @@ assert-nothing-made() {
 
 @test "init flow 3: --name --email — only gpg asks, for the passphrase" {
     use-pinentry pw-three
-    init-answering "" -- --name "Jane Doe" --email jane@example.com
+    init-answering @kind "" -- --name "Jane Doe" --email jane@example.com
     [[ $output != *"Your name"* && $output != *"Your email"* ]]
     [[ $output == *"Next, gpg asks you to choose the new key's passphrase"* ]]
     assert-new-key-store "Jane Doe" jane@example.com pw-three
@@ -148,7 +156,7 @@ assert-nothing-made() {
 @test "init flow 7: an existing key, nothing given — the picker, then a new key" {
     add-existing-key
     use-pinentry pw-seven
-    init-answering 2 "Jane Doe" jane@example.com "" --
+    init-answering 2 "Jane Doe" jane@example.com @kind "" --
     [[ $output == *"Which GPG key"* && $output == *"Your name"* && $output == *"Your email"* ]]
     assert-new-key-store "Jane Doe" jane@example.com pw-seven
     [ "$(store-fpr)" != "$OLD_FPR" ]
@@ -167,7 +175,7 @@ assert-nothing-made() {
 
 @test "init flow: gpg's passphrase prompt cancelled — nothing made" {
     use-pinentry --cancel
-    init-answering "" -- --name "Jane Doe" --email jane@example.com
+    init-answering @kind "" -- --name "Jane Doe" --email jane@example.com
     [[ $output == *"Creating the key failed"* || $output == *"no key was created"* ]]
     assert-nothing-made 0
 }
