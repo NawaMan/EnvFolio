@@ -99,6 +99,26 @@ teardown() {
     [ ! -e "$FOLIO_STORE_DIR/.gpg-id" ]
 }
 
+@test "store-init: a new key is post-quantum when this gpg can make one, else classical" {
+    run Init --name "New User" --email new@example.com --store-passphrase-stdin <<< "correct horse"
+    [ "$status" -eq 0 ]
+    local fpr kind
+    fpr=$(cat "$FOLIO_STORE_DIR/.gpg-id")
+    kind=$(key-kind "$fpr")
+    if gpg-has-pqc; then
+        [[ $kind == "post-quantum ("* ]]
+    else
+        [[ $kind == "classical ("* ]]
+    fi
+    [[ $output == *"Type:    $kind"* ]]
+}
+
+@test "store-init: the summary names the type of an existing key" {
+    run Init --key "$TEST_FPR"
+    [ "$status" -eq 0 ]
+    [[ $output == *"Type:    classical (cv25519)"* ]]
+}
+
 # The store folder's mode, on Linux and macOS.
 dir-mode() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
 

@@ -51,8 +51,10 @@ For Tab completion, add `eval "$(folio completion bash)"` to `~/.bashrc`, or
 
 - `bash` 3.2 or newer (the one macOS ships is enough)
 - `pass`
-- `gpg` — but not 2.5.24 (Homebrew's at the time of writing): it imports a secret key it then
-  cannot decrypt with, so `restore`, `import` and `--from` fail. EnvFolio warns. 2.4 is fine.
+- `gpg` — 2.4 is fine; 2.5.21 or later can also make a post-quantum key (see `folio init` in
+  the MANUAL, and [Updating gpg for post-quantum keys](#updating-gpg-for-post-quantum-keys)).
+  On 2.5.24, `restore`, `import` and `--from` warn that it may import a secret key it then
+  cannot decrypt with.
 - `git`
 - `tar`
 - `gzip`
@@ -65,3 +67,22 @@ For Tab completion, add `eval "$(folio completion bash)"` to `~/.bashrc`, or
 
 - `FOLIO_STORE_DIR` - the path to the EnvFolio store. Defaults to `$HOME/.folio`. The store has the same
   layout as a `pass` store, but is kept apart from your own `~/.password-store`.
+
+# Updating gpg for post-quantum keys
+
+A post-quantum key needs gpg 2.5.21 or later on every machine that opens the store, a backup of
+it, or an export locked to it. Check with `gpg --version`. If it is older, EnvFolio keeps working
+with classical keys, but it cannot make, restore or open post-quantum ones.
+
+- **macOS** — install gpg with [Homebrew](https://brew.sh): `brew install gnupg` (or
+  `brew upgrade gnupg`). If `gpg --version` still shows an older one (for example GPG Suite's),
+  put Homebrew's `bin` folder ahead of it on your `PATH`.
+- **Linux** — if your distribution's package is already 2.5.21 or later, upgrading it is enough.
+  Many still ship 2.4; then install gpg with [Homebrew on Linux](https://docs.brew.sh/Homebrew-on-Linux)
+  (`brew install gnupg`) and put its `bin` folder ahead on your `PATH`, or build it from
+  [gnupg.org](https://gnupg.org/download/).
+- **Windows** — EnvFolio runs in WSL: follow the Linux steps there.
+
+Then stop the old gpg-agent, so the new gpg starts its own: `gpgconf --kill all`. `pass` uses a
+command named `gpg2` instead of `gpg` when there is one: if `gpg2 --version` shows an older gpg,
+remove it or put the new one first.
