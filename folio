@@ -321,7 +321,8 @@ can get in, EnvFolio warns and asks before using it. Anything not given is asked
 Options:
   --key <id>          Use an existing secret key: fingerprint, key id or email (must match one).
                       No passphrase is needed: the store only encrypts to the key.
-  --new-key           Create a new key. Implied by any option below.
+  --new-key           Create a new key — post-quantum when gpg can make one. Implied by any
+                      option below.
   --name <name>       The new key's name.
   --email <email>     The new key's email.
   --store-passphrase-stdin
@@ -374,6 +375,7 @@ Init() {
 This creates your EnvFolio store, where your texts and secrets are kept. It needs:
   - A folder for the store.
   - A GPG key to protect it: an existing one, or a new one made from your name and email.
+    (For a key with special needs, make it with gpg first and pick it here.)
 A new key also needs a passphrase. An existing key needs none: the store is only encrypted to it.
 EOF
 
@@ -421,7 +423,7 @@ EOF
     fi
 
     # Input: the key — --key; otherwise picked from the keyring's secret keys, or a new one.
-    local key="" passphrase="" uid expiry
+    local key="" passphrase="" algo="" asked=0 uid expiry
     if [[ -n $key_id ]]; then
         key=$(find-key "$key_id") || exit 1
     elif (( ! new_key )); then
@@ -431,6 +433,7 @@ EOF
     if (( new_key )); then
         # Input: the new key's name and email — --name / --email, or asked with a guess
         # (git, passwd, EMAIL).
+        [[ -n $name && -n $email ]] || asked=1
         [[ -n $name  ]] || name=$( ask-text "Your name"  "e.g. Jane Doe"         "$(guess-name)")  || exit 1
         [[ -n $name  ]] || die "A name is needed to create a key."
         show-answer "Name" "$name"
@@ -451,7 +454,17 @@ EOF
             show-answer "Passphrase" "************"
         else
             show-answer "Passphrase" "gpg asks for it when it makes the key"
+            asked=1
         fi
+        # Input: the new key's kind — post-quantum when this gpg can make one, else gpg's default.
+        # Asked (post-quantum or classical) when this gpg can, unless every input above came from
+        # an option: a run with no prompts stays one.
+        algo=default
+        if gpg-has-pqc; then
+            algo=pqc
+            if (( asked )); then algo=$(ask-key-kind) || exit 1; fi
+        fi
+        show-answer "Key type" "$(key-kind-label "$algo")"
     else
         show-answer "Key" "$key"
     fi
@@ -463,13 +476,13 @@ EOF
         section "Generating the key."
         if [[ -n $passphrase ]]; then
             # printf is a builtin: the passphrase reaches gpg through a pipe, never through argv.
-            key=$(printf '%s\n' "$passphrase" | generate-key "$name" "$email" 1) || exit 1
+            key=$(printf '%s\n' "$passphrase" | generate-key "$name" "$email" 1 "$algo") || exit 1
             unset passphrase
         else
             acknowledge "Next, gpg asks you to choose the new key's passphrase (twice)." \
                         "It protects the key: you need it to read your secrets and to add texts." \
                         "It cannot be reset, so keep it safe."
-            key=$(generate-key "$name" "$email" 0) || exit 1
+            key=$(generate-key "$name" "$email" 0 "$algo") || exit 1
         fi
         section-end
         show-answer "Key" "$key"
@@ -491,7 +504,7 @@ EOF
     start-store-history "$uid"
 
     section "Summary"
-    store-summary "$key" "$uid" "$expiry"
+    store-summary "$key" "$uid" "$expiry" "$(key-kind "$key")"
     echo ""
 }
 
@@ -512,13 +525,14 @@ function start-store-history() {
 
 # The closing box: what was set up, and what the user must keep to ever get their passwords back.
 function store-summary() {
-    local key=$1 uid=$2 expiry=$3 lines
+    local key=$1 uid=$2 expiry=$3 kind=$4 lines
     lines=(
         "Your pass store is ready."
         ""
         "Store:   $(tilde-path "$(Path)")"
         "Key:     $key"
         "         $uid"
+        "Type:    $kind"
         "Expires: ${expiry:-never}"
         ""
         "To get your passwords back if this machine is lost, you need both:"
@@ -703,7 +717,8 @@ Backup() {
         ""
         "To restore it, here or on a new machine:"
         "  folio restore $file"
-        "That needs the key's passphrase$( (( encrypt )) && echo ", and the backup's own" )."
+        "That needs the key's passphrase$( (( encrypt )) && echo ", and the backup's own" )$(
+            has-pqc-key "$stage/key.asc" && echo ", and gpg 2.5.21 or later (the key is post-quantum)")."
         "Keep the file somewhere safe and offline."
     )
     echo ""
@@ -827,6 +842,11 @@ Restore() {
         [[ $key =~ ^[0-9A-F]{40,64}$ ]] || die "$file names a key that is not a fingerprint: $key"
     done
     show-answer "Store" "$name"
+    # An older gpg imports a post-quantum key without a word, then cannot decrypt with it.
+    if has-pqc-key "$stage/key.asc" && ! gpg-has-pqc; then
+        die "This backup's key is post-quantum: restoring it needs gpg 2.5.21 or later" \
+            "(this one is $(gpg-version)). Nothing changed."$'\n'"$PQC_GPG_HELP"
+    fi
 
     section "Import the key"
     gpg --batch --quiet --import "$stage/key.asc" || die "Importing the key failed."
@@ -1134,6 +1154,8 @@ EOF
     if [[ -n $recipient ]]; then
         lock="to $recipient"
         opens="the secret key of $(GNUPGHOME=$home key-uid "$recipient")"
+        [[ $(GNUPGHOME=$home key-kind "$recipient") != post-quantum* ]] \
+            || opens+=", and gpg 2.5.21 or later (the key is post-quantum)"
     fi
     local box=("Your items are exported."
                ""
@@ -1419,6 +1441,11 @@ function open-export() {
     EXPORT_HOME=$stage/home EXPORT_ROOT=$stage/unpack/store
     new-gpg-home "$EXPORT_HOME"
     mkdir "$stage/unpack"
+    # An older gpg cannot open a file locked to a post-quantum key, and says only "No secret key".
+    if has-pqc-key "$file" && ! gpg-has-pqc; then
+        die "$file is locked to a post-quantum key: opening it needs gpg 2.5.21 or later" \
+            "(this one is $(gpg-version))."$'\n'"$PQC_GPG_HELP"
+    fi
 
     local open=(gpg --decrypt --output -)
     [[ -n $quiet ]] && open=(gpg --quiet "${open[@]:1}")
@@ -3898,21 +3925,22 @@ function find-key() {
     printf '%s\n' "${matches%%$'\t'*}"
 }
 
-# generate-key <name> <email> <passphrase-on-stdin>: a new key with gpg's defaults. Its passphrase is
-# the first line of stdin when <passphrase-on-stdin> is 1; otherwise gpg's own prompt (pinentry) asks.
+# generate-key <name> <email> <passphrase-on-stdin> <algo>: a new key of gpg's <algo> — pqc or
+# default (see key-kind-label). Its passphrase is the first line of stdin when <passphrase-on-stdin>
+# is 1; otherwise gpg's own prompt (pinentry) asks. Its expiry is gpg's default.
 # Prints the new key's fingerprint.
 function generate-key() {
-    local uid="$1 <$2>" passphrase_on_stdin=$3 status finger_print
+    local uid="$1 <$2>" passphrase_on_stdin=$3 algo=$4 status finger_print
 
     info "Generating key ..." >&2
     # gpg's normal output goes to the terminal (stderr); its machine-readable status lines (fd 3)
     # are captured so we get the fingerprint without guessing which key is new.
     if (( passphrase_on_stdin )); then
         status=$(gpg --batch --pinentry-mode loopback --passphrase-fd 0 \
-                     --status-fd 3 --quick-generate-key --yes "$uid" 3>&1 1>&2) \
+                     --status-fd 3 --quick-generate-key --yes "$uid" "$algo" 3>&1 1>&2) \
             || die "Creating the key failed."
     else
-        status=$(gpg --batch --status-fd 3 --quick-generate-key --yes "$uid" 3>&1 1>&2) \
+        status=$(gpg --batch --status-fd 3 --quick-generate-key --yes "$uid" "$algo" 3>&1 1>&2) \
             || die "Creating the key failed."
     fi
     finger_print=$(printf '%s\n' "$status" | awk '$2 == "KEY_CREATED" { print $4 }')
@@ -3949,6 +3977,32 @@ function pick-public-key() {
     printf '%s\n' "${choice%]}"
 }
 
+# The two kinds of new key, as gpg 2.5.21 and later make them for `pqc` and `default`. `pqc` is
+# ML-KEM (Kyber) together with an elliptic curve: safe while either one holds.
+PQC_KEY_LABEL="Post-quantum (recommended) — ML-KEM-768 + Brainpool P-256, Brainpool P-384"
+CLASSICAL_KEY_LABEL="Classical — X25519, Ed25519"
+# Where the README says how to get a gpg that can use a post-quantum key.
+PQC_GPG_HELP="To update gpg: https://github.com/NawaMan/EnvFolio#updating-gpg-for-post-quantum-keys"
+
+# key-kind-label <algo>: how a new key of gpg's <algo> (pqc or default) is shown once picked.
+function key-kind-label() {
+    if [[ $1 == pqc ]]; then
+        printf '%s\n' "${PQC_KEY_LABEL/ (recommended)/}"
+    elif gpg-has-pqc; then
+        printf '%s\n' "$CLASSICAL_KEY_LABEL"
+    else
+        printf '%s\n' "gpg's default"
+    fi
+}
+
+# Ask which kind of key to make; prints gpg's algorithm for it: pqc or default. Dies on cancel.
+function ask-key-kind() {
+    local choice
+    echo >&2
+    choice=$(ask-choice "Which kind of key?" "$PQC_KEY_LABEL" "$CLASSICAL_KEY_LABEL") || die "Cancelled."
+    if [[ $choice == "$PQC_KEY_LABEL" ]]; then echo pqc; else echo default; fi
+}
+
 # Pick the key for the store: an existing one, or a new one. Prints the fingerprint, or nothing for
 # a new key. Always a list, even for one key: confirm reports cancel the same as No, which would
 # turn a cancel into "create a new key".
@@ -3968,6 +4022,49 @@ function select-key() {
     [[ $choice != "${create_new_key}" ]] || return 0
     key=${choice##*[}
     printf '%s\n' "${key%]}"
+}
+
+# Whether this gpg makes post-quantum keys that EnvFolio can also back up and restore: Kyber (ML-KEM)
+# is among its public-key algorithms (gpg 2.5+), and it is 2.5.21 or later — the first that imports
+# a Kyber secret key with --batch, as restore and import do.
+function gpg-has-pqc() {
+    local algos major minor patch
+    algos=$(gpg --with-colons --list-config pubkeyname 2>/dev/null)
+    [[ ";${algos#cfg:pubkeyname:};" == *";Kyber;"* ]] || return 1
+    IFS=. read -r major minor patch <<< "$(gpg-version)"
+    major=${major%%[!0-9]*} minor=${minor%%[!0-9]*} patch=${patch%%[!0-9]*}
+    (( ${major:-0} > 2 || (${major:-0} == 2 && ${minor:-0} > 5)
+       || (${major:-0} == 2 && ${minor:-0} == 5 && ${patch:-0} >= 21) ))
+}
+
+# This gpg's version, e.g. 2.4.4.
+function gpg-version() {
+    local version
+    version=$(gpg --with-colons --list-config version 2>/dev/null)
+    printf '%s\n' "${version#cfg:version:}"
+}
+
+# has-pqc-key <file>: whether <file> holds a post-quantum key (an exported key, as a backup's
+# key.asc) or is locked to one (an export). Kyber is algo 8 in the key's packets; any gpg lists
+# them, also one that cannot use Kyber. With --list-only nothing is decrypted, and nothing asked.
+function has-pqc-key() {
+    gpg --batch --list-only --list-packets "$1" 2>/dev/null | awk '
+        /^:(public|secret) sub key packet:/ { sub_key = 1 ; next }
+        sub_key && /algo 8,/                 { found = 1 }
+        /^:pubkey enc packet:.* algo 8,/     { found = 1 }
+                                             { sub_key = 0 }
+        END { exit !found }'
+}
+
+# The kind of encryption of the key with fingerprint <fpr>: "post-quantum (<algo>)" when one of its
+# usable encryption keys is Kyber (gpg's algo 8), else "classical (<algo>)", e.g. "classical (cv25519)".
+function key-kind() {
+    gpg --list-keys --with-colons "$1" 2>/dev/null | awk -F: '
+        ($1 == "pub" || $1 == "sub") && $12 ~ /e/ && $2 !~ /[eridn]/ {
+            name = ($17 != "" ? $17 : ($4 == 16 ? "elg" : "rsa") $3)
+            if ($4 == 8) pq = name; else if (classic == "") classic = name
+        }
+        END { if (pq != "") print "post-quantum (" pq ")"; else if (classic != "") print "classical (" classic ")" }'
 }
 
 # The first user id ("Name <email>") of the key with fingerprint <fpr>.

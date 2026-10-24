@@ -137,7 +137,7 @@ folio init [--new-key] [--name <name>] [--email <email>] [--store-passphrase-std
 | Option | Meaning |
 | --- | --- |
 | `--key <id>` | Use an existing secret key — fingerprint, key id or email; must match exactly one key. No passphrase is needed: the store only encrypts to the key. |
-| `--new-key` | Create a new key. Implied by any of the options below. |
+| `--new-key` | Create a new key. Implied by any of the options below. See *Post-quantum keys*. |
 | `--name <name>` | The new key's name. |
 | `--email <email>` | The new key's email. |
 | `--store-passphrase-stdin` | Read the new key's passphrase from the first line of stdin instead of gpg's prompt. Needs `--name` and `--email`. An empty passphrase is refused. |
@@ -150,6 +150,31 @@ input given and asks for the ones that are not; only then is anything made. Befo
 choose a new key's passphrase, EnvFolio says so and waits for Enter. `--key` cannot be combined
 with the new-key options. It fails if `$FOLIO_STORE_DIR` is a folder with anything in it;
 an empty folder is fine.
+
+### Post-quantum keys
+
+With gpg 2.5.21 or later, a new key can be post-quantum (gpg's `pqc`: ML-KEM together with an
+elliptic curve), which also protects the secrets from a future quantum computer. When anything
+for the new key is asked, its kind is asked too:
+
+```
+1) Post-quantum (recommended) — ML-KEM-768 + Brainpool P-256, Brainpool P-384
+2) Classical — X25519, Ed25519
+```
+
+With every input given as an option, it is post-quantum without asking. With an older gpg,
+nothing changes: the key is gpg's default. A store with a post-quantum key needs gpg 2.5.21 or
+later on every machine that opens it. Texts are still signed classically: gpg has no post-quantum
+signatures yet.
+
+So do the files made from it: `folio backup` says so when the store's key is post-quantum, and
+`folio export --to` when the key it locks to is. On an older gpg, `restore`, `import` and
+`exec`/`shell --from` refuse such a file before changing anything — an older gpg would take the
+key without a word, then fail to decrypt with it. The refusal says why, and links to
+[Updating gpg for post-quantum keys](README.md#updating-gpg-for-post-quantum-keys).
+
+For a key with special needs — another algorithm, a smart card, another expiry — make it with
+gpg first, then pick it, or pass it with `--key`.
 
 ### Ask for everything
 
