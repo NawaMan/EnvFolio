@@ -3670,8 +3670,8 @@ function store-flat() {
             case $kind:$file in
                 gpg:*.gpg) echo "$SECRET_ON${file%.gpg}$COLOR_OFF" ;;
                 txt:*.txt) echo "$TEXT_ON${file%.txt}$COLOR_OFF" ;;
-                all:*.gpg) echo "$SECRET_ON$SECRET_MARK ${file%.gpg}$COLOR_OFF" ;;
-                all:*.txt) echo "$TEXT_ON$TEXT_MARK ${file%.txt}$COLOR_OFF" ;;
+                all:*.gpg) echo "$SECRET_ON$SECRET_MARK${file%.gpg}$COLOR_OFF" ;;
+                all:*.txt) echo "$TEXT_ON$TEXT_MARK${file%.txt}$COLOR_OFF" ;;
             esac
         done
 }
@@ -3688,9 +3688,9 @@ function store-tree() {
         all) others='*.txt.sig'       ;;
     esac
     set-marks
-    [[ $kind != all ]] || s="$SECRET_MARK " t="$TEXT_MARK "
+    [[ $kind != all ]] || s="$SECRET_MARK" t="$TEXT_MARK"
     [[ -z $COLOR_OFF ]] || color=-C
-    # "├── name.gpg" -> "├── (S) name", tree's own colour for the name swapped for ours; tree draws
+    # "├── name.gpg" -> "├── (S)name", tree's own colour for the name swapped for ours; tree draws
     # "|-- " instead outside UTF-8. A real ESC, not \x1B, which BSD sed (macOS) does not know.
     tree -N "$color" -l --noreport -I "$others" --prune "$@" "$folder" | tail -n +2 \
         | sed -E -e "s/^(.*(── |-- ))($esc\[[0-9;]*m)?(.*)\.gpg($esc\[[0-9;]*m)?( ->.*)?\$/\1$SECRET_ON$s\4$COLOR_OFF\6/" \

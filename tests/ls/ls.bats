@@ -40,11 +40,11 @@ plain() { printf '%s\n' "$output" | sed $'s/\e\\[[0-9;]*m//g' ; }
     run "$FOLIO" ls
     [ "$status" -eq 0 ]
     [ "$(plain)" = "EnvFolio Store
-├── (T) note
+├── (T)note
 └── web
-    ├── (S) github
-    ├── (T) github
-    └── (T) home" ]
+    ├── (S)github
+    ├── (T)github
+    └── (T)home" ]
 }
 
 @test "MANUAL: ls — list one folder" {
@@ -53,25 +53,25 @@ plain() { printf '%s\n' "$output" | sed $'s/\e\\[[0-9;]*m//g' ; }
     [ "$status" -eq 0 ]
     [ "$(plain)" = "EnvFolio Store
 web
-├── (S) github
-├── (T) github
-└── (T) home" ]
+├── (S)github
+├── (T)github
+└── (T)home" ]
 }
 
 @test "MANUAL: ls — list flat" {
     make-store
     run "$FOLIO" ls --flat
     [ "$status" -eq 0 ]
-    [ "$output" = "(T) note
-(S) web/github
-(T) web/github
-(T) web/home" ]
+    [ "$output" = "(T)note
+(S)web/github
+(T)web/github
+(T)web/home" ]
 }
 
 @test "ls --flat: one folder, full names, either place; text ls and secret ls too" {
     make-store
     run "$FOLIO" ls web/ --flat
-    [ "$output" = $'(S) web/github\n(T) web/github\n(T) web/home' ]
+    [ "$output" = $'(S)web/github\n(T)web/github\n(T)web/home' ]
     run "$FOLIO" text ls --flat
     [ "$output" = $'note\nweb/github\nweb/home' ]
     run "$FOLIO" secret ls --flat web
@@ -96,7 +96,7 @@ web
     make-store
     LC_ALL=C run "$FOLIO" ls web
     [ "$status" -eq 0 ]
-    [[ $(plain) == *"-- (S) github"*"-- (T) github"*"-- (T) home"* ]]
+    [[ $(plain) == *"-- (S)github"*"-- (T)github"*"-- (T)home"* ]]
 }
 
 @test "ls: an entry's name, an option, .. or an unknown folder is refused" {
@@ -148,12 +148,12 @@ on-screen() { bash -c 'source "$1"; shift; function on-screen() { return 0; }; M
     local y=$'\e[33m' g=$'\e[32m' off=$'\e[0m'
     TERM=xterm LC_ALL=C run on-screen ls
     [ "$status" -eq 0 ]
-    [[ $output == *"-- $g(T) note$off"* && $output == *"-- $y(S) github$off"* && $output == *"-- $g(T) home$off"* ]]
+    [[ $output == *"-- $g(T)note$off"* && $output == *"-- $y(S)github$off"* && $output == *"-- $g(T)home$off"* ]]
     TERM=xterm LC_ALL=C run on-screen ls --flat
-    [ "$output" = "$g(T) note$off
-$y(S) web/github$off
-$g(T) web/github$off
-$g(T) web/home$off" ]
+    [ "$output" = "$g(T)note$off
+$y(S)web/github$off
+$g(T)web/github$off
+$g(T)web/home$off" ]
     TERM=xterm LC_ALL=C run on-screen secret ls
     [[ $output == *"-- $y""github$off"* ]]
     TERM=xterm LC_ALL=C run on-screen text find home
@@ -166,14 +166,14 @@ $g(T) web/home$off" ]
     make-store
     local y=$'\e[33m' g=$'\e[32m' off=$'\e[0m' esc=$'\e'
     TERM=xterm LC_ALL=C.UTF-8 run on-screen ls
-    [[ $output == *"── $g📄 note$off"* && $output == *"── $y🔑 github$off"* ]]
+    [[ $output == *"── $g📄note$off"* && $output == *"── $y🔑github$off"* ]]
     [[ $output != *"(S)"* && $output != *"(T)"* ]]
     TERM=xterm LC_ALL=C.UTF-8 run on-screen ls --flat web
-    [ "$output" = "$y🔑 web/github$off
-$g📄 web/github$off
-$g📄 web/home$off" ]
+    [ "$output" = "$y🔑web/github$off
+$g📄web/github$off
+$g📄web/home$off" ]
     TERM=xterm LC_ALL=C.UTF-8 NO_COLOR=1 run on-screen ls --flat web
-    [ "$output" = $'🔑 web/github\n📄 web/github\n📄 web/home' ]
+    [ "$output" = $'🔑web/github\n📄web/github\n📄web/home' ]
 }
 
 @test "ls: --plain, TERM=dumb or the Linux console: (S)/(T), and colour only on the console" {
@@ -186,11 +186,11 @@ $g📄 web/home$off" ]
         [[ $output != *"$esc"* && $output != *"🔑"* && $output != *"📄"* ]]
     done
     TERM=xterm LC_ALL=C.UTF-8 run on-screen ls --plain --flat web
-    [ "$output" = $'(S) web/github\n(T) web/github\n(T) web/home' ]
+    [ "$output" = $'(S)web/github\n(T)web/github\n(T)web/home' ]
     TERM=dumb LC_ALL=C.UTF-8 run on-screen ls --flat web
-    [ "$output" = $'(S) web/github\n(T) web/github\n(T) web/home' ]
+    [ "$output" = $'(S)web/github\n(T)web/github\n(T)web/home' ]
     TERM=linux LC_ALL=C.UTF-8 run on-screen ls --flat web
-    [ "$output" = $'\e[33m(S) web/github\e[0m\n\e[32m(T) web/github\e[0m\n\e[32m(T) web/home\e[0m' ]
+    [ "$output" = $'\e[33m(S)web/github\e[0m\n\e[32m(T)web/github\e[0m\n\e[32m(T)web/home\e[0m' ]
     run "$FOLIO" ls --plain web extra
     [[ $output == *"Usage: folio ls [--flat] [--plain] [<subfolder>]"* ]]
 }

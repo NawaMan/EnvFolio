@@ -23,8 +23,8 @@ User-visible changes to EnvFolio. Newest first.
 ### Changed
 
 - `exec`/`shell --names` colour secrets yellow and texts green on a screen, as `ls` does.
-- `exec`/`shell --names` put the mark right against the name: `🔑gh/token`, `gh/token(S)`
-  (was `🔑 gh/token`, `gh/token (S)`).
+- `exec`/`shell --names` and `folio ls` put the mark right against the name: `🔑gh/token`,
+  `gh/token(S)` for exec, `(S)gh/token` for ls (was `🔑 gh/token`, `gh/token (S)`, `(S) gh/token`).
 - `folio ls`, `text ls`, `secret ls` and `text find`/`secret find` show secrets in yellow and texts
   in green, on a screen that shows colour. Sent to a pipe or a file, or with `NO_COLOR` set or
   `TERM=dumb`, they now print no colour codes at all (folders used to keep theirs).
