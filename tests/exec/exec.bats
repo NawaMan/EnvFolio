@@ -132,7 +132,7 @@ make-store() {
     make-store
     run --separate-stderr "$FOLIO" exec --names --secrets gh @nawa -- gh repo list
     [ "$status" -eq 0 ]
-    [ "$output" = $'GH_TOKEN <- @nawa/gh/token (S)\nGH_USER  <- @nawa/gh/user (T)' ]
+    [ "$output" = $'GH_TOKEN <- @nawa/gh/token(S)\nGH_USER  <- @nawa/gh/user(T)' ]
 }
 
 @test "exec --names: reads nothing, runs nothing; the command is optional; shell too" {
@@ -141,18 +141,53 @@ make-store() {
     # No gpg at all: a tampered text still shows, a broken gpg home is never asked.
     run --separate-stderr env GNUPGHOME="$SANDBOX/none" "$FOLIO" exec --names git X=gh/user -- touch "$SANDBOX/ran"
     [ "$status" -eq 0 ]
-    [ "$output" = $'GIT_EMAIL     <- git/email (T)\nGIT_USER_NAME <- git/user_name (T)\nX             <- gh/user (T)' ]
+    [ "$output" = $'GIT_EMAIL     <- git/email(T)\nGIT_USER_NAME <- git/user_name(T)\nX             <- gh/user(T)' ]
     [ ! -e "$SANDBOX/ran" ]
     run --separate-stderr "$FOLIO" exec -n gh
     [ "$status" -eq 0 ]
-    [ "$output" = "GH_USER <- gh/user (T)" ]
+    [ "$output" = "GH_USER <- gh/user(T)" ]
     [[ $stderr == *"left out 1 secret(s) under 'gh'"* ]]
     SHELL=/bin/sh run --separate-stderr "$FOLIO" shell --names gh < <(printf 'echo SHELL-RAN\n')
     [ "$status" -eq 0 ]
-    [ "$output" = "GH_USER <- gh/user (T)" ]
+    [ "$output" = "GH_USER <- gh/user(T)" ]
     # Refusals still stop it.
     run "$FOLIO" exec --names --secrets both -- true
     [ "$status" -eq 1 ]
+}
+
+@test "exec --debug: the names on stderr, then the command runs; shell too; not with --names" {
+    make-store
+    run --separate-stderr "$FOLIO" exec --debug --secrets gh @nawa -- sh -c 'echo "$GH_TOKEN|$GH_USER"'
+    [ "$status" -eq 0 ]
+    [ "$output" = "nawa-token|nawa-user" ]
+    [ "$stderr" = $'GH_TOKEN <- @nawa/gh/token(S)\nGH_USER  <- @nawa/gh/user(T)' ]
+    # Notes are said once, by the real run.
+    run --separate-stderr "$FOLIO" exec --debug gh -- sh -c 'echo "$GH_USER"'
+    [ "$output" = "shared-user" ]
+    [ "$stderr" = "GH_USER <- gh/user(T)
+folio exec: left out 1 secret(s) under 'gh'; add --secrets to load them." ]
+    SHELL=/bin/sh run --separate-stderr "$FOLIO" shell --debug gh/user < <(printf 'echo "SHELL-RAN $GH_USER"\n')
+    [ "$status" -eq 0 ]
+    [ "$output" = "SHELL-RAN shared-user" ]
+    [[ $stderr == "GH_USER <- gh/user(T)"$'\n'"folio shell: loaded GH_USER"* ]]
+    # A refusal still stops it, before anything runs.
+    run --separate-stderr "$FOLIO" exec --debug --secrets both -- touch "$SANDBOX/ran"
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"'both/x' is both a text and a secret"* ]]
+    [ ! -e "$SANDBOX/ran" ]
+    run "$FOLIO" exec --names --debug gh -- true
+    [ "$status" -eq 1 ]
+    [[ $output == *"--names only shows the names"* ]]
+}
+
+@test "exec --confirm: without a terminal, refused before anything is read or run" {
+    make-store
+    command -v setsid >/dev/null || skip "no setsid here (macOS)"
+    # setsid: no controlling terminal, so /dev/tty cannot be opened.
+    run --separate-stderr setsid "$FOLIO" exec --confirm --secrets gh -- touch "$SANDBOX/ran" < <(echo y)
+    [ "$status" -eq 1 ]
+    [[ $stderr == "GH_TOKEN <- gh/token(S)"$'\n'"GH_USER  <- gh/user(T)"$'\n'*"--confirm needs a terminal to ask on."* ]]
+    [ ! -e "$SANDBOX/ran" ]
 }
 
 @test "MANUAL: exec — pick the variable name" {
