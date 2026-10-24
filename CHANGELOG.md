@@ -22,6 +22,9 @@ User-visible changes to EnvFolio. Newest first.
 
 ### Changed
 
+- No more warning about gpg 2.5.24 from `restore`, `import` and `--from`: on Homebrew's 2.5.24
+  today, they work — with a classical key and a post-quantum one.
+
 - `exec`/`shell --names` colour secrets yellow and texts green on a screen, as `ls` does.
 - `exec`/`shell --names`, `folio ls` and the export/import lists put the mark right against the
   name: `🔑gh/token` and `gh/token(S)` for exec, `(S)gh/token` for the others (was `🔑 gh/token`,
