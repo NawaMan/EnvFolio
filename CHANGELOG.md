@@ -6,6 +6,11 @@ User-visible changes to EnvFolio. Newest first.
 
 ### Added
 
+- `folio init` makes a post-quantum key (ML-KEM + ECC) with gpg 2.5.21 or later, or a classical
+  one if you pick it. With an older gpg, nothing changes. The summary shows the key's `Type:`.
+- A backup of a post-quantum key, or an export locked to one, says it needs gpg 2.5.21 or later to
+  open. On an older gpg, `restore`, `import` and `--from` refuse such a file, change nothing, and
+  link to how to update gpg (a new README section).
 - On a screen that can draw emoji (a UTF-8 locale, not the Linux console), `folio ls` and
   `exec`/`shell --names` mark a secret 🔑 and a text 📄 instead of (S)/(T). In a pipe or a file
   it stays (S)/(T).
