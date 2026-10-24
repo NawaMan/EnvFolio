@@ -87,3 +87,26 @@ jobs:
       # /bin/bash on macOS is 3.2; put it first so `env bash` (bats and folio) finds it,
       # not a Homebrew bash 5. test-all.sh fails if it is not 3.x.
       - run: PATH="/bin:$PATH" perl -e '$SIG{PIPE} = "DEFAULT"; exec @ARGV' /bin/bash tests/test-all.sh 3
+
+  # Homebrew's own gpg (2.5.24 at the time of writing), which test-macos-bash32 avoids: whether a
+  # post-quantum key (tests/gpg/gpg-pqc-real.bats, skipped on a gpg that cannot make one) and the
+  # rest of the suite work on it. Informs, does not gate: 2.5.24 was seen to import a secret key it
+  # then cannot decrypt with.
+  test-macos-homebrew-gpg:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install dependencies
+        run: |
+          brew install bats-core pass coreutils gnupg
+          mkdir -p "$RUNNER_TEMP/bin"
+          ln -s "$(brew --prefix)/bin/gtimeout" "$RUNNER_TEMP/bin/timeout"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - run: gpg --version | head -n 1 && { gpg2 --version 2>/dev/null | head -n 1 || true; }
+      - name: Post-quantum key, real gpg
+        run: PATH="/bin:$PATH" perl -e '$SIG{PIPE} = "DEFAULT"; exec @ARGV' bats --print-output-on-failure tests/gpg/gpg-pqc-real.bats
+      - name: Every test
+        if: ${{ !cancelled() }}
+        run: PATH="/bin:$PATH" perl -e '$SIG{PIPE} = "DEFAULT"; exec @ARGV' /bin/bash tests/test-all.sh 3
