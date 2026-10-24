@@ -547,7 +547,7 @@ folio ls [--flat] [--plain] [<subfolder>]
 
 | Option | Meaning |
 | --- | --- |
-| `--flat` | Full names, one per line, sorted, instead of a tree: `(S) web/github`. |
+| `--flat` | Full names, one per line, sorted, instead of a tree: `(S)web/github`. |
 | `--plain` | (S)/(T) and no colour, even on a screen. |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
@@ -561,11 +561,11 @@ folio ls
 
 ```
 EnvFolio Store
-├── (T) note
+├── (T)note
 └── web
-    ├── (S) github
-    ├── (T) github
-    └── (T) home
+    ├── (S)github
+    ├── (T)github
+    └── (T)home
 ```
 
 ### List one folder
