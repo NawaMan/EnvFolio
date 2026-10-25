@@ -34,37 +34,37 @@ make-store() {
     make-store
     run "$FOLIO" secret find git
     [ "$status" -eq 0 ]
-    [[ $output == *"github"* ]]
-    [[ $output != *"work"* && $output != *"s3cr3t"* ]]
+    [[ $output == *"github"* ]] || false
+    [[ $output != *"work"* && $output != *"s3cr3t"* ]] || false
 }
 
 @test "secret find: any of several parts, ignoring case" {
     make-store
     run "$FOLIO" secret find GIT work
     [ "$status" -eq 0 ]
-    [[ $output == *"github"* && $output == *"work"* ]]
+    [[ $output == *"github"* && $output == *"work"* ]] || false
 }
 
 @test "secret find: no part gets the usage" {
     make-store
     run "$FOLIO" secret find
     [ "$status" -ne 0 ]
-    [[ $output == *"Usage:"*"find"* ]]
+    [[ $output == *"Usage:"*"find"* ]] || false
 }
 
 @test "secret find --help: works without a store" {
     run "$FOLIO" secret find --help
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio secret find"* ]]
+    [[ $output == *"Usage: folio secret find"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
     run "$FOLIO" help secret find
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio secret find"* ]]
+    [[ $output == *"Usage: folio secret find"* ]] || false
 }
 
 @test "secret find: no store fails and creates nothing" {
     run "$FOLIO" secret find web/github x < /dev/null
     [ "$status" -eq 1 ]
-    [[ $output == *"No ready EnvFolio store"*"folio init"* ]]
+    [[ $output == *"No ready EnvFolio store"*"folio init"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }

@@ -20,21 +20,21 @@ teardown() {
 @test "MANUAL: help — list the commands" {
     run "$FOLIO" help
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio <command>"* ]]
-    [[ $output == *"  init "* ]]
+    [[ $output == *"Usage: folio <command>"* ]] || false
+    [[ $output == *"  init "* ]] || false
 }
 
 @test "folio help: unknown topic fails" {
     run "$FOLIO" help nope
     [ "$status" -eq 1 ]
-    [[ $output == *"no help for 'nope'"* ]]
+    [[ $output == *"no help for 'nope'"* ]] || false
 }
 
 @test "init --help: shows help, exits 0, makes no store" {
     run "$FOLIO" init --help < /dev/null
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio init"* ]]
-    [[ $output == *"--store-passphrase-stdin"* ]]
+    [[ $output == *"Usage: folio init"* ]] || false
+    [[ $output == *"--store-passphrase-stdin"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 
@@ -55,11 +55,22 @@ teardown() {
     [ "$output" = "$long" ]
 }
 
+@test "an unknown option is refused by every command that takes options" {
+    local cmd
+    # (secret …: a store comes first; secret-show.bats checks its unknown option with one.)
+    for cmd in restore import "text show" "text generate" "text rm" "text insert" backup export init; do
+        # shellcheck disable=SC2086  # the words of the command
+        run "$FOLIO" $cmd --nope x < /dev/null
+        [ "$status" -eq 1 ]
+        [[ $output == *"$cmd: unknown option: --nope"* ]] || false
+    done
+}
+
 @test "init: an unknown option shows the usage" {
     run "$FOLIO" init --nope < /dev/null
     [ "$status" -eq 1 ]
-    [[ $output == *"unknown option: --nope"* ]]
-    [[ $output == *"Usage: folio init"* ]]
+    [[ $output == *"unknown option: --nope"* ]] || false
+    [[ $output == *"Usage: folio init"* ]] || false
 }
 
 @test "MANUAL: path — print the store's folder" {
@@ -72,30 +83,30 @@ teardown() {
 @test "path --help: the same as folio help path, without a store" {
     run "$FOLIO" path --help
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio path"* ]]
+    [[ $output == *"Usage: folio path"* ]] || false
     local long=$output
     run "$FOLIO" help path
     [ "$status" -eq 0 ]
     [ "$output" = "$long" ]
     run "$FOLIO" path extra
     [ "$status" -eq 1 ]
-    [[ $output == *"Usage: folio path"* ]]
+    [[ $output == *"Usage: folio path"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 
 @test "folio help secret insert: shows help without a store" {
     run "$FOLIO" help secret insert < /dev/null
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio secret insert"* ]]
+    [[ $output == *"Usage: folio secret insert"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 
 @test "folio store <command>: gone since 0.5.0 — says what to run instead, touches nothing" {
     run "$FOLIO" store init
     [ "$status" -eq 1 ]
-    [[ $output == *'there is no `folio store` any more: run `folio init`.'* ]]
+    [[ $output == *'there is no `folio store` any more: run `folio init`.'* ]] || false
     run "$FOLIO" store
     [ "$status" -eq 1 ]
-    [[ $output == *'its commands are `folio init`'* ]]
+    [[ $output == *'its commands are `folio init`'* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }

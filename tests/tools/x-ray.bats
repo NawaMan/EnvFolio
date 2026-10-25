@@ -41,8 +41,8 @@ shows-nothing-secret() {
 @test "x-ray: a store folder — each secret's key, each text's signer, never a value" {
     run "$XRAY" "$FOLIO_STORE_DIR"
     [ "$status" -eq 0 ]
-    [[ $output == *"(S)web/github"*"encrypted to "*"Test User <test@example.com>"* ]]
-    [[ $output == *"(T)web/home"*"signed by "*"Test User <test@example.com>"*", verifies"* ]]
+    [[ $output == *"(S)web/github"*"encrypted to "*"Test User <test@example.com>"* ]] || false
+    [[ $output == *"(T)web/home"*"signed by "*"Test User <test@example.com>"*", verifies"* ]] || false
     shows-nothing-secret
 }
 
@@ -50,16 +50,16 @@ shows-nothing-secret() {
     echo "changed" > "$FOLIO_STORE_DIR/web/home.txt"
     run "$XRAY" "$FOLIO_STORE_DIR/web/home.txt.sig"
     [ "$status" -eq 0 ]
-    [[ $output == *"DOES NOT VERIFY"* ]]
+    [[ $output == *"DOES NOT VERIFY"* ]] || false
 }
 
 @test "x-ray: a backup — manifest, key, store" {
     "$FOLIO" backup "$SANDBOX/out" >/dev/null 2>&1
     run "$XRAY" "$SANDBOX"/out/*--folio.tar.gz
     [ "$status" -eq 0 ]
-    [[ $output == *"folio-backup 1"* && $output == *"key.asc (a secret key; not shown)"* ]]
-    [[ $output == *"(S)web/github"* && $output == *", verifies"* ]]
-    [[ $output != *"BEGIN PGP"* ]]
+    [[ $output == *"folio-backup 1"* && $output == *"key.asc (a secret key; not shown)"* ]] || false
+    [[ $output == *"(S)web/github"* && $output == *", verifies"* ]] || false
+    [[ $output != *"BEGIN PGP"* ]] || false
     shows-nothing-secret
 }
 
@@ -67,8 +67,8 @@ shows-nothing-secret() {
     "$FOLIO" export -o "$SANDBOX/out/pw" --file-passphrase-stdin web < <(printf 'p\n') >/dev/null 2>&1
     run "$XRAY" "$SANDBOX/out/pw.folio"
     [ "$status" -eq 0 ]
-    [[ $output == *"locked with a passphrase (AES256)"* && $output == *"--open to unlock it"* ]]
-    [[ $output != *"folio-export 1"* ]]
+    [[ $output == *"locked with a passphrase (AES256)"* && $output == *"--open to unlock it"* ]] || false
+    [[ $output != *"folio-export 1"* ]] || false
     shows-nothing-secret
 }
 
@@ -79,27 +79,27 @@ shows-nothing-secret() {
     "$FOLIO" export -o "$SANDBOX/out/to" --secrets --to "$SANDBOX/server.asc" web < /dev/null >/dev/null 2>&1
     GNUPGHOME="$SANDBOX/there" run "$XRAY" --open "$SANDBOX/out/to.folio"
     [ "$status" -eq 0 ]
-    [[ $output == *"encrypted to "*"Server <server@example.com>"* && $output == *"folio-export 1"* ]]
-    [[ $output == *"(S)web/github"*"encrypted to "*"EnvFolio export "* ]]
-    [[ $output == *"(T)web/home"*"EnvFolio export "*", verifies"* ]]
+    [[ $output == *"encrypted to "*"Server <server@example.com>"* && $output == *"folio-export 1"* ]] || false
+    [[ $output == *"(S)web/github"*"encrypted to "*"EnvFolio export "* ]] || false
+    [[ $output == *"(T)web/home"*"EnvFolio export "*", verifies"* ]] || false
     shows-nothing-secret
     # Here, without the server's key, it cannot be opened.
     run "$XRAY" --open "$SANDBOX/out/to.folio"
     [ "$status" -eq 1 ]
-    [[ $output == *"could not unlock it"* ]]
+    [[ $output == *"could not unlock it"* ]] || false
 }
 
 @test "x-ray: no file, an unknown kind, an unknown option" {
     run "$XRAY" "$SANDBOX/nope.gpg"
     [ "$status" -eq 1 ]
-    [[ $output == *"no such file"* ]]
+    [[ $output == *"no such file"* ]] || false
     echo hi > "$SANDBOX/x.zip"
     run "$XRAY" "$SANDBOX/x.zip"
     [ "$status" -eq 1 ]
-    [[ $output == *"not a file x-ray knows"* ]]
+    [[ $output == *"not a file x-ray knows"* ]] || false
     run "$XRAY" --nope
     [ "$status" -eq 1 ]
     run "$XRAY"
     [ "$status" -eq 1 ]
-    [[ $output == *"Usage: tools/x-ray.sh"* ]]
+    [[ $output == *"Usage: tools/x-ray.sh"* ]] || false
 }

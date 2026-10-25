@@ -35,7 +35,7 @@ make-store() {
     run "$FOLIO" secret rm -f mail/work
     [ "$status" -eq 0 ]
     [ ! -e "$FOLIO_STORE_DIR/mail/work.gpg" ]
-    [[ $(git -C "$FOLIO_STORE_DIR" log -1 --format=%s) == "Remove mail/work"* ]]
+    [[ $(git -C "$FOLIO_STORE_DIR" log -1 --format=%s) == "Remove mail/work"* ]] || false
 }
 
 @test "secret rm: --recursive removes a folder" {
@@ -49,22 +49,22 @@ make-store() {
     make-store
     run "$FOLIO" secret rm -f nope
     [ "$status" -ne 0 ]
-    [[ $output == *"not in the password store"* ]]
+    [[ $output == *"not in the password store"* ]] || false
 }
 
 @test "secret rm --help: works without a store" {
     run "$FOLIO" secret rm --help
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio secret rm"* ]]
+    [[ $output == *"Usage: folio secret rm"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
     run "$FOLIO" help secret rm
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio secret rm"* ]]
+    [[ $output == *"Usage: folio secret rm"* ]] || false
 }
 
 @test "secret rm: no store fails and creates nothing" {
     run "$FOLIO" secret rm web/github x < /dev/null
     [ "$status" -eq 1 ]
-    [[ $output == *"No ready EnvFolio store"*"folio init"* ]]
+    [[ $output == *"No ready EnvFolio store"*"folio init"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }

@@ -56,7 +56,8 @@ go-there() {
 left-clean() {
     [ ! -e "$FOLIO_STORE_DIR" ]
     [ -z "$(ls -A "$TMPDIR")" ]
-    ! gpg --list-keys "EnvFolio export" >/dev/null 2>&1
+    run gpg --list-keys "EnvFolio export"
+    [ "$status" -ne 0 ]
 }
 
 @test "MANUAL: exec — from an export file" {
@@ -65,7 +66,7 @@ left-clean() {
         -- sh -c 'echo "$GH_USER|$GIT_EMAIL|${GH_TOKEN-unset}"' 3< <(printf 'export pass\n')
     [ "$status" -eq 0 ]
     [ "$output" = "shared-user|test@example.com|unset" ]
-    [[ $stderr == *"left out 1 secret(s) under 'gh'"* ]]
+    [[ $stderr == *"left out 1 secret(s) under 'gh'"* ]] || false
     left-clean
 }
 
@@ -119,7 +120,7 @@ left-clean() {
         -- sh -c 'echo ran' 3< <(printf 'wrong pass\n')
     [ "$status" -eq 1 ]
     [ -z "$output" ]
-    [[ $stderr == *"Opening $FILE failed."* ]]
+    [[ $stderr == *"Opening $FILE failed."* ]] || false
     left-clean
 }
 
@@ -129,7 +130,7 @@ left-clean() {
         -- sh -c 'echo ran' 3< <(printf 'export pass\n')
     [ "$status" -eq 1 ]
     [ -z "$output" ]
-    [[ $stderr == *"'nope' is not a text or secret in the export."* ]]
+    [[ $stderr == *"'nope' is not a text or secret in the export."* ]] || false
     left-clean
 }
 
@@ -137,21 +138,21 @@ left-clean() {
     make-export ; go-there
     run "$FOLIO" exec --from "$SANDBOX/missing.folio" gh -- sh -c 'echo ran'
     [ "$status" -eq 1 ]
-    [[ $output == *"There is no file"* ]]
+    [[ $output == *"There is no file"* ]] || false
     run "$FOLIO" exec --from "$SANDBOX/no-store" gh -- sh -c 'echo ran'
     [ "$status" -eq 1 ]
     run "$FOLIO" exec --from gh -- sh -c 'echo ran'
     [ "$status" -eq 1 ]
     run "$FOLIO" exec --from "$FILE" --file-passphrase-fd 7 gh -- sh -c 'echo ran'
     [ "$status" -eq 1 ]
-    [[ $output == *"no such file descriptor is open"* ]]
+    [[ $output == *"no such file descriptor is open"* ]] || false
     run "$FOLIO" exec --from "$FILE" --file-passphrase-fd 3 gh -- sh -c 'echo ran' 3< /dev/null
     [ "$status" -eq 1 ]
-    [[ $output == *"No passphrase on file descriptor 3."* ]]
+    [[ $output == *"No passphrase on file descriptor 3."* ]] || false
     run "$FOLIO" exec --file-passphrase-fd 3 gh -- sh -c 'echo ran' 3< <(printf 'export pass\n')
     [ "$status" -eq 1 ]
-    [[ $output == *"--file-passphrase-fd is for opening a --from file."* ]]
-    [[ $output != *ran* ]]
+    [[ $output == *"--file-passphrase-fd is for opening a --from file."* ]] || false
+    [[ $output != *ran* ]] || false
     left-clean
 }
 
@@ -172,5 +173,42 @@ left-clean() {
         -- sh -c 'echo "$LOGIN|$TOKEN"' 3< <(printf 'export pass\n')
     [ "$status" -eq 0 ]
     [ "$output" = "shared-user|nawa-token" ]
+    left-clean
+}
+
+# repack <dir> <file>: <dir>'s folio-export.txt, key.asc and store (those there) as an export
+# <file>, locked with the passphrase "export pass".
+repack() {
+    local parts=() part
+    for part in folio-export.txt key.asc store; do [[ ! -e $1/$part ]] || parts+=("$part"); done
+    tar -czf - -C "$1" "${parts[@]}" \
+        | gpg --batch --pinentry-mode loopback --passphrase 'export pass' --symmetric --output "$2"
+}
+
+@test "exec --from: a damaged export — no items, or a key file without the secret key — is refused" {
+    make-export
+    local good="$SANDBOX/good" bad="$SANDBOX/bad"
+    mkdir -p "$good" && gpg --batch --pinentry-mode loopback --passphrase 'export pass' --decrypt "$FILE" 2>/dev/null \
+        | tar -xzf - -C "$good"
+    go-there
+    # No items.
+    rm -rf "$bad" && cp -R "$good" "$bad" && rm -rf "$bad/store"
+    repack "$bad" "$SANDBOX/no-items.folio"
+    run --separate-stderr "$FOLIO" exec --from "$SANDBOX/no-items.folio" --file-passphrase-fd 3 gh/user -- touch "$SANDBOX/ran" \
+        3< <(printf 'export pass\n')
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"has no key or no items in it."* ]] || false
+    # The export's public key only, not its secret key.
+    rm -rf "$bad" && cp -R "$good" "$bad" && mkdir -m 700 "$SANDBOX/k"
+    GNUPGHOME="$SANDBOX/k" gpg --batch --quiet --import "$good/key.asc" 2>/dev/null
+    GNUPGHOME="$SANDBOX/k" gpg --armor --export > "$bad/key.asc"
+    GNUPGHOME="$SANDBOX/k" gpgconf --kill all
+    repack "$bad" "$SANDBOX/no-secret.folio"
+    run --separate-stderr "$FOLIO" exec --from "$SANDBOX/no-secret.folio" --file-passphrase-fd 3 gh/user -- touch "$SANDBOX/ran" \
+        3< <(printf 'export pass\n')
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"has no secret key"* ]] || false
+    [ ! -e "$SANDBOX/ran" ]
+    rm -rf "$good" "$bad"
     left-clean
 }

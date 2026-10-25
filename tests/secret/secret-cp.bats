@@ -36,7 +36,7 @@ make-store() {
     [ "$status" -eq 0 ]
     [ "$(pass show web/github | head -1)"      = "s3cr3t" ]
     [ "$(pass show web/github-copy | head -1)" = "s3cr3t" ]
-    [[ $(git -C "$FOLIO_STORE_DIR" log -1 --format=%s) == "Copy web/github to web/github-copy"* ]]
+    [[ $(git -C "$FOLIO_STORE_DIR" log -1 --format=%s) == "Copy web/github to web/github-copy"* ]] || false
 }
 
 @test "secret cp: --force overwrites" {
@@ -49,16 +49,16 @@ make-store() {
 @test "secret cp --help: works without a store" {
     run "$FOLIO" secret cp --help
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio secret cp"* ]]
+    [[ $output == *"Usage: folio secret cp"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
     run "$FOLIO" help secret cp
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio secret cp"* ]]
+    [[ $output == *"Usage: folio secret cp"* ]] || false
 }
 
 @test "secret cp: no store fails and creates nothing" {
     run "$FOLIO" secret cp web/github x < /dev/null
     [ "$status" -eq 1 ]
-    [[ $output == *"No ready EnvFolio store"*"folio init"* ]]
+    [[ $output == *"No ready EnvFolio store"*"folio init"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }

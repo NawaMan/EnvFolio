@@ -2,8 +2,9 @@
 
 # A post-quantum key with the real gpg, nothing faked: backup → restore on a new machine, and
 # export --to → import. Through the real ./folio, against throwaway GPG homes and stores.
-# Skipped unless this gpg can make one (gpg-has-pqc) — so in the booth and on gpg 2.4 they skip;
-# CI runs them on macOS with Homebrew's gpg (check.yml: test-macos-homebrew-gpg).
+# Skipped unless this gpg can make one (gpg-has-pqc), so on gpg 2.4 they skip. They run in the
+# booth with gnupg:2.5.24 (`just test-bash32`), and in CI on macOS with Homebrew's gpg
+# (check.yml: test-macos-homebrew-gpg).
 
 setup() {
     SANDBOX=$(mktemp -d)
@@ -46,14 +47,14 @@ make-store() {
 
 @test "real gpg: the store's key is post-quantum" {
     make-store
-    [[ $(bash -c 'source "$1" && key-kind "$2"' _ "$FOLIO" "$(cat "$FOLIO_STORE_DIR/.gpg-id")") == "post-quantum ("* ]]
+    [[ $(bash -c 'source "$1" && key-kind "$2"' _ "$FOLIO" "$(cat "$FOLIO_STORE_DIR/.gpg-id")") == "post-quantum ("* ]] || false
 }
 
 @test "real gpg: backup of a post-quantum key, restored on a new machine" {
     make-store
     run "$FOLIO" backup "$SANDBOX/out"
     [ "$status" -eq 0 ]
-    [[ $output == *"gpg 2.5.21 or later (the key is post-quantum)"* ]]
+    [[ $output == *"gpg 2.5.21 or later (the key is post-quantum)"* ]] || false
     local file=("$SANDBOX"/out/*)
 
     gpgconf --kill all 2>/dev/null || true
@@ -73,7 +74,7 @@ make-store() {
     GNUPGHOME="$SANDBOX/gnupg"
     run "$FOLIO" export -o "$SANDBOX/out/to-server" --secrets --to "$SANDBOX/server.asc" web < /dev/null
     [ "$status" -eq 0 ]
-    [[ $output == *"gpg 2.5.21 or later (the key is post-quantum)"* ]]
+    [[ $output == *"gpg 2.5.21 or later (the key is post-quantum)"* ]] || false
 
     gpgconf --kill all 2>/dev/null || true
     export GNUPGHOME="$SANDBOX/there-gnupg" FOLIO_STORE_DIR="$SANDBOX/there" PASSWORD_STORE_DIR="$SANDBOX/there"

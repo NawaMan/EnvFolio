@@ -96,6 +96,13 @@ green light** — it is a separate pre-edit check.
 - The development is done within CodingBooth (a wrapper around a container). The booth will have
     all the toolchain needed.
 - Use `./booth exec --run -- <cmd>` for everything (Justfile will use the same technique).
+- The booth's gpg comes from the project template `gnupg` (`.booth/templates/project/gnupg/`):
+  `gnupg:2.5.24` builds that gpg (post-quantum keys, with the upstream T8469 fixes Homebrew has)
+  into `/opt/gnupg-2.5.24`, linked into `/usr/local/bin`; `gnupg:none` keeps Ubuntu's 2.4 in
+  `/usr/bin`. With 2.5.24, `just test-bash32` gets it and runs `tests/gpg/gpg-pqc-real.bats`, while
+  `just test-bash5` puts `/usr/bin` first and so tests on Ubuntu's 2.4 (those three skip) — one
+  `just test-all` covers both. To switch, re-run the `booth config` line at the top of
+  `.booth/Boothfile` with the other value, then remove the booth image so it rebuilds.
 - If there is a need for more tools, mention it explicitly (particularly near the bottom of the text and in color).
 
 ### CodingBooth

@@ -39,8 +39,8 @@ make-store() {
     run "$FOLIO" text ls
     [ "$status" -eq 0 ]
     [ "${lines[0]}" = "Text Store" ]
-    [[ $output == *"note"* && $output == *"web"*"home"* && $output == *"user"* ]]
-    [[ $output != *"example.com"* && $output != *"jane"* ]]
+    [[ $output == *"note"* && $output == *"web"*"home"* && $output == *"user"* ]] || false
+    [[ $output != *"example.com"* && $output != *"jane"* ]] || false
 }
 
 @test "MANUAL: text ls — list one folder" {
@@ -49,23 +49,23 @@ make-store() {
     [ "$status" -eq 0 ]
     [ "${lines[0]}" = "Text Store" ]
     [ "${lines[1]}" = "web" ]
-    [[ $output == *"home"* && $output == *"user"* && $output != *"note"* ]]
+    [[ $output == *"home"* && $output == *"user"* && $output != *"note"* ]] || false
 }
 
 @test "text ls: secrets, signatures and extensions never show; folders of only secrets are left out" {
     make-store
     run "$FOLIO" text ls
     [ "$status" -eq 0 ]
-    [[ $output != *"github"* && $output != *"vault"* ]]
-    [[ $output != *".txt"* && $output != *".sig"* && $output != *".gpg"* ]]
+    [[ $output != *"github"* && $output != *"vault"* ]] || false
+    [[ $output != *".txt"* && $output != *".sig"* && $output != *".gpg"* ]] || false
 }
 
 @test "text ls: secret ls still shows the secrets only" {
     make-store
     run "$FOLIO" secret ls
     [ "$status" -eq 0 ]
-    [[ $output == *"github"* && $output == *"vault"* ]]
-    [[ $output != *"home"* && $output != *"note"* && $output != *".txt"* ]]
+    [[ $output == *"github"* && $output == *"vault"* ]] || false
+    [[ $output != *"home"* && $output != *"note"* && $output != *".txt"* ]] || false
 }
 
 @test "text ls: a text's name, an option, .. or an unknown folder is refused" {
@@ -74,26 +74,26 @@ make-store() {
     for arg in web/home note -c .. web/../.. nope; do
         run "$FOLIO" text ls "$arg"
         [ "$status" -eq 1 ]
-        [[ $output == *"'$arg' is not a folder"* ]]
+        [[ $output == *"'$arg' is not a folder"* ]] || false
     done
     run "$FOLIO" text ls web note
     [ "$status" -eq 1 ]
-    [[ $output == *"Usage: folio text ls"* ]]
+    [[ $output == *"Usage: folio text ls"* ]] || false
 }
 
 @test "text ls: no store fails and creates nothing" {
     run "$FOLIO" text ls
     [ "$status" -eq 1 ]
-    [[ $output == *"No ready EnvFolio store"*"folio init"* ]]
+    [[ $output == *"No ready EnvFolio store"*"folio init"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 
 @test "text ls --help: works without a store" {
     run "$FOLIO" text ls --help
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio text ls"* ]]
+    [[ $output == *"Usage: folio text ls"* ]] || false
     run "$FOLIO" help text ls
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio text ls"* ]]
+    [[ $output == *"Usage: folio text ls"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }

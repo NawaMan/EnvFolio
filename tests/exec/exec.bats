@@ -84,10 +84,10 @@ make-store() {
     [ "$output" = "a-domain|b-server" ]
     run --separate-stderr "$FOLIO" exec sv/@work -- true
     [ "$status" -eq 1 ]
-    [[ $stderr == *"'sv/@work/user' would be SV_@WORK_USER"* ]]
+    [[ $stderr == *"'sv/@work/user' would be SV_@WORK_USER"* ]] || false
     run --separate-stderr "$FOLIO" exec "[x]y" -- true
     [ "$status" -eq 1 ]
-    [[ $stderr == *"'[x]y/z' would be [X]Y_Z"* ]]
+    [[ $stderr == *"'[x]y/z' would be [X]Y_Z"* ]] || false
 }
 
 @test "MANUAL: exec — load everything" {
@@ -96,8 +96,8 @@ make-store() {
     [ "$status" -eq 0 ]
     [ "$output" = $'test@example.com|shared-user|unset|both text|line one\nline two' ]
     # Secrets left out are counted outside the namespaces only: gh/token, both/x.
-    [[ $stderr == *"folio exec: left out 2 secret(s) in the store; add --secrets to load them."* ]]
-    [[ $stderr == *"'odd/api-key' would be ODD_API-KEY"* ]]
+    [[ $stderr == *"folio exec: left out 2 secret(s) in the store; add --secrets to load them."* ]] || false
+    [[ $stderr == *"'odd/api-key' would be ODD_API-KEY"* ]] || false
 }
 
 @test "exec --all: loads first wherever it is typed; namespaces and VAR= layer over it" {
@@ -118,7 +118,7 @@ make-store() {
     rm -rf "$FOLIO_STORE_DIR"/{git,gh,odd,both,multi}
     run "$FOLIO" exec --all -- true
     [ "$status" -eq 1 ]
-    [[ $output == *"the store has no entries to load"* ]]
+    [[ $output == *"the store has no entries to load"* ]] || false
 }
 
 @test "shell --all: needs no entry" {
@@ -146,7 +146,7 @@ make-store() {
     run --separate-stderr "$FOLIO" exec -n gh
     [ "$status" -eq 0 ]
     [ "$output" = "GH_USER <- gh/user(T)" ]
-    [[ $stderr == *"left out 1 secret(s) under 'gh'"* ]]
+    [[ $stderr == *"left out 1 secret(s) under 'gh'"* ]] || false
     SHELL=/bin/sh run --separate-stderr "$FOLIO" shell --names gh < <(printf 'echo SHELL-RAN\n')
     [ "$status" -eq 0 ]
     [ "$output" = "GH_USER <- gh/user(T)" ]
@@ -169,15 +169,15 @@ folio exec: left out 1 secret(s) under 'gh'; add --secrets to load them." ]
     SHELL=/bin/sh run --separate-stderr "$FOLIO" shell --debug gh/user < <(printf 'echo "SHELL-RAN $GH_USER"\n')
     [ "$status" -eq 0 ]
     [ "$output" = "SHELL-RAN shared-user" ]
-    [[ $stderr == "GH_USER <- gh/user(T)"$'\n'"folio shell: loaded GH_USER"* ]]
+    [[ $stderr == "GH_USER <- gh/user(T)"$'\n'"folio shell: loaded GH_USER"* ]] || false
     # A refusal still stops it, before anything runs.
     run --separate-stderr "$FOLIO" exec --debug --secrets both -- touch "$SANDBOX/ran"
     [ "$status" -eq 1 ]
-    [[ $stderr == *"'both/x' is both a text and a secret"* ]]
+    [[ $stderr == *"'both/x' is both a text and a secret"* ]] || false
     [ ! -e "$SANDBOX/ran" ]
     run "$FOLIO" exec --names --debug gh -- true
     [ "$status" -eq 1 ]
-    [[ $output == *"--names only shows the names"* ]]
+    [[ $output == *"--names only shows the names"* ]] || false
 }
 
 @test "exec --confirm: without a terminal, refused before anything is read or run" {
@@ -186,7 +186,7 @@ folio exec: left out 1 secret(s) under 'gh'; add --secrets to load them." ]
     # setsid: no controlling terminal, so /dev/tty cannot be opened.
     run --separate-stderr setsid "$FOLIO" exec --confirm --secrets gh -- touch "$SANDBOX/ran" < <(echo y)
     [ "$status" -eq 1 ]
-    [[ $stderr == "GH_TOKEN <- gh/token(S)"$'\n'"GH_USER  <- gh/user(T)"$'\n'*"--confirm needs a terminal to ask on."* ]]
+    [[ $stderr == "GH_TOKEN <- gh/token(S)"$'\n'"GH_USER  <- gh/user(T)"$'\n'*"--confirm needs a terminal to ask on."* ]] || false
     [ ! -e "$SANDBOX/ran" ]
 }
 
@@ -223,21 +223,21 @@ folio exec: left out 1 secret(s) under 'gh'; add --secrets to load them." ]
     run --separate-stderr "$FOLIO" exec odd -- sh -c 'echo "$ODD_OK|${ODD_API-unset}"'
     [ "$status" -eq 0 ]
     [ "$output" = "ok value|unset" ]
-    [[ $stderr == *"warning: 'odd/api-key' would be ODD_API-KEY"*"Use VAR=odd/api-key"* ]]
+    [[ $stderr == *"warning: 'odd/api-key' would be ODD_API-KEY"*"Use VAR=odd/api-key"* ]] || false
     # Given a VAR, it loads.
     run "$FOLIO" exec ODD_API_KEY=odd/api-key -- printenv ODD_API_KEY
     [ "$output" = "dash value" ]
     # Left out and nothing else: there is nothing to load.
     run "$FOLIO" exec odd/api-key -- true
     [ "$status" -eq 1 ]
-    [[ $output == *"nothing to load"* ]]
+    [[ $output == *"nothing to load"* ]] || false
 }
 
 @test "exec: a path that is both a text and a secret is refused when both would load" {
     make-store
     run "$FOLIO" exec --secrets both -- touch "$SANDBOX/ran"
     [ "$status" -eq 1 ]
-    [[ $output == *"'both/x' is both a text and a secret"* ]]
+    [[ $output == *"'both/x' is both a text and a secret"* ]] || false
     run "$FOLIO" exec --secrets both/x -- touch "$SANDBOX/ran"
     [ "$status" -eq 1 ]
     run "$FOLIO" exec --secrets X=both/x -- touch "$SANDBOX/ran"
@@ -253,7 +253,7 @@ folio exec: left out 1 secret(s) under 'gh'; add --secrets to load them." ]
     make-store
     run "$FOLIO" exec gh/token -- true
     [ "$status" -eq 1 ]
-    [[ $output == *"'gh/token' is a secret; add --secrets"* ]]
+    [[ $output == *"'gh/token' is a secret; add --secrets"* ]] || false
     run --separate-stderr "$FOLIO" exec gh -- sh -c 'echo "${GH_TOKEN-unset}|$GH_USER"'
     [ "$output" = "unset|shared-user" ]
     [ "$stderr" = "folio exec: left out 1 secret(s) under 'gh'; add --secrets to load them." ]
@@ -261,7 +261,7 @@ folio exec: left out 1 secret(s) under 'gh'; add --secrets to load them." ]
     "$FOLIO" secret insert -m only/s < <(printf 'x\n') >/dev/null
     run "$FOLIO" exec only -- touch "$SANDBOX/ran"
     [ "$status" -eq 1 ]
-    [[ $output == *"only secrets under 'only' (1); add --secrets"* ]]
+    [[ $output == *"only secrets under 'only' (1); add --secrets"* ]] || false
     [ ! -e "$SANDBOX/ran" ]
 }
 
@@ -272,10 +272,10 @@ folio exec: left out 1 secret(s) under 'gh'; add --secrets to load them." ]
     "$FOLIO" text insert -t "ev"   exec/vars < /dev/null
     run "$FOLIO" exec random -- touch "$SANDBOX/ran"
     [ "$status" -eq 1 ]
-    [[ $output == *"could not set RANDOM"*"VAR=<name>"* ]]
+    [[ $output == *"could not set RANDOM"*"VAR=<name>"* ]] || false
     run "$FOLIO" exec uid -- touch "$SANDBOX/ran"
     [ "$status" -eq 1 ]
-    [[ $output == *"could not set UID"* ]]
+    [[ $output == *"could not set UID"* ]] || false
     [ ! -e "$SANDBOX/ran" ]
     run "$FOLIO" exec SEED=random -- printenv SEED
     [ "$output" = "seed" ]
@@ -289,7 +289,7 @@ folio exec: left out 1 secret(s) under 'gh'; add --secrets to load them." ]
     echo "tampered" > "$FOLIO_STORE_DIR/git/email.txt"
     run "$FOLIO" exec git -- touch "$SANDBOX/ran"
     [ "$status" -eq 1 ]
-    [[ $output == *"'git/email'"*"does not verify"* ]]
+    [[ $output == *"'git/email'"*"does not verify"* ]] || false
     [ ! -e "$SANDBOX/ran" ]
 }
 
@@ -326,17 +326,17 @@ folio exec: left out 1 secret(s) under 'gh'; add --secrets to load them." ]
 @test "exec: no store fails and creates nothing" {
     run "$FOLIO" exec git -- true
     [ "$status" -eq 1 ]
-    [[ $output == *"folio init"* ]]
+    [[ $output == *"folio init"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 
 @test "exec --help and shell --help: work without a store" {
     run "$FOLIO" exec --help
     [ "$status" -eq 0 ]
-    [[ $output == "Usage: folio exec "* ]]
+    [[ $output == "Usage: folio exec "* ]] || false
     run "$FOLIO" help shell
     [ "$status" -eq 0 ]
-    [[ $output == "Usage: folio shell "* ]]
+    [[ $output == "Usage: folio shell "* ]] || false
 }
 
 @test "MANUAL: shell — open a shell" {

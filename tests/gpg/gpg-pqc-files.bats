@@ -85,15 +85,15 @@ old-gpg-meets-pqc() {
     has-pqc-key() { return 0; }
     run Backup "$SANDBOX/out"
     [ "$status" -eq 0 ]
-    [[ $output == *"That needs the key's passphrase, and gpg 2.5.21 or later (the key is post-quantum)."* ]]
+    [[ $output == *"That needs the key's passphrase, and gpg 2.5.21 or later (the key is post-quantum)."* ]] || false
 }
 
 @test "backup: a classical key — no word of it" {
     make-store
     run Backup "$SANDBOX/out"
     [ "$status" -eq 0 ]
-    [[ $output == *"That needs the key's passphrase."* ]]
-    [[ $output != *"ost-quantum"* ]]
+    [[ $output == *"That needs the key's passphrase."* ]] || false
+    [[ $output != *"ost-quantum"* ]] || false
 }
 
 @test "restore: a post-quantum backup on a gpg that cannot use it — refused, nothing changed" {
@@ -107,7 +107,7 @@ old-gpg-meets-pqc() {
     old-gpg-meets-pqc
     run Restore "${file[0]}"
     [ "$status" -eq 1 ]
-    [[ $output == *"This backup's key is post-quantum: restoring it needs gpg 2.5.21 or later (this one is 2.4.4). Nothing changed."*"EnvFolio#updating-gpg-for-post-quantum-keys"* ]]
+    [[ $output == *"This backup's key is post-quantum: restoring it needs gpg 2.5.21 or later (this one is 2.4.4). Nothing changed."*"EnvFolio#updating-gpg-for-post-quantum-keys"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
     [ -z "$(gpg --list-secret-keys 2>/dev/null)" ]
     [ -z "$(find "$SANDBOX" -maxdepth 1 -name '.folio-restore.*')" ]
@@ -118,14 +118,14 @@ old-gpg-meets-pqc() {
     key-kind() { echo "post-quantum (ky768_bp256)"; }
     run Export --secrets --to test@example.com -o "$SANDBOX/out/to-me" web/github < /dev/null
     [ "$status" -eq 0 ]
-    [[ $output == *"That needs the secret key of Test User <test@example.com>, and gpg 2.5.21 or later (the key is post-quantum)."* ]]
+    [[ $output == *"That needs the secret key of Test User <test@example.com>, and gpg 2.5.21 or later (the key is post-quantum)."* ]] || false
 }
 
 @test "export: --to a classical key — no word of it" {
     make-store
     run Export --secrets --to test@example.com -o "$SANDBOX/out/to-me" web/github < /dev/null
     [ "$status" -eq 0 ]
-    [[ $output == *"That needs the secret key of Test User <test@example.com>."* ]]
+    [[ $output == *"That needs the secret key of Test User <test@example.com>."* ]] || false
 }
 
 @test "import and --from: a file locked to a post-quantum key on a gpg that cannot use it — refused" {
@@ -135,8 +135,37 @@ old-gpg-meets-pqc() {
     old-gpg-meets-pqc
     run Import --all "$SANDBOX/out/to-me.folio" < /dev/null
     [ "$status" -eq 1 ]
-    [[ $output == *"to-me.folio is locked to a post-quantum key: opening it needs gpg 2.5.21 or later (this one is 2.4.4)."*"EnvFolio#updating-gpg-for-post-quantum-keys"* ]]
+    [[ $output == *"to-me.folio is locked to a post-quantum key: opening it needs gpg 2.5.21 or later (this one is 2.4.4)."*"EnvFolio#updating-gpg-for-post-quantum-keys"* ]] || false
     run Exec --secrets --from "$SANDBOX/out/to-me.folio" web/github -- true
     [ "$status" -eq 1 ]
-    [[ $output == *"is locked to a post-quantum key"*"#updating-gpg-for-post-quantum-keys"* ]]
+    [[ $output == *"is locked to a post-quantum key"*"#updating-gpg-for-post-quantum-keys"* ]] || false
+}
+
+@test "import and --from: a gpg that cannot use the export's key (T8469) — refused, nothing changed" {
+    make-store
+    run Export --secrets --file-passphrase-fd 3 -o "$SANDBOX/out/items" web/github < /dev/null 3< <(printf 'x\n')
+    [ "$status" -eq 0 ]
+    # Fake: this gpg imports the export's key, then cannot decrypt with it.
+    # shellcheck disable=SC2317  # called by the command under test
+    can-use-imported-key() { return 1; }
+    # shellcheck disable=SC2317  # called by the command under test
+    gpg-version() { echo 2.5.24; }
+    local there="$SANDBOX/there"
+    FOLIO_STORE_DIR=$there STORE_PATH=$there PASSWORD_STORE_DIR=$there \
+        run Import --all --key test@example.com --file-passphrase-fd 3 "$SANDBOX/out/items.folio" < /dev/null 3< <(printf 'x\n')
+    [ "$status" -eq 1 ]
+    [[ $output == *"This gpg (2.5.24) cannot use the key in $SANDBOX/out/items.folio"*"https://dev.gnupg.org/T8469"*"Nothing changed."* ]] || false
+    [ ! -e "$there" ]
+    run Exec --secrets --from "$SANDBOX/out/items.folio" --file-passphrase-fd 3 web/github -- true 3< <(printf 'x\n')
+    [ "$status" -eq 1 ]
+    [[ $output == *"cannot use the key in"*"T8469"* ]] || false
+}
+
+@test "can-use-imported-key: yes for a key this gpg imported and can use" {
+    make-store
+    run Export --secrets --file-passphrase-fd 3 -o "$SANDBOX/out/items" web/github < /dev/null 3< <(printf 'x\n')
+    [ "$status" -eq 0 ]
+    # open-export runs it on the export's key; it gets this far only when it says yes.
+    run Exec --secrets --from "$SANDBOX/out/items.folio" --file-passphrase-fd 3 web/github -- true 3< <(printf 'x\n')
+    [ "$status" -eq 0 ]
 }

@@ -49,7 +49,7 @@ teardown() {
     fpr=$(list-secret-keys | awk -F'\t' '$2 ~ /Expiring/ { print $1 }')
     run key-expiry "$fpr"
     [ "$status" -eq 0 ]
-    [[ $output == 2030-01-1[45] ]]   # gpg may store the end of the previous day in UTC
+    [[ $output == 2030-01-1[45] ]] || false   # gpg may store the end of the previous day in UTC
 }
 
 @test "store-init: starts a git history authored from the key" {

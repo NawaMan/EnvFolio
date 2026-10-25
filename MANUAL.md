@@ -131,7 +131,7 @@ encrypts it, runs `pass init`, and starts the store's git history.
 
 ```
 folio init [--key <id>] [--allow-unsafe-folder]
-folio init [--new-key] [--name <name>] [--email <email>] [--store-passphrase-stdin|--store-passphrase-fd <n>] [--allow-unsafe-folder]
+folio init [--new-key] [--name <name>] [--email <email>] [--key-type <pqc|classical>] [--store-passphrase-stdin|--store-passphrase-fd <n>] [--allow-unsafe-folder]
 ```
 
 | Option | Meaning |
@@ -140,6 +140,7 @@ folio init [--new-key] [--name <name>] [--email <email>] [--store-passphrase-std
 | `--new-key` | Create a new key. Implied by any of the options below. See *Post-quantum keys*. |
 | `--name <name>` | The new key's name. |
 | `--email <email>` | The new key's email. |
+| `--key-type <pqc\|classical>` | The new key's kind, without asking: `pqc` (post-quantum; needs gpg 2.5.21 or later, refused on an older one) or `classical` (gpg's default key). See *Post-quantum keys*. |
 | `--store-passphrase-stdin` | Read the new key's passphrase from the first line of stdin instead of gpg's prompt. Needs `--name` and `--email`. An empty passphrase is refused. |
 | `--store-passphrase-fd <n>` | Read the new key's passphrase from the first line of file descriptor `<n>` (e.g. `--store-passphrase-fd 3 3< pass.txt`). stdin stays free, so anything not given is still asked for. An empty passphrase is refused. |
 | `--allow-unsafe-folder` | Use an existing empty folder that is someone else's or open to other users without asking. The warning still shows. See *The store folder is private*. |
@@ -162,8 +163,15 @@ for the new key is asked, its kind is asked too:
 2) Classical — X25519, Ed25519
 ```
 
-With every input given as an option, it is post-quantum without asking. With an older gpg,
-nothing changes: the key is gpg's default. A store with a post-quantum key needs gpg 2.5.21 or
+With every input given as an option, it is post-quantum without asking. `--key-type pqc` or
+`--key-type classical` picks it without asking — e.g. a scripted init for a store that machines
+with gpg 2.4 must open:
+
+```bash
+folio init --name "Jane Doe" --email jane@example.com --key-type classical --store-passphrase-fd 3 3< pass.txt
+```
+
+With an older gpg, nothing changes: the key is gpg's default, and `--key-type pqc` is refused. A store with a post-quantum key needs gpg 2.5.21 or
 later on every machine that opens it. Texts are still signed classically: gpg has no post-quantum
 signatures yet.
 
@@ -533,12 +541,9 @@ Takes `aws/key` and `web/user`; one already in the store stays as it is.
 
 Lists the texts and secrets in the EnvFolio store together as one tree: names only, never values.
 Each name is marked **(S)** for a secret or **(T)** for a text. A name that is both shows twice.
-On a screen, a secret is marked **🔑** and a text **📄** instead, and secrets are yellow and texts
-green — the colours in `text ls`, `secret ls` and `find` too. No terminal can be asked whether it
-draws emoji, so they show only with a UTF-8 locale and not on the Linux console (`TERM=linux`).
-`NO_COLOR` takes the colours away and keeps the emoji. Sent to a pipe or a file, with `TERM=dumb`,
-or with `--plain`, it is always **(S)**/**(T)** and no colour — what scripts and the examples below
-see.
+On a screen, secrets are yellow and texts green — the colours in `text ls`, `secret ls` and `find`
+too. Sent to a pipe or a file, with `NO_COLOR` set or `TERM=dumb`, or with `--plain`, there is no
+colour — what scripts and the examples below see.
 Signatures (`.txt.sig`) are left out.
 
 ```
@@ -548,7 +553,7 @@ folio ls [--flat] [--plain] [<subfolder>]
 | Option | Meaning |
 | --- | --- |
 | `--flat` | Full names, one per line, sorted, instead of a tree: `(S)web/github`. |
-| `--plain` | (S)/(T) and no colour, even on a screen. |
+| `--plain` | No colour, even on a screen. |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
 Only a folder can be listed. It needs a ready store (`folio init`).
@@ -1289,10 +1294,10 @@ folio exec [-s|--secrets] [-a|--all] [-n|--names|--debug|--confirm] [--plain]
 | --- | --- |
 | `-s`, `--secrets` | Also load secrets. Without it, a secret named directly is refused, and the secrets in a folder are left out, with a note on stderr saying how many. |
 | `-a`, `--all` | Load every entry outside the namespaces (top `@` folders) first, wherever it is typed; the entries given then layer over it. With it, `<entry>` is optional. |
-| `-n`, `--names` | Only show which variable would get which entry, in the order they are set, marked (S)ecret or (T)ext — on a screen, 🔑 or 📄 in front, coloured as in `folio ls` — and stop. Nothing is read or decrypted (no passphrase, no signature check), and the command, if given, does not run. With `--from`, the file is still opened to see what is in it. |
+| `-n`, `--names` | Only show which variable would get which entry, in the order they are set, marked (S)ecret or (T)ext — on a screen, coloured as in `folio ls` — and stop. Nothing is read or decrypted (no passphrase, no signature check), and the command, if given, does not run. With `--from`, the file is still opened to see what is in it. |
 | `--debug` | Show the same as `--names`, on stderr, then run the command. The names are shown before any value is read. Not with `--names`. |
-| `--confirm` | Show the same as `--debug`, then ask `run <command>? [y/N]` and run it only on yes. Asked and answered on the terminal (`/dev/tty`), never stdin, which stays the command's; with no terminal it refuses. Nothing is read or decrypted before the yes. |
-| `--plain` | With `--names`, `--debug` or `--confirm`: (S)/(T) and no colour, even on a screen. |
+| `--confirm` | Show the same as `--debug`, then ask `run <command>? [y/N]` and run it only on yes. Asked and answered on the terminal (`/dev/tty`), never stdin, which stays the command's; with no terminal it refuses. No value is read or decrypted, and the store key is not unlocked (`--store-passphrase-fd`), before the yes; a `--from` file is opened first, to show its names. |
+| `--plain` | With `--names`, `--debug` or `--confirm`: no colour, even on a screen. |
 | `--vars <file>` | Set the variables a vars file says: constants, values from your environment, entries, with fallbacks. Can be given more than once. With it, `<entry>` is optional. See [From a vars file](#from-a-vars-file). |
 | `--from <file>` | Take the entries from a file made by `folio export`, not from the store. No store is needed, and none is made or touched. See [From an export file](#from-an-export-file). |
 | `--file-passphrase-fd <n>` | With `--from`: the file's passphrase, from the first line of file descriptor `<n>`, e.g. `--file-passphrase-fd 3 3< pass.txt`. stdin stays the command's. |
@@ -1559,7 +1564,7 @@ folio shell [-s|--secrets] [-a|--all] [-n|--names|--debug|--confirm] [--plain] [
 | `-n`, `--names` | Only show which variable would get which entry, as in `folio exec`; no shell starts. |
 | `--debug` | Show the same on stderr, then start the shell. |
 | `--confirm` | Show the same on stderr, and start the shell only when you say yes, as in `folio exec`. |
-| `--plain` | With `--names`, `--debug` or `--confirm`: (S)/(T) and no colour, even on a screen. |
+| `--plain` | With `--names`, `--debug` or `--confirm`: no colour, even on a screen. |
 | `--vars <file>` | Set the variables a vars file says, as in `folio exec`; can be given more than once. |
 | `--from <file>` | Take the entries from a file made by `folio export`, as in `folio exec`. |
 | `--file-passphrase-fd <n>` | With `--from`: the file's passphrase, from file descriptor `<n>`, as in `folio exec`. |

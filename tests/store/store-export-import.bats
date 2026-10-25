@@ -56,17 +56,18 @@ export-file() {
 # Nothing left in TMPDIR, and the export's key never in the keyring.
 left-clean() {
     [ -z "$(ls -A "$TMPDIR")" ]
-    ! gpg --list-keys "EnvFolio export" >/dev/null 2>&1
+    run gpg --list-keys "EnvFolio export"
+    [ "$status" -ne 0 ]
 }
 
 @test "MANUAL: export — export with a passphrase" {
     make-store
     run "$FOLIO" export -o "$SANDBOX/out" --file-passphrase-stdin web < <(printf 'export pass\n')
     [ "$status" -eq 0 ]
-    [[ $output == *"Items:  2 (texts: 2, secrets: 0)"* ]]
-    [[ $output == *"left out 1 secret(s) under 'web'"* ]]
+    [[ $output == *"Items:  2 (texts: 2, secrets: 0)"* ]] || false
+    [[ $output == *"left out 1 secret(s) under 'web'"* ]] || false
     local file ; file=$(export-file)
-    [[ ${file##*/} =~ ^store-[0-9]{8}\.folio$ ]]
+    [[ ${file##*/} =~ ^store-[0-9]{8}\.folio$ ]] || false
     [ "$(stat -c %a "$file" 2>/dev/null || stat -f %Lp "$file")" = "600" ]
     # Locked: not a readable tar.
     run tar -tzf "$file"
@@ -80,7 +81,7 @@ left-clean() {
     go-there
     run "$FOLIO" import --all --key server@example.com --file-passphrase-stdin "$(export-file)" < <(printf 'export pass\n')
     [ "$status" -eq 0 ]
-    [[ $output == *"Texts:   1"* && $output == *"Secrets: 1"* ]]
+    [[ $output == *"Texts:   1"* && $output == *"Secrets: 1"* ]] || false
     [ "$("$FOLIO" text show web/home)" = "https://example.com" ]
     [ "$("$FOLIO" secret show web/github)" = "s3cr3t" ]
     [ ! -e "$FOLIO_STORE_DIR/web/user.txt" ]
@@ -95,9 +96,10 @@ left-clean() {
     GNUPGHOME="$SANDBOX/there-gnupg" gpg --armor --export server@example.com > "$SANDBOX/server.asc"
     run "$FOLIO" export -o "$SANDBOX/out" --secrets --to "$SANDBOX/server.asc" web < /dev/null
     [ "$status" -eq 0 ]
-    [[ $output == *"Items:  3 (texts: 2, secrets: 1)"* && $output == *"Server <server@example.com>"* ]]
+    [[ $output == *"Items:  3 (texts: 2, secrets: 1)"* && $output == *"Server <server@example.com>"* ]] || false
     # The server's key stayed out of this keyring; this keyring cannot open the file.
-    ! gpg --list-keys server@example.com >/dev/null 2>&1
+    run gpg --list-keys server@example.com
+    [ "$status" -ne 0 ]
     run gpg --batch --decrypt --output /dev/null "$(export-file)"
     [ "$status" -ne 0 ]
     left-clean
@@ -119,7 +121,7 @@ left-clean() {
     "$FOLIO" text insert -t "old" web/user < /dev/null >/dev/null
     run "$FOLIO" import --skip-existing --file-passphrase-stdin "$(export-file)" aws/key web/user < <(printf 'p\n')
     [ "$status" -eq 0 ]
-    [[ $output == *"Skipped: 1"* ]]
+    [[ $output == *"Skipped: 1"* ]] || false
     [ "$("$FOLIO" secret show aws/key)" = "AKIA" ]
     [ "$("$FOLIO" text show web/user)" = "old" ]
 }
@@ -143,7 +145,7 @@ left-clean() {
     chmod 755 "$FOLIO_STORE_DIR"
     run "$FOLIO" import --all --file-passphrase-stdin "$(export-file)" < <(printf 'p\n')
     [ "$status" -eq 1 ]
-    [[ $output == *"other users can get into"*"stdin carries the passphrase"*"--allow-unsafe-folder"* ]]
+    [[ $output == *"other users can get into"*"stdin carries the passphrase"*"--allow-unsafe-folder"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR/web/user.txt" ]
     run "$FOLIO" import --all --file-passphrase-stdin --allow-unsafe-folder "$(export-file)" < <(printf 'p\n')
     [ "$status" -eq 0 ]
@@ -180,8 +182,8 @@ left-clean() {
     # web/user clashes: "2" skips it.
     run --separate-stderr "$FOLIO" import "$(export-file)" < <(printf '9\n1 3-4\n2\n')
     [ "$status" -eq 0 ]
-    [[ $stderr == *"   4) (T)web/user"* && $stderr == *"Not a choice: '9'"* ]]
-    [[ $output == *"Texts:   1"* && $output == *"Secrets: 1"* && $output == *"Skipped: 1"* ]]
+    [[ $stderr == *"   4) (T)web/user"* && $stderr == *"Not a choice: '9'"* ]] || false
+    [[ $output == *"Texts:   1"* && $output == *"Secrets: 1"* && $output == *"Skipped: 1"* ]] || false
     [ "$("$FOLIO" secret show aws/key)" = "AKIA" ]
     [ "$("$FOLIO" text show web/home)" = "https://example.com" ]
     [ "$("$FOLIO" text show web/user)" = "old" ]
@@ -199,10 +201,10 @@ V
     run "$FOLIO" export -s -o "$SANDBOX/out" --vars "$SANDBOX/deploy.vars" --file-passphrase-stdin \
         < <(printf 'export pass\n')
     [ "$status" -eq 0 ]
-    [[ $output == *"Vars files: $SANDBOX/deploy.vars"* ]]
-    [[ $output == *"Items:  4 (texts: 2, secrets: 2)"* ]]
-    [[ $output == *"deploy.vars:3: 'no/such' is not a text or secret in the store; left out"* ]]
-    [[ $output == *"folio exec -s --from $SANDBOX/out/"*".folio --vars $SANDBOX/deploy.vars -- <command>"* ]]
+    [[ $output == *"Vars files: $SANDBOX/deploy.vars"* ]] || false
+    [[ $output == *"Items:  4 (texts: 2, secrets: 2)"* ]] || false
+    [[ $output == *"deploy.vars:3: 'no/such' is not a text or secret in the store; left out"* ]] || false
+    [[ $output == *"folio exec -s --from $SANDBOX/out/"*".folio --vars $SANDBOX/deploy.vars -- <command>"* ]] || false
     local file ; file=$(export-file)
     left-clean
     go-there
@@ -219,8 +221,8 @@ V
     run "$FOLIO" export -o "$SANDBOX/out" --vars="$SANDBOX/a.vars" web/user web/home --file-passphrase-stdin \
         < <(printf 'p\n')
     [ "$status" -eq 0 ]
-    [[ $output == *"Items:  2 (texts: 2, secrets: 0)"* ]]
-    [[ $output == *"folio exec --from "* ]]
+    [[ $output == *"Items:  2 (texts: 2, secrets: 0)"* ]] || false
+    [[ $output == *"folio exec --from "* ]] || false
     left-clean
 }
 
@@ -229,23 +231,23 @@ V
     printf '%s\n' 'A=@{web/home}' 'T=${NO_SUCH_ENV_FOR_TEST:-@{web/github}}' > "$SANDBOX/a.vars"
     run "$FOLIO" export -o "$SANDBOX/out" --vars "$SANDBOX/a.vars" --file-passphrase-stdin < <(printf 'p\n')
     [ "$status" -eq 1 ]
-    [[ $output == *"a.vars:2: 'web/github' is a secret; add --secrets to load it."* ]]
+    [[ $output == *"a.vars:2: 'web/github' is a secret; add --secrets to load it."* ]] || false
     printf '%s\n' '@{aws/*}' > "$SANDBOX/a.vars"
     run "$FOLIO" export -o "$SANDBOX/out" --vars "$SANDBOX/a.vars" --file-passphrase-stdin < <(printf 'p\n')
     [ "$status" -eq 1 ]
-    [[ $output == *"a.vars:1: 'aws' has 1 secret(s); add --secrets to load them."* ]]
+    [[ $output == *"a.vars:1: 'aws' has 1 secret(s); add --secrets to load them."* ]] || false
     printf '%s\n' 'A=@{web/home}' 'B=x-@{web}' > "$SANDBOX/a.vars"
     run "$FOLIO" export -s -o "$SANDBOX/out" --vars "$SANDBOX/a.vars" --file-passphrase-stdin < <(printf 'p\n')
     [ "$status" -eq 1 ]
-    [[ $output == *"a.vars:2: 'web' is not a text or secret in the store, and there is no fallback."* ]]
+    [[ $output == *"a.vars:2: 'web' is not a text or secret in the store, and there is no fallback."* ]] || false
     printf '%s\n' 'A=@{no/such:-x}' 'B=${HOME}' > "$SANDBOX/a.vars"
     run "$FOLIO" export -o "$SANDBOX/out" --vars "$SANDBOX/a.vars" --file-passphrase-stdin < <(printf 'p\n')
     [ "$status" -eq 1 ]
-    [[ $output == *"the vars files name no item that is there."* ]]
+    [[ $output == *"the vars files name no item that is there."* ]] || false
     printf '%s\n' 'A=$(touch x)' > "$SANDBOX/a.vars"
     run "$FOLIO" export -o "$SANDBOX/out" --vars "$SANDBOX/a.vars" --file-passphrase-stdin < <(printf 'p\n')
     [ "$status" -eq 1 ]
-    [[ $output == *"a.vars:1: a \$ starts"* ]]
+    [[ $output == *"a.vars:1: a \$ starts"* ]] || false
     [ -z "$(ls -A "$SANDBOX/out")" ]
     left-clean
 }
@@ -254,31 +256,31 @@ V
     make-store
     run "$FOLIO" export -o "$SANDBOX/out" --file-passphrase-stdin < <(printf 'p\n')
     [ "$status" -eq 1 ]
-    [[ $output == *"needs the items named"* ]]
+    [[ $output == *"needs the items named"* ]] || false
     run "$FOLIO" export -o "$SANDBOX/out" --to x --file-passphrase-stdin web < /dev/null
     [ "$status" -eq 1 ]
     run "$FOLIO" export -o "$SANDBOX/out" --file-passphrase-stdin aws < <(printf 'p\n')
     [ "$status" -eq 1 ]
-    [[ $output == *"only secrets under 'aws' (1); add --secrets"* ]]
+    [[ $output == *"only secrets under 'aws' (1); add --secrets"* ]] || false
     run "$FOLIO" export -o "$SANDBOX/out" --file-passphrase-stdin nope < <(printf 'p\n')
     [ "$status" -eq 1 ]
-    [[ $output == *"'nope' is not an item"* ]]
+    [[ $output == *"'nope' is not an item"* ]] || false
     run "$FOLIO" export -o "$SANDBOX/out" --file-passphrase-stdin ../x < <(printf 'p\n')
     [ "$status" -eq 1 ]
-    [[ $output == *"not a valid name"* ]]
+    [[ $output == *"not a valid name"* ]] || false
     run "$FOLIO" export -o "$SANDBOX/out" --to nobody@example.com web < /dev/null
     [ "$status" -eq 1 ]
-    [[ $output == *"No public key"* ]]
+    [[ $output == *"No public key"* ]] || false
     run "$FOLIO" export -o "$SANDBOX/out" --file-passphrase-stdin web < /dev/null
     [ "$status" -eq 1 ]
-    [[ $output == *"No passphrase"* ]]
+    [[ $output == *"No passphrase"* ]] || false
     run "$FOLIO" export -o "$FOLIO_STORE_DIR/web" --file-passphrase-stdin web < <(printf 'p\n')
     [ "$status" -eq 1 ]
-    [[ $output == *"is inside the store"* ]]
+    [[ $output == *"is inside the store"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR/web"/*.folio ]
     run "$FOLIO" export --nope
     [ "$status" -eq 1 ]
-    [[ $output == *"unknown option: --nope"* ]]
+    [[ $output == *"unknown option: --nope"* ]] || false
     [ -z "$(ls -A "$SANDBOX/out")" ]
     left-clean
 }
@@ -293,14 +295,14 @@ V
     echo hi > "$SANDBOX/x.tgz"
     run "$FOLIO" import --all "$SANDBOX/x.tgz"
     [ "$status" -eq 1 ]
-    [[ $output == *"not an EnvFolio export"* ]]
+    [[ $output == *"not an EnvFolio export"* ]] || false
     run "$FOLIO" import --all "$(export-file)" web
     [ "$status" -eq 1 ]
-    [[ $output == *"give no <name> with it"* ]]
+    [[ $output == *"give no <name> with it"* ]] || false
     # No file, and no input to answer the questions (the new store's key, then the file).
     run "$FOLIO" import < /dev/null
     [ "$status" -eq 1 ]
-    [[ $output == *"Cancelled"* ]]
+    [[ $output == *"Cancelled"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
     left-clean
 }
@@ -317,7 +319,7 @@ V
     go-there
     run "$FOLIO" import --all --key server@example.com --file-passphrase-stdin "$SANDBOX/bad.folio" < <(printf 'p\n')
     [ "$status" -eq 1 ]
-    [[ $output == *"signature of 'web/home' in the export does not verify"* ]]
+    [[ $output == *"signature of 'web/home' in the export does not verify"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 
@@ -341,10 +343,10 @@ V
 @test "export --help, import --help: work without a store" {
     run "$FOLIO" export --help
     [ "$status" -eq 0 ]
-    [[ $output == "Usage: folio export"* ]]
+    [[ $output == "Usage: folio export"* ]] || false
     run "$FOLIO" help import
     [ "$status" -eq 0 ]
-    [[ $output == "Usage: folio import"* ]]
+    [[ $output == "Usage: folio import"* ]] || false
 }
 
 @test "parse-picks: numbers, ranges, all; once each, in order; nothing out of range" {
@@ -353,11 +355,18 @@ V
     [ "$(parse-picks 5 '3 1,2-3')" = $'1\n2\n3' ]
     [ "$(parse-picks 3 'all')" = $'1\n2\n3' ]
     [ "$(parse-picks 10 '08 10')" = $'8\n10' ]
-    ! parse-picks 3 ''
-    ! parse-picks 3 '0'
-    ! parse-picks 3 '4'
-    ! parse-picks 3 '3-1'
-    ! parse-picks 3 '1-'
-    ! parse-picks 3 'x'
-    ! parse-picks 3 '*'
+    run parse-picks 3 ''
+    [ "$status" -ne 0 ]
+    run parse-picks 3 '0'
+    [ "$status" -ne 0 ]
+    run parse-picks 3 '4'
+    [ "$status" -ne 0 ]
+    run parse-picks 3 '3-1'
+    [ "$status" -ne 0 ]
+    run parse-picks 3 '1-'
+    [ "$status" -ne 0 ]
+    run parse-picks 3 'x'
+    [ "$status" -ne 0 ]
+    run parse-picks 3 '*'
+    [ "$status" -ne 0 ]
 }

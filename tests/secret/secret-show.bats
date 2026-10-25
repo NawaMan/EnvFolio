@@ -74,8 +74,8 @@ EOF
     fake-clipboard
     run "$FOLIO" secret show web/github -c
     [ "$status" -eq 0 ]
-    [[ $output == *"Copied web/github to clipboard"*"clear in 60 seconds"* ]]
-    [[ $output != *"s3cr3t"* ]]
+    [[ $output == *"Copied web/github to clipboard"*"clear in 60 seconds"* ]] || false
+    [[ $output != *"s3cr3t"* ]] || false
     [ "$(cat "$CLIPBOARD")" = "s3cr3t" ]
 }
 
@@ -84,7 +84,7 @@ EOF
     fake-clipboard
     run "$FOLIO" secret show --clip=2 note
     [ "$status" -eq 0 ]
-    [[ $output != *"line"* ]]
+    [[ $output != *"line"* ]] || false
     [ "$(cat "$CLIPBOARD")" = "line two" ]
 }
 
@@ -92,15 +92,15 @@ EOF
     make-store
     run "$FOLIO" secret show web
     [ "$status" -eq 1 ]
-    [[ $output == *"'web' is not a secret"* ]]
-    [[ $output != *"github"* ]]
+    [[ $output == *"'web' is not a secret"* ]] || false
+    [[ $output != *"github"* ]] || false
 }
 
 @test "secret show: an unknown name fails" {
     make-store
     run "$FOLIO" secret show nope
     [ "$status" -eq 1 ]
-    [[ $output == *"'nope' is not a secret"* ]]
+    [[ $output == *"'nope' is not a secret"* ]] || false
 }
 
 @test "secret show: --qrcode and unknown options are refused" {
@@ -109,21 +109,21 @@ EOF
     for arg in -q --qrcode --qrcode=1; do
         run "$FOLIO" secret show "$arg" web/github
         [ "$status" -eq 1 ]
-        [[ $output == *"--qrcode is not offered"* ]]
+        [[ $output == *"--qrcode is not offered"* ]] || false
     done
     run "$FOLIO" secret show --nope web/github
     [ "$status" -eq 1 ]
-    [[ $output == *"unknown option: --nope"* && $output != *"s3cr3t"* ]]
+    [[ $output == *"unknown option: --nope"* && $output != *"s3cr3t"* ]] || false
 }
 
 @test "secret show: exactly one name" {
     make-store
     run "$FOLIO" secret show
     [ "$status" -eq 1 ]
-    [[ $output == *"Usage: folio secret show"* ]]
+    [[ $output == *"Usage: folio secret show"* ]] || false
     run "$FOLIO" secret show web/github note
     [ "$status" -eq 1 ]
-    [[ $output == *"Usage: folio secret show"* && $output != *"s3cr3t"* ]]
+    [[ $output == *"Usage: folio secret show"* && $output != *"s3cr3t"* ]] || false
 }
 
 @test "secret show: a name after -- is not an option" {
@@ -137,16 +137,16 @@ EOF
 @test "secret show: no store fails and creates nothing" {
     run "$FOLIO" secret show web/github
     [ "$status" -eq 1 ]
-    [[ $output == *"No ready EnvFolio store"*"folio init"* ]]
+    [[ $output == *"No ready EnvFolio store"*"folio init"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 
 @test "secret show --help: works without a store" {
     run "$FOLIO" secret show --help
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio secret show"* ]]
+    [[ $output == *"Usage: folio secret show"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
     run "$FOLIO" help secret show
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio secret show"* ]]
+    [[ $output == *"Usage: folio secret show"* ]] || false
 }

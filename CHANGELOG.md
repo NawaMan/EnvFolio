@@ -4,34 +4,41 @@ User-visible changes to EnvFolio. Newest first.
 
 ## Unreleased
 
+1.0.0: commands, options and file formats (the store, vars files, `.folio` exports, backups) are
+now stable. A change that breaks any of them will come with a new major version. Changes since
+0.8.0:
+
 ### Added
 
-- `folio init` makes a post-quantum key (ML-KEM + ECC) with gpg 2.5.21 or later, or a classical
-  one if you pick it. With an older gpg, nothing changes. The summary shows the key's `Type:`.
+- `folio init` makes a post-quantum key (ML-KEM + ECC) with gpg 2.5.21 or later — asked, when
+  anything else is asked, with classical as the other choice. `--key-type pqc|classical` picks it
+  without asking. With an older gpg, nothing changes (`--key-type pqc` is refused). The summary
+  shows the key's `Type:`.
 - A backup of a post-quantum key, or an export locked to one, says it needs gpg 2.5.21 or later to
   open. On an older gpg, `restore`, `import` and `--from` refuse such a file, change nothing, and
   link to how to update gpg (a new README section).
-- On a screen that can draw emoji (a UTF-8 locale, not the Linux console), `folio ls` and
-  `exec`/`shell --names` mark a secret 🔑 and a text 📄 instead of (S)/(T). In a pipe or a file
-  it stays (S)/(T).
 - `exec`/`shell --debug`: show which variable gets which entry, as `--names` does, on stderr, and
-  then run. `--confirm`: show the same and ask on the terminal (not stdin) before anything is read
-  or run.
-- `--plain` for `ls`, `text ls`, `secret ls`, `text find`, `secret find`, `exec` and `shell`:
-  (S)/(T) and no colour, even on a screen.
+  then run. `--confirm`: show the same and ask on the terminal (not stdin) first. No value is read,
+  and the store key is not unlocked (`--store-passphrase-fd`), before the yes; a `--from` file is
+  opened first, to show its names.
+- `--plain` for `ls`, `text ls`, `secret ls`, `text find`, `secret find`, `exec` and `shell`: no
+  colour, even on a screen.
 
 ### Changed
 
-- No more warning about gpg 2.5.24 from `restore`, `import` and `--from`: on Homebrew's 2.5.24
-  today, they work — with a classical key and a post-quantum one.
-
-- `exec`/`shell --names` colour secrets yellow and texts green on a screen, as `ls` does.
-- `exec`/`shell --names`, `folio ls` and the export/import lists put the mark right against the
-  name: `🔑gh/token` and `gh/token(S)` for exec, `(S)gh/token` for the others (was `🔑 gh/token`,
-  `gh/token (S)`, `(S) gh/token`).
 - `folio ls`, `text ls`, `secret ls` and `text find`/`secret find` show secrets in yellow and texts
-  in green, on a screen that shows colour. Sent to a pipe or a file, or with `NO_COLOR` set or
-  `TERM=dumb`, they now print no colour codes at all (folders used to keep theirs).
+  in green, on a screen that shows colour; `exec`/`shell --names` too. Sent to a pipe or a file, or
+  with `NO_COLOR` set or `TERM=dumb`, they now print no colour codes at all (folders used to keep
+  theirs).
+- `exec`/`shell --names`, `folio ls` and the export/import lists put the mark right against the
+  name: `gh/token(S)` for exec, `(S)gh/token` for the others (was `gh/token (S)`, `(S) gh/token`).
+- `exec`/`shell --names` with `--store-passphrase-fd` no longer reads the passphrase: it reads no
+  value, so it needs none.
+- The warning about gpg 2.5.24 from `restore`, `import` and `--from` is now a check: opening an
+  export, EnvFolio tries its key, and refuses — saying why, nothing changed — only when this gpg
+  cannot use it. gpg 2.5.23 and 2.5.24 as released cannot use a key imported without a passphrase,
+  as an export's is ([T8469](https://dev.gnupg.org/T8469)); Homebrew's 2.5.24 has the fix, and
+  works with a classical key and a post-quantum one.
 
 ### Fixed
 
@@ -39,13 +46,6 @@ User-visible changes to EnvFolio. Newest first.
   `command not found: compdef` when zsh finds a completion file it does not trust (one owned by
   another user, or in a world-writable folder) and no one can answer its question — as at
   Powerlevel10k's instant prompt. It skips that file instead.
-
-## 1.0.0 — 2026-10-22
-
-### Changed
-
-- 1.0.0: commands, options and file formats (the store, vars files, `.folio` exports, backups)
-  are now stable. A change that breaks any of them will come with a new major version.
 
 ## 0.8.0 — 2026-10-22
 

@@ -72,18 +72,18 @@ fake-gpg() {
     # The menu is on stderr, its prompt with no newline: the answer ends the output.
     run ask-key-kind <<< 1
     [ "$status" -eq 0 ]
-    [[ $output == *": pqc" ]]
-    [[ $output == *"1) Post-quantum (recommended) — ML-KEM-768 + Brainpool P-256, Brainpool P-384"* ]]
-    [[ $output == *"2) Classical — X25519, Ed25519"* ]]
+    [[ $output == *": pqc" ]] || false
+    [[ $output == *"1) Post-quantum (recommended) — ML-KEM-768 + Brainpool P-256, Brainpool P-384"* ]] || false
+    [[ $output == *"2) Classical — X25519, Ed25519"* ]] || false
     run ask-key-kind <<< 2
     [ "$status" -eq 0 ]
-    [[ $output == *": default" ]]
+    [[ $output == *": default" ]] || false
 }
 
 @test "ask-key-kind: cancelled (Ctrl-D) fails" {
     run ask-key-kind < /dev/null
     [ "$status" -eq 1 ]
-    [[ $output == *"Cancelled."* ]]
+    [[ $output == *"Cancelled."* ]] || false
 }
 
 # init-new-key <stdin> <option>...: Init with a new key, up to making it. gpg-has-pqc says yes; the
@@ -101,18 +101,47 @@ init-new-key() {
 @test "init: a new key with everything from options is post-quantum, not asked" {
     init-new-key "correct horse" --name "New User" --email new@example.com --store-passphrase-stdin
     [ "$(cat "$SANDBOX/algo")" = pqc ]
-    [[ $output != *"Which kind of key?"* ]]
-    [[ $output == *"Key type: Post-quantum — ML-KEM-768"* ]]
+    [[ $output != *"Which kind of key?"* ]] || false
+    [[ $output == *"Key type: Post-quantum — ML-KEM-768"* ]] || false
 }
 
 @test "init: a new key with something asked: the kind is asked too" {
     init-new-key 2 --name "New User" --email new@example.com
-    [[ $output == *"Which kind of key?"* ]]
-    [[ $output == *"make it with gpg first"* ]]
+    [[ $output == *"Which kind of key?"* ]] || false
+    [[ $output == *"make it with gpg first"* ]] || false
     [ "$(cat "$SANDBOX/algo")" = default ]
     init-new-key 1 --name "New User"
-    [[ $output == *"Which kind of key?"* ]]
+    [[ $output == *"Which kind of key?"* ]] || false
     [ "$(cat "$SANDBOX/algo")" = pqc ]
+}
+
+@test "init --key-type: picks the kind, never asked; implies --new-key" {
+    init-new-key "" --name "New User" --email new@example.com --key-type classical
+    [[ $output != *"Which kind of key?"* ]] || false
+    [[ $output == *"Key type: Classical — X25519, Ed25519"* ]] || false
+    [ "$(cat "$SANDBOX/algo")" = default ]
+    init-new-key "" --name "New User" --key-type=pqc
+    [[ $output != *"Which kind of key?"* ]] || false
+    [ "$(cat "$SANDBOX/algo")" = pqc ]
+}
+
+@test "init --key-type: pqc refused on a gpg that can't make one; a wrong value or --key refused" {
+    # shellcheck disable=SC2317  # called by Init
+    gpg-has-pqc() { return 1; }
+    # shellcheck disable=SC2317  # called by Init
+    gpg-version() { echo 2.4.4; }
+    run Init --name "New User" --email new@example.com --key-type pqc < /dev/null
+    [ "$status" -eq 1 ]
+    [[ $output == *"--key-type pqc needs gpg 2.5.21 or later (this one is 2.4.4)."* ]] || false
+    [[ $output == *"updating-gpg-for-post-quantum-keys"* ]] || false
+    [ ! -e "$FOLIO_STORE_DIR" ]
+    run Init --name "New User" --email new@example.com --key-type quantum < /dev/null
+    [ "$status" -eq 1 ]
+    [[ $output == *"--key-type is pqc or classical, not 'quantum'."* ]] || false
+    run Init --key test@example.com --key-type classical < /dev/null
+    [ "$status" -eq 1 ]
+    [[ $output == *"--key cannot be used with"*"--key-type"* ]] || false
+    [ ! -e "$FOLIO_STORE_DIR" ]
 }
 
 @test "init: no menu when this gpg can't make a post-quantum key" {
@@ -121,8 +150,8 @@ init-new-key() {
     acknowledge()  { :; }
     generate-key() { echo "$4" > "$SANDBOX/algo"; return 1; }
     run Init --name "New User" --email new@example.com
-    [[ $output != *"Which kind of key?"* ]]
-    [[ $output == *"Key type: gpg's default"* ]]
-    [[ $output != *"ost-quantum"* ]]
+    [[ $output != *"Which kind of key?"* ]] || false
+    [[ $output == *"Key type: gpg's default"* ]] || false
+    [[ $output != *"ost-quantum"* ]] || false
     [ "$(cat "$SANDBOX/algo")" = default ]
 }

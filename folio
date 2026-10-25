@@ -21,7 +21,7 @@
 
 # Set by the release: `<major>.<minor>.<patch>` in a release, `<next>--rc` on main between releases.
 # The release workflow (.github/workflows/release.yml) reads and bumps this exact line.
-APP_VERSION=1.1.0--rc
+APP_VERSION=1.0.0--rc
 
 STORE_PATH=${FOLIO_STORE_DIR:-$HOME/.folio}
 # Always absolute: `pass` loops forever on a relative PASSWORD_STORE_DIR whose folder doesn't exist
@@ -304,7 +304,7 @@ function accept-unsafe-store() {
 function store-init-usage() {
     cat <<'EOF'
 Usage: folio init [--key <id>] [--allow-unsafe-folder]
-       folio init [--new-key] [--name <name>] [--email <email>]
+       folio init [--new-key] [--name <name>] [--email <email>] [--key-type <pqc|classical>]
                   [--store-passphrase-stdin|--store-passphrase-fd <n>] [--allow-unsafe-folder]
 EOF
 }
@@ -321,10 +321,15 @@ can get in, EnvFolio warns and asks before using it. Anything not given is asked
 Options:
   --key <id>          Use an existing secret key: fingerprint, key id or email (must match one).
                       No passphrase is needed: the store only encrypts to the key.
-  --new-key           Create a new key — post-quantum when gpg can make one. Implied by any
-                      option below.
+  --new-key           Create a new key — post-quantum when gpg can make one (see --key-type).
+                      Implied by any option below.
   --name <name>       The new key's name.
   --email <email>     The new key's email.
+  --key-type <pqc|classical>
+                      The new key's kind: pqc (post-quantum, ML-KEM + ECC; opening the store or
+                      a backup of it then needs gpg 2.5.21 or later everywhere) or classical
+                      (gpg's default key, e.g. X25519 + Ed25519). Not given: pqc when this gpg can
+                      make one — asked, when anything else is asked — else classical.
   --store-passphrase-stdin
                       Read the new key's passphrase from the first line of stdin.
                       Needs --name and --email. An empty passphrase is refused.
@@ -342,23 +347,24 @@ Examples: MANUAL.md, section `folio init`.
 EOF
 }
 
-# folio init [--key <id>] | [--new-key] [--name <name>] [--email <email>]
+# folio init [--key <id>] | [--new-key] [--name <name>] [--email <email>] [--key-type <pqc|classical>]
 #                     [--store-passphrase-stdin|--store-passphrase-fd <n>] [--allow-unsafe-folder]
 # Anything not given is asked for. An existing key needs no passphrase: the store only encrypts to it.
 Init() {
     # Process the command-line options
-    local key_id="" new_key=0 name="" email="" passphrase_stdin=0 passphrase_fd="" allow_unsafe=0 arg
+    local key_id="" new_key=0 name="" email="" key_type="" passphrase_stdin=0 passphrase_fd="" allow_unsafe=0 arg
     while (( $# > 0 )); do
         arg=$1 ; shift
         # --opt=value is the same as --opt value
         if [[ $arg == --*=* ]]; then set -- "${arg#*=}" "$@" ; arg=${arg%%=*} ; fi
         case $arg in
-            --key|--name|--email|--store-passphrase-fd)
+            --key|--name|--email|--key-type|--store-passphrase-fd)
                 [[ $# -gt 0 && -n $1 ]] || die "$arg needs a value."
                 case $arg in
                     --key)   key_id=$1 ;;
                     --name)  name=$1   ;;
                     --email) email=$1  ;;
+                    --key-type) key_type=$1 ;;
                     --store-passphrase-fd) passphrase_fd=$1 ;;
                 esac
                 shift ;;
@@ -408,11 +414,16 @@ EOF
         info "The store path is available: the folder will be made (private, 700)." >&2
     fi
 
-    # --name / --email / --store-passphrase-stdin / --store-passphrase-fd imply --new-key
-    [[ -n $name || -n $email || -n $passphrase_fd ]] || (( passphrase_stdin )) && new_key=1
+    # --name / --email / --key-type / --store-passphrase-stdin / --store-passphrase-fd imply --new-key
+    [[ -n $name || -n $email || -n $key_type || -n $passphrase_fd ]] || (( passphrase_stdin )) && new_key=1
     if [[ -n $key_id ]] && (( new_key )); then
-        die "--key cannot be used with --new-key, --name, --email, --store-passphrase-stdin or --store-passphrase-fd."
+        die "--key cannot be used with --new-key, --name, --email, --key-type, --store-passphrase-stdin or --store-passphrase-fd."
     fi
+    case $key_type in
+        ""|classical) ;;
+        pqc) gpg-has-pqc || die "--key-type pqc needs gpg 2.5.21 or later (this one is $(gpg-version))."$'\n'"$PQC_GPG_HELP" ;;
+        *)   die "--key-type is pqc or classical, not '$key_type'." ;;
+    esac
     if (( passphrase_stdin )) && [[ -n $passphrase_fd ]]; then
         die "--store-passphrase-stdin and --store-passphrase-fd cannot be used together."
     fi
@@ -456,11 +467,13 @@ EOF
             show-answer "Passphrase" "gpg asks for it when it makes the key"
             asked=1
         fi
-        # Input: the new key's kind — post-quantum when this gpg can make one, else gpg's default.
-        # Asked (post-quantum or classical) when this gpg can, unless every input above came from
-        # an option: a run with no prompts stays one.
+        # Input: the new key's kind — --key-type; otherwise post-quantum when this gpg can make one,
+        # else gpg's default. Asked (post-quantum or classical) when this gpg can, unless every
+        # input above came from an option: a run with no prompts stays one.
         algo=default
-        if gpg-has-pqc; then
+        if [[ $key_type == pqc ]]; then
+            algo=pqc
+        elif [[ -z $key_type ]] && gpg-has-pqc; then
             algo=pqc
             if (( asked )); then algo=$(ask-key-kind) || exit 1; fi
         fi
@@ -558,12 +571,18 @@ function store-summary() {
 # With --store-passphrase-fd, unlocks the store's key.
 STORE_MODE_CHECKED=0
 function require-store() {
+    check-store
+    unlock-store-key
+}
+
+# check-store: require-store without unlocking the key — for exec and shell, which unlock it only
+# once they go on to read a value.
+function check-store() {
     store-exists || die "No ready EnvFolio store at $STORE_PATH. Create one with: folio init"
     if (( ! STORE_MODE_CHECKED )); then
         STORE_MODE_CHECKED=1
         warn-unsafe-store
     fi
-    unlock-store-key
 }
 
 # --- backup -------------------------------------------------------------------
@@ -1467,7 +1486,20 @@ function open-export() {
     [[ -s $stage/unpack/key.asc && -d $EXPORT_ROOT ]] || die "$file has no key or no items in it."
     GNUPGHOME=$EXPORT_HOME gpg --batch --quiet --import "$stage/unpack/key.asc" 2>/dev/null
     GNUPGHOME=$EXPORT_HOME gpg --list-secret-keys "$key" >/dev/null 2>&1 || die "$file has no secret key $key."
+    can-use-imported-key "$EXPORT_HOME" "$key" \
+        || die "This gpg ($(gpg-version)) cannot use the key in $file: gpg 2.5.23 and 2.5.24, as" \
+               "released, cannot decrypt with a key they imported without a passphrase, as an" \
+               "export's is (https://dev.gnupg.org/T8469). Use a gpg with the fix — Homebrew's," \
+               "2.4, or a later 2.5. Nothing changed."$'\n'"$PQC_GPG_HELP"
     EXPORT_KEY=$key
+}
+
+# can-use-imported-key <gnupg-home> <key>: whether gpg decrypts with <key>, a secret key just imported
+# into <gnupg-home> — by encrypting a word to it and decrypting that. gpg 2.5.23 and 2.5.24 as
+# released cannot, for a key without a passphrase (https://dev.gnupg.org/T8469); Homebrew's can.
+function can-use-imported-key() {
+    printf 'folio\n' | GNUPGHOME=$1 gpg --batch --quiet --trust-model always --encrypt --recipient "$2" 2>/dev/null \
+        | GNUPGHOME=$1 gpg --batch --quiet --decrypt 2>/dev/null | grep -qx folio
 }
 
 # verify-export-text <how> <name>: die unless the text <name> in the opened export is the one the
@@ -2390,12 +2422,12 @@ function list-help() {
 Usage: folio ls [--flat] [--plain] [<subfolder>]
 
 List the texts and secrets in the EnvFolio store together as a tree — names only, never values.
-Each name is marked (S) for a secret or (T) for a text — on a screen, 🔑 and 📄, secrets yellow
-and texts green (no colour with NO_COLOR set). Give a subfolder to list only what is under it.
+Each name is marked (S) for a secret or (T) for a text — on a screen, secrets yellow and texts
+green (no colour with NO_COLOR set). Give a subfolder to list only what is under it.
 
 Options:
       --flat          Full names, one per line, sorted, instead of a tree.
-      --plain         Mark secrets (S) and texts (T), with no colour, even on a screen.
+      --plain         No colour, even on a screen.
   -h, --help          Show this help and stop.
 EOF
 }
@@ -2440,9 +2472,9 @@ Options:
                       nothing runs.
       --debug         Show the same on stderr, then go on.
       --confirm       Show the same on stderr, and go on only when you say yes (asked on the
-                      terminal, not stdin).
-      --plain         With --names, --debug or --confirm: mark secrets (S) and texts (T), with no
-                      colour, even on a screen.
+                      terminal, not stdin). No value is read, and the store key is not
+                      unlocked, before the yes; a --from file is opened first, to show its names.
+      --plain         With --names, --debug or --confirm: no colour, even on a screen.
   --vars <file>       Set the variables a vars file says (e.g. prod-deploy.vars); can be given
                       more than once. <entry> is then optional.
   --from <file>       Take the entries from a file made by `folio export`, not from the store,
@@ -2475,9 +2507,9 @@ Options:
                       nothing runs.
       --debug         Show the same on stderr, then go on.
       --confirm       Show the same on stderr, and go on only when you say yes (asked on the
-                      terminal, not stdin).
-      --plain         With --names, --debug or --confirm: mark secrets (S) and texts (T), with no
-                      colour, even on a screen.
+                      terminal, not stdin). No value is read, and the store key is not
+                      unlocked, before the yes; a --from file is opened first, to show its names.
+      --plain         With --names, --debug or --confirm: no colour, even on a screen.
   --vars <file>       Set the variables a vars file says, as in `folio exec`; can be given more
                       than once. <entry> is then optional.
   --from <file>       Take the entries from a file made by `folio export`, as in `folio exec`.
@@ -2550,7 +2582,9 @@ function exec-with-entries() {
         FROM_EXPORT=1
     else
         [[ -z $passphrase_fd ]] || die "$how: --file-passphrase-fd is for opening a --from file."
-        require-store
+        # The key is unlocked below, once a value is to be read: not for --names, nor before
+        # --confirm's yes.
+        check-store
     fi
     check-vars-entries "$how" "$secrets"
     # In order: --all (the store's root, wherever it was typed), the vars files, the entries typed.
@@ -2560,8 +2594,9 @@ function exec-with-entries() {
     # any value is read. It runs in a subshell, so nothing it sets is kept. What it says goes to
     # the screen only when it fails; when it does not, the real run below says the same notes.
     # With --debug, that dry run also shows the names, as --names does, straight to stderr (fd 3);
-    # the notes it says are kept, and shown only when it fails. With --confirm, nothing is read
-    # until the user says yes.
+    # the notes it says are kept, and shown only when it fails. With --confirm, no value is read and
+    # the store key is not unlocked until the user says yes (with --from, the file is open already:
+    # its names are needed to show them).
     if (( debug )); then
         local names_errors
         if ! names_errors=$(
@@ -2592,6 +2627,7 @@ function exec-with-entries() {
             exit 1
         fi
     fi
+    (( only_names )) || unlock-store-key
     (( all )) && add-folder "$how" "$secrets" "" " "
     apply-vars "$how" "$secrets" "$only_names"
     (( ${#entries[@]} == 0 )) || resolve-entries "$how" "$secrets" "${entries[@]}"
@@ -2737,14 +2773,12 @@ function print-entry-names() {
     done
 }
 
-# entry-mark <name>.gpg|<name>.txt: the name marked as set-marks says — "🔑<name>" in yellow on a
-# screen, "<name>(S)" elsewhere; for a text, 📄, green and (T).
+# entry-mark <name>.gpg|<name>.txt: "<name>(S)", yellow on a screen with colour (set-marks); for a
+# text, "<name>(T)", green.
 function entry-mark() {
     local name=${1%.*} on=$TEXT_ON mark=$TEXT_MARK
     [[ $1 != *.gpg ]] || on=$SECRET_ON mark=$SECRET_MARK
-    if (( EMOJI )); then echo "$on$mark$name$COLOR_OFF"
-    else                 echo "$on$name$mark$COLOR_OFF"
-    fi
+    echo "$on$name$mark$COLOR_OFF"
 }
 
 # is-explicit <entry>: true for VAR=<name> (no / or [ before the =).
@@ -3683,7 +3717,7 @@ function store-tree() {
                  -e "s/^(.*(── |-- ))($esc\[[0-9;]*m)?(.*)\.txt($esc\[[0-9;]*m)?( ->.*)?\$/\1$TEXT_ON$t\4$COLOR_OFF\6/"
 }
 
-# --plain: (S)/(T) and no colour, even on a screen.
+# --plain: no colour, even on a screen.
 PLAIN=0
 # on-screen: stdout (or SCREEN_FD, where the marks are shown) is a terminal.
 SCREEN_FD=1
@@ -3691,19 +3725,11 @@ function on-screen() { [[ -t $SCREEN_FD ]] ; }
 # use-color: true when stdout is a screen that shows colour — a terminal, not TERM=dumb, and no
 # NO_COLOR (https://no-color.org) or --plain.
 function use-color() { (( ! PLAIN )) && on-screen && [[ -z ${NO_COLOR:-} && ${TERM:-dumb} != dumb ]] ; }
-# use-emoji: true when stdout is a screen that can draw emoji — a terminal, a UTF-8 locale, not
-# TERM=dumb or the Linux console (TERM=linux), and no --plain. A guess: no terminal can be asked.
-function use-emoji() {
-    (( ! PLAIN )) && on-screen && [[ ${TERM:-dumb} != dumb && $TERM != linux ]] || return 1
-    case ${LC_ALL:-${LC_CTYPE:-${LANG:-}}} in *[Uu][Tt][Ff]-8*|*[Uu][Tt][Ff]8*) return 0 ;; esac
-    return 1
-}
-# set-marks: how a secret and a text are marked, for this stdout — SECRET_MARK and TEXT_MARK (🔑
-# and 📄 on a screen with emoji, else (S) and (T)), SECRET_ON and TEXT_ON (yellow and green on a
-# screen with colour, else nothing) and COLOR_OFF. Call it outside $(…), where stdout is not the screen.
+# set-marks: how a secret and a text are marked, for this stdout — SECRET_MARK and TEXT_MARK ((S)
+# and (T)), SECRET_ON and TEXT_ON (yellow and green on a screen with colour, else nothing) and
+# COLOR_OFF. Call it outside $(…), where stdout is not the screen.
 function set-marks() {
-    SECRET_MARK='(S)' TEXT_MARK='(T)' SECRET_ON='' TEXT_ON='' COLOR_OFF='' EMOJI=0
-    if use-emoji; then SECRET_MARK='🔑' TEXT_MARK='📄' EMOJI=1; fi
+    SECRET_MARK='(S)' TEXT_MARK='(T)' SECRET_ON='' TEXT_ON='' COLOR_OFF=''
     if use-color; then SECRET_ON=$'\e[33m' TEXT_ON=$'\e[32m' COLOR_OFF=$'\e[0m'; fi
 }
 
