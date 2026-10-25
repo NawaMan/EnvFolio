@@ -54,6 +54,9 @@ now stable. A change that breaks any of them will come with a new major version.
 
 ### Fixed
 
+- A prompt (`[y/N]`, a name, a number, Enter to continue — `pass`'s too) is no longer answered by
+  keys typed before it showed: an extra Enter, or the newline at the end of a paste. At a terminal,
+  what is waiting is dropped first; answers piped in are read as before.
 - `folio completion zsh` no longer fails with `compinit: initialization aborted` and
   `command not found: compdef` when zsh finds a completion file it does not trust (one owned by
   another user, or in a world-writable folder) and no one can answer its question — as at
