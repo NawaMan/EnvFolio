@@ -176,14 +176,14 @@ bash-tab() {
 @test "MANUAL: completion — no shell named: say how to load it" {
     run "$FOLIO" completion
     [ "$status" -eq 1 ]
-    [[ $output == *'eval "$(folio completion bash)"'*'~/.bashrc'* ]]
-    [[ $output == *'eval "$(folio completion zsh)"'*'~/.zshrc'* ]]
+    [[ $output == *'eval "$(folio completion bash)"'*'~/.bashrc'* ]] || false
+    [[ $output == *'eval "$(folio completion zsh)"'*'~/.zshrc'* ]] || false
 }
 
 @test "completion: an unknown shell is refused" {
     run "$FOLIO" completion fish
     [ "$status" -eq 1 ]
-    [[ $output == *"there is none for 'fish'"* ]]
+    [[ $output == *"there is none for 'fish'"* ]] || false
 }
 
 @test "MANUAL: completion — bash" {
@@ -214,9 +214,9 @@ bash-tab() {
     "$FOLIO" completion zsh > "$SANDBOX/folio.zsh"
     run zsh -f -c "fpath=('$SANDBOX/insecure' \$fpath); source '$SANDBOX/folio.zsh'
                    print -r -- \"folio: \$_comps[folio]\"" < /dev/null
-    [[ $output != *"initialization aborted"* ]]
-    [[ $output != *"compdef"* ]]
-    [[ $output == *"folio: _folio"* ]]
+    [[ $output != *"initialization aborted"* ]] || false
+    [[ $output != *"compdef"* ]] || false
+    [[ $output == *"folio: _folio"* ]] || false
 }
 
 @test "MANUAL: completion — zsh" {
@@ -248,7 +248,7 @@ zpty -d z
 out=${out//$'\e'\[[0-9;?]#[a-zA-Z]/} ; print -r -- ${out//$'\r'/}
 EOF
     run zsh -f "$SANDBOX/drive.zsh" "folio secret sh"
-    [[ $output == *"BUF:[folio secret show ]"* ]]
+    [[ $output == *"BUF:[folio secret show ]"* ]] || false
     run zsh -f "$SANDBOX/drive.zsh" "folio secret show web/d"
-    [[ $output == *"BUF:[folio secret show web/deep/down/key"* ]]
+    [[ $output == *"BUF:[folio secret show web/deep/down/key"* ]] || false
 }

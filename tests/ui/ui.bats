@@ -55,14 +55,14 @@ teardown() {
     run --separate-stderr ask-text "Your name" < /dev/null
     [ "$status" -eq 1 ]
     # shellcheck disable=SC2154  # set by run --separate-stderr
-    [[ $stderr == *"Cancelled"* ]]
+    [[ $stderr == *"Cancelled"* ]] || false
 }
 
 @test "ask-path: piped, prints the answer; an empty answer keeps the guess" {
     run --separate-stderr ask-path "Export file" "a .folio file" <<< "out/x.folio"
     [ "$status" -eq 0 ]
     [ "$output" = "out/x.folio" ]
-    [[ $stderr == *"Export file [a .folio file]:"* ]]
+    [[ $stderr == *"Export file [a .folio file]:"* ]] || false
     run --separate-stderr ask-path "File" "" "./store-1.folio" <<< ""
     [ "$output" = "./store-1.folio" ]
 }
@@ -79,7 +79,7 @@ teardown() {
 @test "ask-path: end of input cancels" {
     run --separate-stderr ask-path "Export file" < /dev/null
     [ "$status" -eq 1 ]
-    [[ $stderr == *"Cancelled"* ]]
+    [[ $stderr == *"Cancelled"* ]] || false
 }
 
 @test "confirm: y is yes; empty, n and end of input are no" {

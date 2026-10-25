@@ -61,7 +61,7 @@ teardown() {
     echo "0123456789ABCDEF" > "$FOLIO_STORE_DIR/.gpg-id"
     run Init
     [ "$status" -eq 1 ]
-    [[ $output == *"already exists"* ]]
+    [[ $output == *"already exists"* ]] || false
 }
 
 @test "store-init: refuses a non-empty folder that is not a store" {
@@ -69,7 +69,7 @@ teardown() {
     echo "someone else's file" > "$FOLIO_STORE_DIR/notes.txt"
     run Init
     [ "$status" -eq 1 ]
-    [[ $output == *"not a ready EnvFolio store"* ]]
+    [[ $output == *"not a ready EnvFolio store"* ]] || false
 }
 
 @test "store-init: refuses an unfinished store (no git history)" {
@@ -77,7 +77,7 @@ teardown() {
     echo "0123456789ABCDEF" > "$FOLIO_STORE_DIR/.gpg-id"
     run Init
     [ "$status" -eq 1 ]
-    [[ $output == *"not a ready EnvFolio store"* ]]
+    [[ $output == *"not a ready EnvFolio store"* ]] || false
 }
 
 @test "store-init: refuses a folder with only a hidden file" {
@@ -85,7 +85,7 @@ teardown() {
     : > "$FOLIO_STORE_DIR/.keep"
     run Init
     [ "$status" -eq 1 ]
-    [[ $output == *"not a ready EnvFolio store"* ]]
+    [[ $output == *"not a ready EnvFolio store"* ]] || false
     [ "$(ls -A "$FOLIO_STORE_DIR")" = ".keep" ]
 }
 
@@ -124,7 +124,7 @@ teardown() {
     chmod 755 "$FOLIO_STORE_DIR"
     run require-store
     [ "$status" -eq 0 ]
-    [[ $output == *"warning: other users can get into $FOLIO_STORE_DIR"*"chmod 700 $FOLIO_STORE_DIR"* ]]
+    [[ $output == *"warning: other users can get into $FOLIO_STORE_DIR"*"chmod 700 $FOLIO_STORE_DIR"* ]] || false
     run bash -c 'source "$1"; require-store; require-store' _ "$BATS_TEST_DIRNAME/../../folio"
     [ "$(grep -c 'warning:' <<< "$output")" -eq 1 ]
     chmod 700 "$FOLIO_STORE_DIR"
@@ -138,8 +138,8 @@ teardown() {
     is-own-dir() { return 1; }
     run warn-unsafe-store
     [ "$status" -eq 0 ]
-    [[ $output == *"warning: $FOLIO_STORE_DIR belongs to "*", not to you"* ]]
-    [[ $output != *"other users can get into"* ]]
+    [[ $output == *"warning: $FOLIO_STORE_DIR belongs to "*", not to you"* ]] || false
+    [[ $output != *"other users can get into"* ]] || false
 }
 
 @test "warn-unsafe-store: both warnings" {
@@ -147,7 +147,7 @@ teardown() {
     is-own-dir() { return 1; }
     run warn-unsafe-store
     [ "$status" -eq 0 ]
-    [[ $output == *"belongs to "*"other users can get into"* ]]
+    [[ $output == *"belongs to "*"other users can get into"* ]] || false
 }
 
 @test "warn-unsafe-store: no folder yet, nothing to say" {
@@ -167,10 +167,10 @@ teardown() {
     mkdir -p "$FOLIO_STORE_DIR" && chmod 755 "$FOLIO_STORE_DIR"
     run accept-unsafe-store 0 0 < <(echo y)
     [ "$status" -eq 0 ]
-    [[ $output == *"other users can get into"*"anyway? [y/N]"* ]]
+    [[ $output == *"other users can get into"*"anyway? [y/N]"* ]] || false
     run accept-unsafe-store 0 0 < <(echo n)
     [ "$status" -eq 1 ]
-    [[ $output == *"Not using $FOLIO_STORE_DIR. Nothing changed. Add --allow-unsafe-folder"* ]]
+    [[ $output == *"Not using $FOLIO_STORE_DIR. Nothing changed. Add --allow-unsafe-folder"* ]] || false
     run accept-unsafe-store 0 0 < /dev/null
     [ "$status" -eq 1 ]
 }
@@ -179,14 +179,14 @@ teardown() {
     mkdir -p "$FOLIO_STORE_DIR" && chmod 755 "$FOLIO_STORE_DIR"
     run accept-unsafe-store 1 0 < /dev/null
     [ "$status" -eq 0 ]
-    [[ $output == *"other users can get into"* && $output != *"[y/N]"* ]]
+    [[ $output == *"other users can get into"* && $output != *"[y/N]"* ]] || false
 }
 
 @test "accept-unsafe-store: stdin carrying a passphrase cannot answer: stops unless allowed" {
     mkdir -p "$FOLIO_STORE_DIR" && chmod 755 "$FOLIO_STORE_DIR"
     run accept-unsafe-store 0 1 < <(echo y)
     [ "$status" -eq 1 ]
-    [[ $output == *"stdin carries the passphrase"*"--allow-unsafe-folder"* && $output != *"[y/N]"* ]]
+    [[ $output == *"stdin carries the passphrase"*"--allow-unsafe-folder"* && $output != *"[y/N]"* ]] || false
     run accept-unsafe-store 1 1 < <(echo y)
     [ "$status" -eq 0 ]
 }
