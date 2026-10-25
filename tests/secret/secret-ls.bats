@@ -35,26 +35,26 @@ make-store() {
     run "$FOLIO" secret ls
     [ "$status" -eq 0 ]
     [ "${lines[0]}" = "Secret Store" ]
-    [[ $output != *"Password Store"* ]]
-    [[ $output == *"web"*"github"* ]]
-    [[ $output == *"note"* ]]
-    [[ $output != *"s3cr3t"* && $output != *"n0te"* ]]
+    [[ $output != *"Password Store"* ]] || false
+    [[ $output == *"web"*"github"* ]] || false
+    [[ $output == *"note"* ]] || false
+    [[ $output != *"s3cr3t"* && $output != *"n0te"* ]] || false
 }
 
 @test "MANUAL: secret ls — list one folder" {
     make-store
     run "$FOLIO" secret ls web
     [ "$status" -eq 0 ]
-    [[ $output == *"github"* ]]
-    [[ $output != *"note"* && $output != *"s3cr3t"* ]]
+    [[ $output == *"github"* ]] || false
+    [[ $output != *"note"* && $output != *"s3cr3t"* ]] || false
 }
 
 @test "secret ls: a secret's name is refused, its value never shown" {
     make-store
     run "$FOLIO" secret ls web/github
     [ "$status" -eq 1 ]
-    [[ $output == *"not a folder"* ]]
-    [[ $output != *"s3cr3t"* ]]
+    [[ $output == *"not a folder"* ]] || false
+    [[ $output != *"s3cr3t"* ]] || false
 }
 
 @test "secret ls: pass's options are refused" {
@@ -63,10 +63,10 @@ make-store() {
     for arg in -c --clip --qrcode -q; do
         run "$FOLIO" secret ls "$arg" web/github
         [ "$status" -eq 1 ]
-        [[ $output != *"s3cr3t"* ]]
+        [[ $output != *"s3cr3t"* ]] || false
         run "$FOLIO" secret ls "$arg"
         [ "$status" -eq 1 ]
-        [[ $output == *"not a folder"* ]]
+        [[ $output == *"not a folder"* ]] || false
     done
 }
 
@@ -74,22 +74,22 @@ make-store() {
     make-store
     run "$FOLIO" secret ls nope
     [ "$status" -eq 1 ]
-    [[ $output == *"'nope' is not a folder"* ]]
+    [[ $output == *"'nope' is not a folder"* ]] || false
 }
 
 @test "secret ls: no store fails and creates nothing" {
     run "$FOLIO" secret ls
     [ "$status" -eq 1 ]
-    [[ $output == *"No ready EnvFolio store"*"folio init"* ]]
+    [[ $output == *"No ready EnvFolio store"*"folio init"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 
 @test "secret ls --help: works without a store" {
     run "$FOLIO" secret ls --help
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio secret ls"* ]]
+    [[ $output == *"Usage: folio secret ls"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
     run "$FOLIO" help secret ls
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio secret ls"* ]]
+    [[ $output == *"Usage: folio secret ls"* ]] || false
 }

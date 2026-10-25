@@ -103,7 +103,10 @@ with classical keys, but it cannot make, restore or open post-quantum ones.
 - **Linux** — if your distribution's package is already 2.5.21 or later, upgrading it is enough.
   Many still ship 2.4; then install gpg with [Homebrew on Linux](https://docs.brew.sh/Homebrew-on-Linux)
   (`brew install gnupg`) and put its `bin` folder ahead on your `PATH`, or build it from
-  [gnupg.org](https://gnupg.org/download/).
+  [gnupg.org](https://gnupg.org/download/). gpg 2.5.23 and 2.5.24 as released have a bug
+  ([T8469](https://dev.gnupg.org/T8469)): they cannot use a key imported without a passphrase,
+  so EnvFolio cannot open an export with them. Homebrew's has the fix; building it yourself, add
+  the two commits linked from that bug, or take a later 2.5.
 - **Windows** — EnvFolio runs in WSL: follow the Linux steps there.
 
 Then stop the old gpg-agent, so the new gpg starts its own: `gpgconf --kill all`. `pass` uses a

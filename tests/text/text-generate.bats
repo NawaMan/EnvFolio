@@ -34,7 +34,7 @@ make-store() {
     run "$FOLIO" text generate -n id/session 12 < /dev/null
     [ "$status" -eq 0 ]
     local text ; text=$(cat "$FOLIO_STORE_DIR/id/session.txt")
-    [[ $text =~ ^[[:alnum:]]{12}$ ]]
+    [[ $text =~ ^[[:alnum:]]{12}$ ]] || false
     [ "${lines[0]}" = "The generated text for id/session is:" ]
     [ "${lines[1]}" = "$text" ]
     [ "$("$FOLIO" text show id/session)" = "$text" ]
@@ -63,7 +63,7 @@ make-store() {
     printf 'mallory\nrest\n' > "$FOLIO_STORE_DIR/note.txt"
     run "$FOLIO" text generate -i note < /dev/null
     [ "$status" -eq 1 ]
-    [[ $output == *"does not verify with the store's key"* ]]
+    [[ $output == *"does not verify with the store's key"* ]] || false
     [ "$(cat "$FOLIO_STORE_DIR/note.txt")" = $'mallory\nrest' ]
 }
 
@@ -82,22 +82,29 @@ make-store() {
         run "$FOLIO" text generate $args < /dev/null
         [ "$status" -eq 1 ]
     done
+    for args in "x 0" "x abc"; do
+        # shellcheck disable=SC2086  # split the arguments
+        run "$FOLIO" text generate $args < /dev/null
+        [[ $output == *"the length must be a number above 0."* ]] || false
+    done
+    run "$FOLIO" text generate -q x < /dev/null
+    [[ $output == *"text generate: unknown option: -q"* ]] || false
     run "$FOLIO" text generate ../out < /dev/null
     [ "$status" -eq 1 ]
-    [[ $output == *"is not a valid name"* ]]
+    [[ $output == *"is not a valid name"* ]] || false
 }
 
 @test "text generate: no store fails and creates nothing" {
     run "$FOLIO" text generate x < /dev/null
     [ "$status" -eq 1 ]
-    [[ $output == *"No ready EnvFolio store"* ]]
+    [[ $output == *"No ready EnvFolio store"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 
 @test "text generate --help: works without a store" {
     run "$FOLIO" text generate --help
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio text generate"* ]]
+    [[ $output == *"Usage: folio text generate"* ]] || false
     run "$FOLIO" help text generate
     [ "$status" -eq 0 ]
     [ ! -e "$FOLIO_STORE_DIR" ]

@@ -95,7 +95,7 @@ is-signed() {
     GNUPGHOME="$SANDBOX/no-key" ; mkdir -m 700 "$GNUPGHOME"
     run "$FOLIO" text insert -t new note < /dev/null
     [ "$status" -eq 1 ]
-    [[ $output == *"signing failed; nothing was saved"* ]]
+    [[ $output == *"signing failed; nothing was saved"* ]] || false
     [ "$(cat "$FOLIO_STORE_DIR/note.txt")" = "old" ]
     [ -z "$(git -C "$FOLIO_STORE_DIR" status --porcelain)" ]
 }
@@ -107,11 +107,11 @@ is-signed() {
     "$FOLIO" text insert -t x only-texts/a < /dev/null
     run "$FOLIO" secret ls
     [ "$status" -eq 0 ]
-    [[ $output == *"github"* ]]
-    [[ $output != *".txt"* && $output != *"only-texts"* ]]
+    [[ $output == *"github"* ]] || false
+    [[ $output != *".txt"* && $output != *"only-texts"* ]] || false
     run "$FOLIO" secret find git
     [ "$status" -eq 0 ]
-    [[ $output == *"github"* && $output != *".txt"* ]]
+    [[ $output == *"github"* && $output != *".txt"* ]] || false
 }
 
 @test "text insert: a name leaving the store is refused, nothing is written" {
@@ -120,7 +120,7 @@ is-signed() {
     for name in ../out a/../../out .. a/ ""; do
         run "$FOLIO" text insert -t x "$name" < /dev/null
         [ "$status" -eq 1 ]
-        [[ $output == *"is not a valid name"* ]]
+        [[ $output == *"is not a valid name"* ]] || false
     done
     [ ! -e "$SANDBOX/out.txt" ]
 }
@@ -129,28 +129,36 @@ is-signed() {
     make-store
     run "$FOLIO" text insert -t x < /dev/null
     [ "$status" -eq 1 ]
-    [[ $output == *"Usage: folio text insert"* ]]
+    [[ $output == *"Usage: folio text insert"* ]] || false
     run "$FOLIO" text insert a b < /dev/null
     [ "$status" -eq 1 ]
-    [[ $output == *"Usage: folio text insert"* ]]
+    [[ $output == *"Usage: folio text insert"* ]] || false
     run "$FOLIO" text insert --bogus a < /dev/null
     [ "$status" -eq 1 ]
-    [[ $output == *"unknown option: --bogus"* ]]
+    [[ $output == *"unknown option: --bogus"* ]] || false
+}
+
+@test "text insert: no text on stdin is refused, nothing saved" {
+    make-store
+    run "$FOLIO" text insert web/empty < /dev/null
+    [ "$status" -eq 1 ]
+    [[ $output == *"text insert: no text given."* ]] || false
+    [ ! -e "$FOLIO_STORE_DIR/web/empty.txt" ]
 }
 
 @test "text insert: no store fails and creates nothing" {
     run "$FOLIO" text insert -t x note < /dev/null
     [ "$status" -eq 1 ]
-    [[ $output == *"No ready EnvFolio store"*"folio init"* ]]
+    [[ $output == *"No ready EnvFolio store"*"folio init"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 
 @test "text insert --help: works without a store" {
     run "$FOLIO" text insert --help < /dev/null
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio text insert"* ]]
+    [[ $output == *"Usage: folio text insert"* ]] || false
     run "$FOLIO" help text insert
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio text insert"* ]]
+    [[ $output == *"Usage: folio text insert"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }

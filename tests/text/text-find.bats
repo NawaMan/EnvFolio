@@ -50,53 +50,53 @@ plain() { printf '%s\n' "$output" | sed $'s/\e\\[[0-9;]*m//g' ; }
     make-store
     run "$FOLIO" text find HOME work
     [ "$status" -eq 0 ]
-    [[ $output == *"home"* && $output == *"work"* && $output != *"user"* ]]
+    [[ $output == *"home"* && $output == *"work"* && $output != *"user"* ]] || false
 }
 
 @test "text find: a matching folder shows its texts" {
     make-store
     run "$FOLIO" text find mail
     [ "$status" -eq 0 ]
-    [[ $output == *"mail"*"work"* ]]
+    [[ $output == *"mail"*"work"* ]] || false
 }
 
 @test "text find: secrets, signatures and extensions never show" {
     make-store
     run "$FOLIO" text find git home
     [ "$status" -eq 0 ]
-    [[ $output != *"github"* && $output != *"homebank"* ]]
-    [[ $output != *".txt"* && $output != *".sig"* && $output != *".gpg"* ]]
-    [[ $output != *"example.com"* ]]
+    [[ $output != *"github"* && $output != *"homebank"* ]] || false
+    [[ $output != *".txt"* && $output != *".sig"* && $output != *".gpg"* ]] || false
+    [[ $output != *"example.com"* ]] || false
 }
 
 @test "text find: secret find still finds the secrets only" {
     make-store
     run "$FOLIO" secret find home
     [ "$status" -eq 0 ]
-    [[ $output == *"homebank"* ]]
-    [[ $(plain) != *"── home"$'\n'* && $(plain) != *"── home" ]]
+    [[ $output == *"homebank"* ]] || false
+    [[ $(plain) != *"── home"$'\n'* && $(plain) != *"── home" ]] || false
 }
 
 @test "text find: no part gets the usage" {
     make-store
     run "$FOLIO" text find
     [ "$status" -eq 1 ]
-    [[ $output == *"Usage: folio text find"* ]]
+    [[ $output == *"Usage: folio text find"* ]] || false
 }
 
 @test "text find: no store fails and creates nothing" {
     run "$FOLIO" text find home
     [ "$status" -eq 1 ]
-    [[ $output == *"No ready EnvFolio store"*"folio init"* ]]
+    [[ $output == *"No ready EnvFolio store"*"folio init"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 
 @test "text find --help: works without a store" {
     run "$FOLIO" text find --help
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio text find"* ]]
+    [[ $output == *"Usage: folio text find"* ]] || false
     run "$FOLIO" help text find
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio text find"* ]]
+    [[ $output == *"Usage: folio text find"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
