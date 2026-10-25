@@ -1,0 +1,13 @@
+display-name = "GnuPG"
+display-disc = "The booth's gpg: none (Ubuntu's 2.4) or 2.5.24 (post-quantum keys), built into /opt/gnupg-<version>"
+tags = ["gpg", "gnupg", "post-quantum", "test"]
+
+[params.GNUPG_VERSION]
+default = "none"
+suggests = ["none", "2.5.24"]
+
+# Late, so it lands after the package installs (pass brings Ubuntu's gpg); it builds beside it.
+[segments]
+"Boothfile--90" = """
+setup gnupg ${GNUPG_VERSION}
+"""

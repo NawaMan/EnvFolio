@@ -61,18 +61,18 @@ folio: vars check: $f:15: '../x' is not an entry name." ]
     printf 'A B\n' > "$SANDBOX/bad.vars"
     run "$FOLIO" vars check "$SANDBOX/good.vars" "$SANDBOX/bad.vars" "$SANDBOX/missing.vars"
     [ "$status" -eq 1 ]
-    [[ $output == *"good.vars: fine (1 line(s) to load)."* ]]
-    [[ $output == *"bad.vars:1: not VAR=<value>"* ]]
-    [[ $output == *"cannot read the vars file"*"missing.vars."* ]]
+    [[ $output == *"good.vars: fine (1 line(s) to load)."* ]] || false
+    [[ $output == *"bad.vars:1: not VAR=<value>"* ]] || false
+    [[ $output == *"cannot read the vars file"*"missing.vars."* ]] || false
 }
 
 @test "vars check: needs a file; --help" {
     run "$FOLIO" vars check
     [ "$status" -eq 1 ]
-    [[ $output == *"Usage: folio vars check <file>..."* ]]
+    [[ $output == *"Usage: folio vars check <file>..."* ]] || false
     run "$FOLIO" vars check --help
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio vars check <file>..."* ]]
+    [[ $output == *"Usage: folio vars check <file>..."* ]] || false
     run "$FOLIO" vars
     [ "$status" -eq 1 ]
 }

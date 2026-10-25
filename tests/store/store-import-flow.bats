@@ -113,7 +113,7 @@ ALL=(aws/key.gpg web/github.gpg web/home.txt web/user.txt)
     make-there-store
     use-pinentry pw
     import-answering "$EXPORT" "" all 2 --
-    [[ $output == *"Export file"* && $output == *"Which items?"* && $output == *"What to do with these 1?"* ]]
+    [[ $output == *"Export file"* && $output == *"Which items?"* && $output == *"What to do with these 1?"* ]] || false
     assert-imported "${ALL[@]}"
     [ "$("$FOLIO" text show web/user)" = "old" ]
 }
@@ -123,7 +123,7 @@ ALL=(aws/key.gpg web/github.gpg web/home.txt web/user.txt)
     use-pinentry pw
     # 1) aws/key 2) web/github 3) web/home 4) web/user
     import-answering "" "1 3" -- "$EXPORT"
-    [[ $output != *"Export file"* && $output == *"Which items?"* && $output != *"What to do with these"* ]]
+    [[ $output != *"Export file"* && $output == *"Which items?"* && $output != *"What to do with these"* ]] || false
     assert-imported aws/key.gpg web/home.txt web/user.txt
 }
 
@@ -131,7 +131,7 @@ ALL=(aws/key.gpg web/github.gpg web/home.txt web/user.txt)
     make-there-store
     use-pinentry pw
     import-answering "" -- "$EXPORT" aws web/home
-    [[ $output != *"Export file"* && $output != *"Which items?"* ]]
+    [[ $output != *"Export file"* && $output != *"Which items?"* ]] || false
     assert-imported aws/key.gpg web/home.txt web/user.txt
 }
 
@@ -145,7 +145,7 @@ ALL=(aws/key.gpg web/github.gpg web/home.txt web/user.txt)
 @test "import flow 5: --all instead of names — a clash is asked; skip keeps what is there" {
     make-there-store
     import-answering 2 -- --file-passphrase-fd 5 --all "$EXPORT" 5< <(printf 'pw\n')
-    [[ $output == *"Already in the store:"*"(T)web/user"* && $output == *"What to do with these 1?"* ]]
+    [[ $output == *"Already in the store:"*"(T)web/user"* && $output == *"What to do with these 1?"* ]] || false
     assert-imported "${ALL[@]}"
     [ "$("$FOLIO" text show web/user)" = "old" ]
 }
@@ -153,7 +153,7 @@ ALL=(aws/key.gpg web/github.gpg web/home.txt web/user.txt)
 @test "import flow 6: + --overwrite — not asked, replaced" {
     make-there-store
     import-answering -- --file-passphrase-fd 5 --all --overwrite "$EXPORT" 5< <(printf 'pw\n')
-    [[ $output != *"What to do with these"* && $output == *"Already in the store: 1: overwritten"* ]]
+    [[ $output != *"What to do with these"* && $output == *"Already in the store: 1: overwritten"* ]] || false
     assert-imported "${ALL[@]}"
     [ "$("$FOLIO" text show web/user)" = "jane" ]
 }
@@ -161,7 +161,7 @@ ALL=(aws/key.gpg web/github.gpg web/home.txt web/user.txt)
 @test "import flow 6b: --skip-existing instead — not asked, kept" {
     make-there-store
     import-answering -- --file-passphrase-fd 5 --all --skip-existing "$EXPORT" 5< <(printf 'pw\n')
-    [[ $output != *"What to do with these"* && $output == *"Already in the store: 1: skipped"* ]]
+    [[ $output != *"What to do with these"* && $output == *"Already in the store: 1: skipped"* ]] || false
     assert-imported "${ALL[@]}"
     [ "$("$FOLIO" text show web/user)" = "old" ]
 }
@@ -169,7 +169,7 @@ ALL=(aws/key.gpg web/github.gpg web/home.txt web/user.txt)
 @test "import flow 7: --file-passphrase-stdin instead of the fd — asks nothing" {
     make-there-store
     import-answering pw -- --file-passphrase-stdin --all --overwrite "$EXPORT"
-    [[ $output != *"Which items?"* && $output != *"What to do with these"* ]]
+    [[ $output != *"Which items?"* && $output != *"What to do with these"* ]] || false
     assert-imported "${ALL[@]}"
 }
 
@@ -178,8 +178,8 @@ ALL=(aws/key.gpg web/github.gpg web/home.txt web/user.txt)
 @test "import flow 8: no store, nothing given — the file, the items, then the key picker" {
     # Key picker: 1) Server 2) Create a new key
     import-answering "$EXPORT" all 1 -- --file-passphrase-fd 5 5< <(printf 'pw\n')
-    [[ $output == *"no store yet"* && $output == *"Which GPG key should encrypt the store?"* ]]
-    [[ $output == *"Store key: $SERVER_FPR"* ]]
+    [[ $output == *"no store yet"* && $output == *"Which GPG key should encrypt the store?"* ]] || false
+    [[ $output == *"Store key: $SERVER_FPR"* ]] || false
     assert-imported "${ALL[@]}"
     [ "$(cat "$FOLIO_STORE_DIR/.gpg-id")" = "$SERVER_FPR" ]
 }
@@ -187,8 +187,8 @@ ALL=(aws/key.gpg web/github.gpg web/home.txt web/user.txt)
 @test "import flow 9: no store, a new key picked — asks name and email; gpg its passphrase" {
     use-pinentry pw
     import-answering 2 "Jane Doe" jane@example.com @kind "" -- --file-passphrase-fd 5 --all "$EXPORT" 5< <(printf 'pw\n')
-    [[ $output == *"Your name"* && $output == *"Your email"* ]]
-    [[ $output == *"a new one for Jane Doe <jane@example.com>"* ]]
+    [[ $output == *"Your name"* && $output == *"Your email"* ]] || false
+    [[ $output == *"a new one for Jane Doe <jane@example.com>"* ]] || false
     assert-imported "${ALL[@]}"
     [ "$(gpg --list-keys --with-colons "$(cat "$FOLIO_STORE_DIR/.gpg-id")" \
             | awk -F: '$1 == "uid" { print $10 ; exit }')" = "Jane Doe <jane@example.com>" ]
@@ -196,7 +196,7 @@ ALL=(aws/key.gpg web/github.gpg web/home.txt web/user.txt)
 
 @test "import flow 10: no store, --key — asks no key question" {
     import-answering -- --key server@example.com --file-passphrase-fd 5 --all "$EXPORT" 5< <(printf 'pw\n')
-    [[ $output != *"Which GPG key"* && $output == *"Store key: $SERVER_FPR"* ]]
+    [[ $output != *"Which GPG key"* && $output == *"Store key: $SERVER_FPR"* ]] || false
     assert-imported "${ALL[@]}"
 }
 
@@ -205,14 +205,14 @@ ALL=(aws/key.gpg web/github.gpg web/home.txt web/user.txt)
 @test "import flow: no store, --file-passphrase-stdin without --key — refused, nothing made" {
     import-answering pw -- --file-passphrase-stdin --all "$EXPORT"
     [ "$status" -eq 1 ]
-    [[ $output == *"needs --key"* ]]
+    [[ $output == *"needs --key"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 
 @test "import flow: a wrong passphrase — nothing made" {
     import-answering -- --key server@example.com --file-passphrase-fd 5 --all "$EXPORT" 5< <(printf 'wrong\n')
     [ "$status" -eq 1 ]
-    [[ $output == *"Opening $EXPORT failed"* ]]
+    [[ $output == *"Opening $EXPORT failed"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
     [ -z "$(ls -A "$TMPDIR")" ]
 }
@@ -221,7 +221,7 @@ ALL=(aws/key.gpg web/github.gpg web/home.txt web/user.txt)
     make-there-store
     import-answering --
     [ "$status" -eq 1 ]
-    [[ $output == *"Cancelled"* ]]
+    [[ $output == *"Cancelled"* ]] || false
     [ "$(store-items)" = "web/user.txt" ]
 }
 
@@ -229,7 +229,7 @@ ALL=(aws/key.gpg web/github.gpg web/home.txt web/user.txt)
     make-there-store
     import-answering -- --file-passphrase-fd 5 --all "$EXPORT" 5< <(printf 'pw\n')
     [ "$status" -eq 1 ]
-    [[ $output == *"Cancelled"* && $output != *"Importing now"* ]]
+    [[ $output == *"Cancelled"* && $output != *"Importing now"* ]] || false
     [ "$(store-items)" = "web/user.txt" ]
     [ -z "$(ls -A "$TMPDIR")" ]
 }
@@ -237,7 +237,7 @@ ALL=(aws/key.gpg web/github.gpg web/home.txt web/user.txt)
 @test "import flow: --file-passphrase-fd on a closed fd — nothing made" {
     import-answering -- --key server@example.com --file-passphrase-fd 7 --all "$EXPORT"
     [ "$status" -eq 1 ]
-    [[ $output == *"no such file descriptor"* ]]
+    [[ $output == *"no such file descriptor"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 
@@ -245,7 +245,7 @@ ALL=(aws/key.gpg web/github.gpg web/home.txt web/user.txt)
     make-there-store
     use-pinentry pw
     import-answering -- "$EXPORT" aws
-    [[ $output == *"Next, gpg asks for the export file's passphrase"* && $output == *"Cancelled"* ]]
+    [[ $output == *"Next, gpg asks for the export file's passphrase"* && $output == *"Cancelled"* ]] || false
     [ "$(store-items)" = "web/user.txt" ]
     [ -z "$(ls -A "$TMPDIR")" ]
 }

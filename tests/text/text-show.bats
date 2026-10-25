@@ -61,9 +61,9 @@ fake-clipboard() {
     printf 'mallory\n' > "$FOLIO_STORE_DIR/web/user.txt"
     run "$FOLIO" text show web/user
     [ "$status" -eq 1 ]
-    [[ $output == *"does not verify with the store's key"* ]]
-    [[ $output == *"git -C"*"diff -- web/user.txt"*"log -p -- web/user.txt"* ]]
-    [[ $output != *"mallory"* ]]
+    [[ $output == *"does not verify with the store's key"* ]] || false
+    [[ $output == *"git -C"*"diff -- web/user.txt"*"log -p -- web/user.txt"* ]] || false
+    [[ $output != *"mallory"* ]] || false
 }
 
 @test "MANUAL: text show — copy to the clipboard" {
@@ -71,7 +71,7 @@ fake-clipboard() {
     fake-clipboard
     run "$FOLIO" text show -c web/user
     [ "$status" -eq 0 ]
-    [[ $output == *"Copied web/user to clipboard"*"not cleared"* && $output != *"jane"* ]]
+    [[ $output == *"Copied web/user to clipboard"*"not cleared"* && $output != *"jane"* ]] || false
     [ "$(cat "$CLIPBOARD")" = "jane" ]
 }
 
@@ -93,12 +93,12 @@ fake-clipboard() {
     for clip in --clip=3 --clip=9; do
         run "$FOLIO" text show "$clip" note
         [ "$status" -eq 1 ]
-        [[ $output == *"'note' has no text at line ${clip#*=}"* ]]
+        [[ $output == *"'note' has no text at line ${clip#*=}"* ]] || false
     done
     for clip in --clip=0 --clip=x -cx; do
         run "$FOLIO" text show "$clip" note
         [ "$status" -eq 1 ]
-        [[ $output == *"is not a line number"* || $output == *"unknown option"* ]]
+        [[ $output == *"is not a line number"* || $output == *"unknown option"* ]] || false
     done
     [ ! -e "$CLIPBOARD" ]
 }
@@ -109,7 +109,7 @@ fake-clipboard() {
     printf 'mallory\n' > "$FOLIO_STORE_DIR/web/user.txt"
     run "$FOLIO" text show -c web/user
     [ "$status" -eq 1 ]
-    [[ $output == *"does not verify with the store's key"* ]]
+    [[ $output == *"does not verify with the store's key"* ]] || false
     [ ! -e "$CLIPBOARD" ]
 }
 
@@ -120,7 +120,7 @@ fake-clipboard() {
     unset DISPLAY
     run "$FOLIO" text show -c web/user
     [ "$status" -eq 1 ]
-    [[ $output == *"no clipboard"* ]]
+    [[ $output == *"no clipboard"* ]] || false
     [ ! -e "$CLIPBOARD" ]
 }
 
@@ -129,7 +129,7 @@ fake-clipboard() {
     rm "$FOLIO_STORE_DIR/web/user.txt.sig"
     run "$FOLIO" text show web/user
     [ "$status" -eq 1 ]
-    [[ $output == *"'web/user' has no signature"* && $output != *"jane"* ]]
+    [[ $output == *"'web/user' has no signature"* && $output != *"jane"* ]] || false
 }
 
 @test "text show: a text re-signed by another key in the keyring is refused" {
@@ -141,7 +141,7 @@ fake-clipboard() {
     gpg --verify "$FOLIO_STORE_DIR/web/user.txt.sig" "$FOLIO_STORE_DIR/web/user.txt" 2>/dev/null
     run "$FOLIO" text show web/user
     [ "$status" -eq 1 ]
-    [[ $output == *"does not verify with the store's key"* && $output != *"mallory"* ]]
+    [[ $output == *"does not verify with the store's key"* && $output != *"mallory"* ]] || false
 }
 
 @test "text show: the suggested fix signs the text again" {
@@ -159,32 +159,32 @@ fake-clipboard() {
     for name in web web/github nope; do
         run "$FOLIO" text show "$name"
         [ "$status" -eq 1 ]
-        [[ $output == *"'$name' is not a text in the store"* ]]
-        [[ $output != *"s3cr3t"* ]]
+        [[ $output == *"'$name' is not a text in the store"* ]] || false
+        [[ $output != *"s3cr3t"* ]] || false
     done
     for name in ../x web/../../x -c; do
         run "$FOLIO" text show -- "$name"
         [ "$status" -eq 1 ]
-        [[ $output == *"'$name' is not a valid name"* ]]
+        [[ $output == *"'$name' is not a valid name"* ]] || false
     done
     run "$FOLIO" text show web/user note
     [ "$status" -eq 1 ]
-    [[ $output == *"Usage: folio text show"* ]]
+    [[ $output == *"Usage: folio text show"* ]] || false
 }
 
 @test "text show: no store fails and creates nothing" {
     run "$FOLIO" text show web/user
     [ "$status" -eq 1 ]
-    [[ $output == *"No ready EnvFolio store"*"folio init"* ]]
+    [[ $output == *"No ready EnvFolio store"*"folio init"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 
 @test "text show --help: works without a store" {
     run "$FOLIO" text show --help
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio text show"* ]]
+    [[ $output == *"Usage: folio text show"* ]] || false
     run "$FOLIO" help text show
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio text show"* ]]
+    [[ $output == *"Usage: folio text show"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
