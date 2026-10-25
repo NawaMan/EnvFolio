@@ -67,7 +67,7 @@ make-store() {
     make-store
     run "$FOLIO" text rm web < /dev/null
     [ "$status" -eq 1 ]
-    [[ $output == *"'web' is a folder; use -r"* ]]
+    [[ $output == *"'web' is a folder; use -r"* ]] || false
     [ -e "$FOLIO_STORE_DIR/web/user.txt" ]
 }
 
@@ -77,7 +77,7 @@ make-store() {
     for name in web/github nope; do
         run "$FOLIO" text rm "$name" < /dev/null
         [ "$status" -eq 1 ]
-        [[ $output == *"'$name' is not in the store"* ]]
+        [[ $output == *"'$name' is not in the store"* ]] || false
     done
     [ "$(pass show web/github)" = "s3cr3t" ]
 }
@@ -88,24 +88,24 @@ make-store() {
     for name in .. ../out a/../.. /; do
         run "$FOLIO" text rm -r "$name" < /dev/null
         [ "$status" -eq 1 ]
-        [[ $output == *"is not a valid name"* ]]
+        [[ $output == *"is not a valid name"* ]] || false
     done
     run "$FOLIO" text rm a b < /dev/null
     [ "$status" -eq 1 ]
-    [[ $output == *"Usage: folio text rm"* ]]
+    [[ $output == *"Usage: folio text rm"* ]] || false
 }
 
 @test "text rm: no store fails and creates nothing" {
     run "$FOLIO" text rm x < /dev/null
     [ "$status" -eq 1 ]
-    [[ $output == *"No ready EnvFolio store"* ]]
+    [[ $output == *"No ready EnvFolio store"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 
 @test "text rm --help: works without a store" {
     run "$FOLIO" text rm --help
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio text rm"* ]]
+    [[ $output == *"Usage: folio text rm"* ]] || false
     run "$FOLIO" help text rm
     [ "$status" -eq 0 ]
     [ ! -e "$FOLIO_STORE_DIR" ]

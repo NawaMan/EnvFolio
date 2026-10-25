@@ -60,8 +60,8 @@ EOF
     run "$FOLIO" secret generate -n api 12 < /dev/null
     [ "$status" -eq 0 ]
     local value ; value=$(pass show api)
-    [[ $value =~ ^[A-Za-z0-9]{12}$ ]]
-    [[ $output == *"$value"* ]]
+    [[ $value =~ ^[A-Za-z0-9]{12}$ ]] || false
+    [[ $output == *"$value"* ]] || false
 }
 
 @test "secret generate: 25 characters by default" {
@@ -75,8 +75,8 @@ EOF
     fake-clipboard
     run "$FOLIO" secret generate -c api < /dev/null
     [ "$status" -eq 0 ]
-    [[ $output == *"Copied api to clipboard"* ]]
-    [[ $output != *"$(pass show api)"* ]]
+    [[ $output == *"Copied api to clipboard"* ]] || false
+    [[ $output != *"$(pass show api)"* ]] || false
     [ "$(cat "$CLIPBOARD")" = "$(pass show api)" ]
 }
 
@@ -94,7 +94,7 @@ EOF
     for arg in -q --qrcode -nq; do
         run "$FOLIO" secret generate "$arg" api < /dev/null
         [ "$status" -eq 1 ]
-        [[ $output == *"--qrcode is not offered"* ]]
+        [[ $output == *"--qrcode is not offered"* ]] || false
     done
     [ ! -e "$FOLIO_STORE_DIR/api.gpg" ]
 }
@@ -102,16 +102,16 @@ EOF
 @test "secret generate --help: works without a store" {
     run "$FOLIO" secret generate --help
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio secret generate"* ]]
+    [[ $output == *"Usage: folio secret generate"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
     run "$FOLIO" help secret generate
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio secret generate"* ]]
+    [[ $output == *"Usage: folio secret generate"* ]] || false
 }
 
 @test "secret generate: no store fails and creates nothing" {
     run "$FOLIO" secret generate web/github x < /dev/null
     [ "$status" -eq 1 ]
-    [[ $output == *"No ready EnvFolio store"*"folio init"* ]]
+    [[ $output == *"No ready EnvFolio store"*"folio init"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }

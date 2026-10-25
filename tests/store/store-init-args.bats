@@ -36,32 +36,32 @@ teardown() {
 @test "store-init: an unknown option fails" {
     run Init --nope
     [ "$status" -eq 1 ]
-    [[ $output == *"unknown option: --nope"* ]]
+    [[ $output == *"unknown option: --nope"* ]] || false
 }
 
 @test "store-init: --key without a value fails" {
     run Init --key
     [ "$status" -eq 1 ]
-    [[ $output == *"--key needs a value"* ]]
+    [[ $output == *"--key needs a value"* ]] || false
 }
 
 @test "store-init: --key cannot go with new-key options" {
     run Init --key "$TEST_FPR" --name Someone
     [ "$status" -eq 1 ]
-    [[ $output == *"--key cannot be used"* ]]
+    [[ $output == *"--key cannot be used"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 
 @test "store-init: --store-passphrase-stdin needs --name and --email" {
     run Init --store-passphrase-stdin --name Someone
     [ "$status" -eq 1 ]
-    [[ $output == *"needs --name and --email"* ]]
+    [[ $output == *"needs --name and --email"* ]] || false
 }
 
 @test "store-init: --key with no match fails" {
     run Init --key nobody@nowhere.invalid
     [ "$status" -eq 1 ]
-    [[ $output == *"No secret key matches"* ]]
+    [[ $output == *"No secret key matches"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 
@@ -69,7 +69,7 @@ teardown() {
     gpg --batch --passphrase '' --quick-generate-key "Other User <other@example.com>" default default never 2>/dev/null
     run Init --key example.com
     [ "$status" -eq 1 ]
-    [[ $output == *"More than one secret key matches"* ]]
+    [[ $output == *"More than one secret key matches"* ]] || false
 }
 
 @test "store-init: --key=<email> uses that key without asking" {
@@ -95,7 +95,7 @@ teardown() {
 @test "store-init: an empty passphrase on stdin fails" {
     run Init --name "New User" --email new@example.com --store-passphrase-stdin < /dev/null
     [ "$status" -eq 1 ]
-    [[ $output == *"No passphrase on stdin"* ]]
+    [[ $output == *"No passphrase on stdin"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR/.gpg-id" ]
 }
 
@@ -106,17 +106,17 @@ teardown() {
     fpr=$(cat "$FOLIO_STORE_DIR/.gpg-id")
     kind=$(key-kind "$fpr")
     if gpg-has-pqc; then
-        [[ $kind == "post-quantum ("* ]]
+        [[ $kind == "post-quantum ("* ]] || false
     else
-        [[ $kind == "classical ("* ]]
+        [[ $kind == "classical ("* ]] || false
     fi
-    [[ $output == *"Type:    $kind"* ]]
+    [[ $output == *"Type:    $kind"* ]] || false
 }
 
 @test "store-init: the summary names the type of an existing key" {
     run Init --key "$TEST_FPR"
     [ "$status" -eq 0 ]
-    [[ $output == *"Type:    classical (cv25519)"* ]]
+    [[ $output == *"Type:    classical (cv25519)"* ]] || false
 }
 
 # The store folder's mode, on Linux and macOS.
@@ -135,7 +135,7 @@ dir-mode() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
     mkdir "$FOLIO_STORE_DIR" && chmod 755 "$FOLIO_STORE_DIR"
     run Init --key "$TEST_FPR" < /dev/null
     [ "$status" -eq 1 ]
-    [[ $output == *"other users can get into $FOLIO_STORE_DIR"*"anyway? [y/N]"*"Nothing changed"* ]]
+    [[ $output == *"other users can get into $FOLIO_STORE_DIR"*"anyway? [y/N]"*"Nothing changed"* ]] || false
     [ -z "$(ls -A "$FOLIO_STORE_DIR")" ]
 }
 
@@ -152,7 +152,7 @@ dir-mode() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
     run Init --key "$TEST_FPR" --allow-unsafe-folder < /dev/null
     [ "$status" -eq 0 ]
     store-exists
-    [[ $output == *"other users can get into"* && $output != *"[y/N]"* ]]
+    [[ $output == *"other users can get into"* && $output != *"[y/N]"* ]] || false
 }
 
 @test "store-init: an empty folder of someone else's is warned about and asked" {
@@ -160,7 +160,7 @@ dir-mode() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
     is-own-dir() { return 1; }
     run Init --key "$TEST_FPR" < /dev/null
     [ "$status" -eq 1 ]
-    [[ $output == *"belongs to "*", not to you"*"anyway? [y/N]"* ]]
+    [[ $output == *"belongs to "*", not to you"*"anyway? [y/N]"* ]] || false
     [ -z "$(ls -A "$FOLIO_STORE_DIR")" ]
 }
 
@@ -169,7 +169,7 @@ dir-mode() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
     run Init --key "$TEST_FPR" < /dev/null
     [ "$status" -eq 0 ]
     store-exists
-    [[ $output != *warning* && $output != *"[y/N]"* ]]
+    [[ $output != *warning* && $output != *"[y/N]"* ]] || false
 }
 
 @test "store-init: an empty folder reached through a link works too" {

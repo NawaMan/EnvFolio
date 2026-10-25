@@ -43,7 +43,7 @@ fake-editor() {
     run "$FOLIO" secret edit web/github
     [ "$status" -eq 0 ]
     [ "$(pass show web/github)" = "n3w" ]
-    [[ $(git -C "$FOLIO_STORE_DIR" log -1 --format=%s) == "Edit password for web/github"* ]]
+    [[ $(git -C "$FOLIO_STORE_DIR" log -1 --format=%s) == "Edit password for web/github"* ]] || false
 }
 
 @test "secret edit: a new name adds the secret" {
@@ -59,23 +59,23 @@ fake-editor() {
     export EDITOR=true
     run "$FOLIO" secret edit web/github
     [ "$status" -ne 0 ]
-    [[ $output == *"unchanged"* ]]
-    [[ $(git -C "$FOLIO_STORE_DIR" log -1 --format=%s) != "Edit"* ]]
+    [[ $output == *"unchanged"* ]] || false
+    [[ $(git -C "$FOLIO_STORE_DIR" log -1 --format=%s) != "Edit"* ]] || false
 }
 
 @test "secret edit --help: works without a store" {
     run "$FOLIO" secret edit --help
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio secret edit"* ]]
+    [[ $output == *"Usage: folio secret edit"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
     run "$FOLIO" help secret edit
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio secret edit"* ]]
+    [[ $output == *"Usage: folio secret edit"* ]] || false
 }
 
 @test "secret edit: no store fails and creates nothing" {
     run "$FOLIO" secret edit web/github x < /dev/null
     [ "$status" -eq 1 ]
-    [[ $output == *"No ready EnvFolio store"*"folio init"* ]]
+    [[ $output == *"No ready EnvFolio store"*"folio init"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
