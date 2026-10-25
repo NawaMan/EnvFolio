@@ -912,8 +912,8 @@ EXPORT_SUFFIX=.folio
 function store-export-usage() {
     cat <<'EOF'
 Usage: folio export [-s|--secrets] [--to <key>|--file-passphrase-stdin|--file-passphrase-fd <n>]
-                    [--store-passphrase-fd <n>] [--vars <file>]... [-o|--output <file>|<folder>]
-                    [<name>...]
+                    [--store-passphrase-fd <n>] [--use <@namespace>]... [--vars <file>]...
+                    [-o|--output <file>|<folder>] [<name>...]
 EOF
 }
 
@@ -928,16 +928,19 @@ or with --to, to the public key of where it is going. With neither given, EnvFol
 gpg may ask for your store key's passphrase to read the secrets.
 
 A <name> is a text or secret, or a folder: every text under it, and its secrets with --secrets.
-With --vars, the items a vars file names are taken too. With no <name> and no --vars, EnvFolio
-lists every item and asks which ones.
+With --use @app2, every item under @app2 is taken as if @app2/ were not in its path, and the file
+has it so: @app2/@prod/server/user goes in as @prod/server/user. The <name>s and --use are laid
+in the order typed, and the last one wins where two give the same item. With --vars, the items a
+vars file names are taken too. With no <name>, --use or --vars, EnvFolio lists every item and
+asks which ones.
 
 The file is <file> (.folio added when missing), or store-<date>.folio in <folder> —
 never inside the store. An existing file is never replaced. With no -o, EnvFolio asks, offering
 store-<date>.folio in the current folder (taken as it is with --file-passphrase-stdin).
 
 Options:
-  -s, --secrets       Take the secrets in a folder too. A secret named on its own always goes;
-                      one a vars file names needs it.
+  -s, --secrets       Take the secrets in a folder, or under a --use, too. A secret named on its
+                      own always goes; one a vars file names needs it.
   --to <key>          Lock the file to this public key: a key file (.asc) or a key in your
                       keyring (fingerprint, key id or email). Only its secret key can open it.
   --file-passphrase-stdin
@@ -951,6 +954,9 @@ Options:
   --store-passphrase-fd <n>
                       The store key's passphrase (to read the secrets), from the first line of
                       file descriptor <n>, instead of gpg's prompt.
+  --use <@namespace>  Take every item under <@namespace> (e.g. @app2, or @app2/@prod), named
+                      without it; its secrets with --secrets. Can be given more than once.
+                      Experimental: it may change in a later version.
   --vars <file>       Take the items a vars file names (the one `folio exec --vars` reads), to
                       run the same command with `folio exec --from`: every @{…} in it, also one
                       in a fallback (left out, with a note, when it is not there). Any secret in
@@ -966,29 +972,32 @@ EOF
 # Anything not given is asked for: the items, and how to lock the file.
 Export() {
     # Process the command-line options
-    local secrets=0 to="" passphrase_stdin=0 passphrase_fd="" target="" names=() vars_files=() arg
+    # layers: the <name>s and --use (--use=<@namespace>) in the order typed, for make-view.
+    local secrets=0 to="" passphrase_stdin=0 passphrase_fd="" target="" names=() uses=() layers=() vars_files=() arg
     while (( $# > 0 )); do
         arg=$1 ; shift
         case $arg in
             -s|--secrets)       secrets=1 ;;
-            --to|-o|--output|--file-passphrase-fd|--vars)
+            --to|-o|--output|--file-passphrase-fd|--vars|--use)
                                 [[ $# -gt 0 && -n $1 ]] || die "$arg needs a value."
                                 case $arg in
                                     --to)                 to=$1 ;;
                                     --file-passphrase-fd) passphrase_fd=$1 ;;
                                     --vars)               read-vars-file export "$1" ; vars_files+=("$1") ;;
+                                    --use)                uses+=("${1%/}") ; layers+=("--use=${1%/}") ;;
                                     *)                    target=$1 ;;
                                 esac
                                 shift ;;
             --vars=*)           read-vars-file export "${arg#*=}" ; vars_files+=("${arg#*=}") ;;
+            --use=*)            arg=${arg#--use=} ; uses+=("${arg%/}") ; layers+=("--use=${arg%/}") ;;
             --to=*)             to=${arg#*=} ;;
             --output=*)         target=${arg#*=} ;;
             --file-passphrase-fd=*)  passphrase_fd=${arg#*=} ;;
             --file-passphrase-stdin) passphrase_stdin=1 ;;
             -h|--help)          export-help ; return 0 ;;
-            --)                 names+=("$@") ; break ;;
+            --)                 names+=("$@") ; layers+=("$@") ; break ;;
             -*)                 die "export: unknown option: $arg${EXTRA_LINE}$(store-export-usage)" ;;
-            *)                  names+=("$arg") ;;
+            *)                  names+=("$arg") ; layers+=("$arg") ;;
         esac
     done
     if (( passphrase_stdin )) && [[ -n $passphrase_fd ]]; then
@@ -996,8 +1005,8 @@ Export() {
     fi
     [[ -z $to ]] || { (( ! passphrase_stdin )) && [[ -z $passphrase_fd ]] ; } \
         || die "--file-passphrase-stdin and --file-passphrase-fd are for a passphrase; a file locked --to needs none."
-    (( ! passphrase_stdin || ${#names[@]} + ${#vars_files[@]} > 0 )) \
-        || die "--file-passphrase-stdin needs the items named (or --vars): stdin cannot also answer which ones."
+    (( ! passphrase_stdin || ${#names[@]} + ${#uses[@]} + ${#vars_files[@]} > 0 )) \
+        || die "--file-passphrase-stdin needs the items named (or --use, --vars): stdin cannot also answer which ones."
     [[ -z $passphrase_fd ]] || check-passphrase-fd --file-passphrase-fd "$passphrase_fd"
     require-store
 
@@ -1018,28 +1027,38 @@ EOF
     # Input: the store — FOLIO_STORE_DIR, default ~/.folio (see STORE_PATH at the top)
     show-answer "Store path" "$(tilde-path "$STORE_PATH")"
 
-    # Input: the items — the <name>s (a folder's secrets too with --secrets) and the ones the vars
-    # files name, or with neither, picked from a list
-    local item texts=0
-    if (( ${#vars_files[@]} == 0 )); then
+    # Input: the items — the <name>s (a folder's secrets too with --secrets), the ones under each
+    # --use, named with it peeled off, and the ones the vars files name; or with none of them,
+    # picked from a list. With a --use, all are read from a view (make-view): the store with the
+    # <name>s and --use laid over it in the order typed, the last one winning. The file has them
+    # as they are named there.
+    local item texts=0 use
+    make-view export "$secrets" ${layers[@]+"${layers[@]}"}
+    if (( ${#vars_files[@]} == 0 && ${#uses[@]} == 0 )); then
         select-items export "$STORE_PATH" "$secrets" 0 "${names[@]}"
     else
-        local vars_list
-        vars_list=$(printf ', %s' "${vars_files[@]}")
-        show-answer "Vars files" "${vars_list#, }"
-        # The <name>s first, as select-items takes them; then each item the vars files name, once.
+        if (( ${#uses[@]} > 0 )); then
+            show-answer "Use" "$(printf '%s ' "${uses[@]}")"
+        fi
+        if (( ${#vars_files[@]} > 0 )); then
+            local vars_list
+            vars_list=$(printf ', %s' "${vars_files[@]}")
+            show-answer "Vars files" "${vars_list#, }"
+        fi
+        # The <name>s first, as select-items takes them; then each --use's; then each item the vars
+        # files name — each item once.
         SELECTED=()
         if (( ${#names[@]} > 0 )); then
             select-items export "$STORE_PATH" "$secrets" 0 "${names[@]}"
         fi
-        vars-items export "$secrets"
-        local seen=$'\n'
-        for item in ${SELECTED[@]+"${SELECTED[@]}"}; do seen+=$item$'\n' ; done
-        for item in ${VARS_ITEMS[@]+"${VARS_ITEMS[@]}"}; do
-            [[ $seen == *$'\n'"$item"$'\n'* ]] && continue
-            SELECTED+=("$item")
-            seen+=$item$'\n'
+        for use in ${uses[@]+"${uses[@]}"}; do
+            used-items export "$secrets" "$use"
+            select-more "${USED_ITEMS[@]}"
         done
+        if (( ${#vars_files[@]} > 0 )); then
+            vars-items export "$secrets"
+            select-more ${VARS_ITEMS[@]+"${VARS_ITEMS[@]}"}
+        fi
         (( ${#SELECTED[@]} > 0 )) || die "export: the vars files name no item that is there."
     fi
     for item in "${SELECTED[@]}"; do [[ $item == *.gpg ]] || texts=$(( texts + 1 )) ; done
@@ -1059,7 +1078,7 @@ EOF
     [[ $file == *"$EXPORT_SUFFIX" ]] || file+=$EXPORT_SUFFIX
     [[ ! -e $file ]]            || die "$file already exists."
     [[ -d $(dirname "$file") ]] || die "There is no folder $(dirname "$file")."
-    [[ $(cd "$(dirname "$file")" && pwd -P)/ != "$(cd "$STORE_PATH" && pwd -P)"/* ]] \
+    [[ $(cd "$(dirname "$file")" && pwd -P)/ != "$(cd "${VIEW_SOURCE:-$STORE_PATH}" && pwd -P)"/* ]] \
         || die "$file is inside the store; write the export somewhere else."
     show-answer "File" "$(tilde-path "$file")"
 
@@ -1502,10 +1521,10 @@ function can-use-imported-key() {
         | GNUPGHOME=$1 gpg --batch --quiet --decrypt 2>/dev/null | grep -qx folio
 }
 
-# verify-export-text <how> <name>: die unless the text <name> in the opened export is the one the
-# export signed.
+# verify-export-text <how> <name> [<root>]: die unless the text <name> in the opened export — or
+# under <root>, a view of it — is the one the export signed.
 function verify-export-text() {
-    local signer item=$EXPORT_ROOT/$2.txt
+    local signer item=${3:-$EXPORT_ROOT}/$2.txt
     signer=$(GNUPGHOME=$EXPORT_HOME gpg --status-fd 1 --verify "$item.sig" "$item" 2>/dev/null \
                 | awk '$2 == "VALIDSIG" { print $NF }')
     [[ $signer == "$EXPORT_KEY" ]] || die "$1: the signature of '$2' in the export does not verify."
@@ -1527,6 +1546,17 @@ function is-passphrase-locked() {
 }
 
 # --- Items: choose some -------------------------------------------------------
+
+# select-more <item>...: add each item file to SELECTED, unless it is there already.
+function select-more() {
+    local item seen=$'\n'
+    for item in ${SELECTED[@]+"${SELECTED[@]}"}; do seen+=$item$'\n' ; done
+    for item in "$@"; do
+        [[ $seen == *$'\n'"$item"$'\n'* ]] && continue
+        SELECTED+=("$item")
+        seen+=$item$'\n'
+    done
+}
 
 # select-items <how> <root> <secrets:0|1> <all:0|1> [<name>...]: set SELECTED to item files
 # (<name>.txt, <name>.gpg) under <root>: every one with <all>; else those the names pick — an item
@@ -2445,16 +2475,20 @@ Ls() {
 function run-exec-help() {
     cat <<'HELP'
 Usage: folio exec [-s|--secrets] [-a|--all] [-n|--names|--debug|--confirm] [--plain]
-                  [--vars <file>]... [--store-passphrase-fd <n>] [--from <file> [--file-passphrase-fd <n>]]
-                  <entry>... -- <command> [<arg>...]
+                  [--use <@namespace>]... [--vars <file>]... [--store-passphrase-fd <n>]
+                  [--from <file> [--file-passphrase-fd <n>]] <entry>... -- <command> [<arg>...]
 
 Run a command with entries from the store as environment variables. Texts load by default;
 secrets only with --secrets. Values are never printed.
 
 An <entry> is a text or secret name, a folder (every entry under it), or VAR=<name> to pick
 the variable's name. Otherwise the name comes from the entry's path: a top folder starting with @
-(a namespace) is removed, / turns into _, and it is uppercased (@nawa/gh/token -> GH_TOKEN). A
-later entry overrides an earlier one; VAR=<name> overrides them all.
+(a namespace) is removed, / turns into _, and it is uppercased (@nawa/gh/token -> GH_TOKEN).
+--use @prod takes every entry under @prod as if @prod/ were not in its path: @prod/server/user
+is server/user, everywhere, also to a vars file. Only namespaces peel, from the front:
+--use @app2/@prod. The entries, --all and --use are taken in the order typed, and the last one
+wins: in `server --use @prod`, @prod's server/user wins; in `--use @prod server`, server's does.
+VAR=<name> overrides them all.
 
 A vars file (--vars) sets variables, one line each:
   VAR=<value>         Text, with ${NAME} (from the environment) and @{name} (a text or secret)
@@ -2462,12 +2496,14 @@ A vars file (--vars) sets variables, one line each:
                       missing; a fallback is a value too, so they chain.
   @{name}, @{folder/*}
                       An entry, or every entry under a folder, named by its path as above.
-Blank lines and # comments are left out; nothing in it runs. It loads after --all and before
-the entries typed. `folio vars check` checks one without a store; --names shows what it gives.
+Blank lines and # comments are left out; nothing in it runs. It is made after the entries,
+--all and --use, and they only feed it: ${NAME} sees them, but the command gets only what the
+vars files set. `folio vars check` checks one without a store; --names shows what it gives.
 
 Options:
   -s, --secrets       Also load secrets.
-  -a, --all           Load every entry outside the @namespaces first; <entry> is then optional.
+  -a, --all           Load every entry outside the @namespaces, where it is typed among the
+                      entries. <entry> is then optional.
   -n, --names         Only show which variable would get which entry, and stop: nothing is read,
                       nothing runs.
       --debug         Show the same on stderr, then go on.
@@ -2475,6 +2511,10 @@ Options:
                       terminal, not stdin). No value is read, and the store key is not
                       unlocked, before the yes; a --from file is opened first, to show its names.
       --plain         With --names, --debug or --confirm: no colour, even on a screen.
+  --use <@namespace>  Take every entry under <@namespace> (e.g. @prod, or @app2/@prod), named
+                      without it, where it is typed among the entries; can be given more than
+                      once. <entry> is then optional.
+                      Experimental: it may change in a later version.
   --vars <file>       Set the variables a vars file says (e.g. prod-deploy.vars); can be given
                       more than once. <entry> is then optional.
   --from <file>       Take the entries from a file made by `folio export`, not from the store,
@@ -2494,15 +2534,17 @@ HELP
 function run-shell-help() {
     cat <<'HELP'
 Usage: folio shell [-s|--secrets] [-a|--all] [-n|--names|--debug|--confirm] [--plain]
-                   [--vars <file>]... [--store-passphrase-fd <n>] [--from <file> [--file-passphrase-fd <n>]] <entry>...
+                   [--use <@namespace>]... [--vars <file>]... [--store-passphrase-fd <n>]
+                   [--from <file> [--file-passphrase-fd <n>]] <entry>...
 
 Start your shell ($SHELL) with entries from the store as environment variables, and say which
 names were loaded (never their values). FOLIO_SHELL=1 is set. Type `exit` to leave.
-Entries, vars files and variable names are as in `folio exec`.
+Entries, --use, vars files and variable names are as in `folio exec`.
 
 Options:
   -s, --secrets       Also load secrets.
-  -a, --all           Load every entry outside the @namespaces first; <entry> is then optional.
+  -a, --all           Load every entry outside the @namespaces, where it is typed among the
+                      entries. <entry> is then optional.
   -n, --names         Only show which variable would get which entry, and stop: nothing is read,
                       nothing runs.
       --debug         Show the same on stderr, then go on.
@@ -2510,6 +2552,9 @@ Options:
                       terminal, not stdin). No value is read, and the store key is not
                       unlocked, before the yes; a --from file is opened first, to show its names.
       --plain         With --names, --debug or --confirm: no colour, even on a screen.
+  --use <@namespace>  Take every entry under <@namespace>, named without it, as in `folio exec`;
+                      can be given more than once. <entry> is then optional.
+                      Experimental: it may change in a later version.
   --vars <file>       Set the variables a vars file says, as in `folio exec`; can be given more
                       than once. <entry> is then optional.
   --from <file>       Take the entries from a file made by `folio export`, as in `folio exec`.
@@ -2528,32 +2573,35 @@ VAR_NAME_PATTERN='^[A-Za-z_][A-Za-z0-9_]*$'
 # Where the entries come from, in messages: the store, or with --from, the export.
 ENTRIES_IN="the store"
 
-# exec-with-entries <exec|shell> [-s|--secrets] [--vars <file>]... [--from <file> [--file-passphrase-fd <n>]]
+# exec-with-entries <exec|shell> [-s|--secrets] [--use <@namespace>]... [--vars <file>]... [--from <file> [--file-passphrase-fd <n>]]
 #                   <entry>... [-- <command> [<arg>...]]
 # Read every entry first, then export them all at once and exec: no `pass` or `gpg` call made
 # while reading ever sees a value already loaded. With --from, the entries come from an export
 # file instead of the store, which is then not needed at all.
 function exec-with-entries() {
-    local how=$1 secrets=0 all=0 only_names=0 debug=0 confirm=0 dashes=0 from_file="" passphrase_fd="" entries=() arg ; shift
+    # The entries, --all ("") and --use (--use=<@namespace>) in the order typed: the last one wins.
+    local how=$1 secrets=0 only_names=0 debug=0 confirm=0 dashes=0 from_file="" passphrase_fd="" entries=() arg ; shift
     while (( $# > 0 )); do
         arg=$1 ; shift
         case $arg in
             -h|--help)    "run-$how-help" ; return 0 ;;
             -s|--secrets) secrets=1 ;;
-            -a|--all)     all=1 ;;
+            -a|--all)     entries+=("") ;;
             -n|--names)   only_names=1 ;;
             --debug)      debug=1 ;;
             --confirm)    debug=1 confirm=1 ;;
             --plain)      PLAIN=1 ;;
-            --from|--file-passphrase-fd|--vars)
+            --from|--file-passphrase-fd|--vars|--use)
                           [[ $# -gt 0 && -n $1 ]] || die "$arg needs a value."
                           case $arg in
                               --from) from_file=$1 ;;
                               --vars) read-vars-file "$how" "$1" ;;
+                              --use)  entries+=("--use=${1%/}") ;;
                               *)      passphrase_fd=$1 ;;
                           esac
                           shift ;;
             --vars=*)          read-vars-file "$how" "${arg#*=}" ;;
+            --use=*)           arg=${arg#--use=} ; entries+=("--use=${arg%/}") ;;
             --from=*)          from_file=${arg#*=} ;;
             --file-passphrase-fd=*) passphrase_fd=${arg#*=} ;;
             --)           dashes=1 ; break ;;
@@ -2561,13 +2609,13 @@ function exec-with-entries() {
             *)            entries+=("$arg") ;;
         esac
     done
-    local from_usage="[--vars <file>]... [--store-passphrase-fd <n>] [--from <file> [--file-passphrase-fd <n>]]"
+    local from_usage="[--use <@namespace>]... [--vars <file>]... [--store-passphrase-fd <n>] [--from <file> [--file-passphrase-fd <n>]]"
     (( ! (only_names && debug) )) \
         || die "$how: --names only shows the names; --debug and --confirm show them and go on."
     # --debug and --confirm show the names on stderr: marked for that screen, not stdout's.
     (( ! debug )) || SCREEN_FD=2
     set-marks    # for --names, here: what it shows of a vars file is made in $(…)
-    local given=$(( ${#entries[@]} + all + ${#VARS_KIND[@]} ))
+    local given=$(( ${#entries[@]} + ${#VARS_KIND[@]} ))
     if [[ $how == exec ]]; then
         (( given > 0 && (only_names || (dashes && $# > 0)) )) \
             || die "Usage: folio exec [-s|--secrets] [-a|--all] [-n|--names|--debug|--confirm] [--plain] $from_usage <entry>... -- <command> [<arg>...]"
@@ -2586,9 +2634,10 @@ function exec-with-entries() {
         # --confirm's yes.
         check-store
     fi
+    # With a --use, every entry is read from a view: the store (or export) with the layers laid
+    # over it, in the order typed.
+    make-view "$how" "$secrets" ${entries[@]+"${entries[@]}"}
     check-vars-entries "$how" "$secrets"
-    # In order: --all (the store's root, wherever it was typed), the vars files, the entries typed.
-    EXEC_VARS=() EXEC_FILES=() VAR_VALUES=()
     # The vars files' values are made line by line, reading entries as they go. So first a dry
     # run, as --names does it: it reads no value, and stops at an entry that is not there before
     # any value is read. It runs in a subshell, so nothing it sets is kept. What it says goes to
@@ -2601,10 +2650,7 @@ function exec-with-entries() {
         local names_errors
         if ! names_errors=$(
                 {
-                    if (( all )); then add-folder "$how" "$secrets" "" " " ; fi
-                    apply-vars "$how" "$secrets" 1
-                    (( ${#entries[@]} == 0 )) || resolve-entries "$how" "$secrets" "${entries[@]}"
-                    (( ${#EXEC_VARS[@]} > 0 )) || die "$how: nothing to load."
+                    load-entries "$how" "$secrets" 1 ${entries[@]+"${entries[@]}"}
                     print-entry-names >&3
                 } 3>&2 2>&1
             ); then
@@ -2619,8 +2665,7 @@ function exec-with-entries() {
         local dry_run_errors
         if ! dry_run_errors=$(
                 {
-                    if (( all )); then add-folder "$how" "$secrets" "" " " ; fi
-                    apply-vars "$how" "$secrets" 1
+                    load-entries "$how" "$secrets" 1 ${entries[@]+"${entries[@]}"}
                 } 2>&1
             ); then
             printf '%s\n' "$dry_run_errors" >&2
@@ -2628,10 +2673,7 @@ function exec-with-entries() {
         fi
     fi
     (( only_names )) || unlock-store-key
-    (( all )) && add-folder "$how" "$secrets" "" " "
-    apply-vars "$how" "$secrets" "$only_names"
-    (( ${#entries[@]} == 0 )) || resolve-entries "$how" "$secrets" "${entries[@]}"
-    (( ${#EXEC_VARS[@]} > 0 )) || die "$how: nothing to load."
+    load-entries "$how" "$secrets" "$only_names" ${entries[@]+"${entries[@]}"}
     (( only_names )) && { print-entry-names ; return 0 ; }
 
     local pairs=() i file value texts=0 values=0
@@ -2661,7 +2703,7 @@ function exec-with-entries() {
     fi
     # Arrays would swallow a loaded name of theirs (export makes it element 0, never exported).
     set -- "${pairs[@]}" -- "$@"
-    unset pairs entries EXEC_VARS EXEC_FILES STORE_PASSPHRASE
+    unset pairs entries EXEC_VARS EXEC_FILES INPUT_VARS INPUT_FILES STORE_PASSPHRASE
     export-and-exec "$@"
 }
 
@@ -2704,15 +2746,34 @@ function export-and-exec() {
     exec "$@"
 }
 
+# load-entries <exec|shell> <secrets:0|1> <names:0|1> <entry>...: EXEC_VARS[i] <- EXEC_FILES[i]
+# is what the command gets. First the entries, --all and --use, in the order typed; then the vars
+# files, over them. With vars files, the entries only feed them — INPUT_VARS/INPUT_FILES, which
+# ${NAME} sees — and the command gets only what the vars files set.
+function load-entries() {
+    local how=$1 secrets=$2 names=$3
+    shift 3
+    EXEC_VARS=() EXEC_FILES=() VAR_VALUES=() INPUT_VARS=() INPUT_FILES=()
+    (( $# == 0 )) || resolve-entries "$how" "$secrets" "$@"
+    if (( ${#VARS_KIND[@]} > 0 )); then
+        INPUT_VARS=(${EXEC_VARS[@]+"${EXEC_VARS[@]}"}) INPUT_FILES=(${EXEC_FILES[@]+"${EXEC_FILES[@]}"})
+        EXEC_VARS=() EXEC_FILES=()
+        apply-vars "$how" "$secrets" "$names"
+    fi
+    (( ${#EXEC_VARS[@]} > 0 )) || die "$how: nothing to load."
+}
+
 # resolve-entries <exec|shell> <secrets:0|1> <entry>...
 # Work out which variable gets which entry, into EXEC_VARS[i] <- EXEC_FILES[i] (<name>.txt or
 # <name>.gpg), over what is there already. VAR=<name> entries first: they claim their entry, and
 # are applied last so they win. Every other entry is named by its path, a later one overriding an
 # earlier one. An empty entry is the store's root (--all): every entry outside the @namespaces.
+# --use=<@namespace>: every entry under it, named by its path with the namespace peeled off.
 function resolve-entries() {
     local how=$1 secrets=$2 entry var name claimed=" " exp_vars=() exp_files=() i
     shift 2
     for entry in "$@"; do
+        [[ $entry == --use=* ]] && continue
         is-explicit "$entry" || continue
         var=${entry%%=*} name=${entry#*=}
         [[ $var =~ $VAR_NAME_PATTERN ]] || die "$how: '$var' is not a valid variable name."
@@ -2720,12 +2781,16 @@ function resolve-entries() {
         exp_vars+=("$var") ; exp_files+=("$ENTRY_FILE") ; claimed+="$ENTRY_FILE "
     done
 
+    # With a view (--use), an entry or folder takes the items it has in the source — not the ones
+    # a --use laid there too — each read from the view, where the last layer laid it.
+    local source=${VIEW_SOURCE:-$STORE_PATH}
     for entry in "$@"; do
+        if [[ $entry == --use=* ]]; then add-used "$how" "$secrets" "${entry#--use=}" "$claimed" ; continue ; fi
         is-explicit "$entry" && continue
-        if [[ -n $entry ]] && entry-file "$how" "$secrets" "$entry"; then
+        if [[ -n $entry ]] && STORE_PATH=$source entry-file "$how" "$secrets" "$entry"; then
             [[ $claimed == *" $ENTRY_FILE "* ]] || add-derived "$how" "$ENTRY_FILE"
         else
-            add-folder "$how" "$secrets" "$entry" "$claimed"
+            STORE_PATH=$source add-folder "$how" "$secrets" "$entry" "$claimed"
         fi
     done
 
@@ -2755,22 +2820,160 @@ function add-folder() {
     fi
 }
 
+# add-used <how> <secrets> <@namespace> <claimed>: every entry used-items finds, named by its
+# path in the view (@prod/server/user -> server/user -> SERVER_USER), leaving out the ones in
+# <claimed>.
+function add-used() {
+    local how=$1 secrets=$2 prefix=$3 claimed=$4 file
+    used-items "$how" "$secrets" "$prefix"
+    for file in "${USED_ITEMS[@]}"; do
+        if [[ $file == *.gpg && -f $VIEW_SOURCE/$prefix/${file%.gpg}.txt ]]; then
+            die "$how: '$prefix/${file%.gpg}' is both a text and a secret; give one VAR=<name> or rename one."
+        fi
+        [[ $claimed == *" $file "* ]] || add-derived "$how" "$file"
+    done
+}
+
+# used-items <how> <secrets> <@namespace>: USED_ITEMS gets every item under <@namespace> in the
+# source, as it is named in the view — <@namespace> peeled off (<name>.txt or <name>.gpg). Its
+# secrets only with <secrets>, as in a folder. One a later layer laid over with the other kind is
+# left to that layer.
+function used-items() {
+    local how=$1 secrets=$2 prefix=$3 file
+    USED_ITEMS=()
+    while IFS= read -r file; do
+        file=${file#"$VIEW_SOURCE/$prefix"/}
+        [[ -f $STORE_PATH/$file ]] && USED_ITEMS+=("$file")
+    done < <(entries-under "$secrets" "$VIEW_SOURCE/$prefix")
+    (( secrets )) || STORE_PATH=$VIEW_SOURCE note-skipped-secrets "$how" "$prefix" "${#USED_ITEMS[@]}"
+    (( ${#USED_ITEMS[@]} > 0 )) || die "$how: '$prefix' has no entries to load."
+}
+
+# --- The view (--use) ---------------------------------------------------------
+
+# make-view <how> <secrets:0|1> <entry>...: with a --use among the entries, read every entry from a
+# view from here on — STORE_PATH (and pass's PASSWORD_STORE_DIR) is a private temporary copy of the
+# source (the store, or an opened export), its .git left out, with each layer laid over it in the
+# order given, the last one winning:
+#   ""                 (--all) every item outside the @namespaces, where it is
+#   <name>, <folder>   the item, or every item under the folder, where it is (VAR=<name> too)
+#   --use=<@ns>[/<@ns>]...  every item under it, with that much peeled off the front of its path
+# A folder's or a --use's secrets are laid only with <secrets>, as only then are they taken: so
+# one left out never covers a text of the same name.
+# Only files are copied: a secret stays encrypted, and nothing is read or decrypted. VIEW_FROM[i]
+# says which item in the source the item VIEW_PATHS[i] in the view was laid from. The view is
+# removed when EnvFolio exits (or, before an exec, by remove-now). Without a --use: nothing.
+VIEW_SOURCE="" VIEW_PATHS=() VIEW_FROM=()
+function make-view() {
+    local how=$1 secrets=$2 entry="" view file name prefix
+    shift 2
+    for entry in "$@"; do [[ $entry == --use=* ]] && break ; done
+    [[ $entry == --use=* ]] || return 0
+
+    VIEW_SOURCE=$STORE_PATH
+    view=$(umask 077 && mktemp -d) || die "Cannot make a temporary folder."
+    remove-on-exit "$view"
+    while IFS= read -r file; do
+        file=${file#./}
+        mkdir -p "$view/$(dirname "$file")"
+        cp -- "$VIEW_SOURCE/$file" "$view/$file"
+    done < <(cd "$VIEW_SOURCE" && find . -name .git -prune -o -type f -print)
+
+    for entry in "$@"; do
+        if [[ $entry == --use=* ]]; then
+            prefix=${entry#--use=}
+            check-use-prefix "$how" "$prefix"
+            while IFS= read -r file; do
+                name=${file#"$VIEW_SOURCE"/} name=${name%.*}
+                lay-in-view "$view" "$name" "${name#"$prefix"/}"
+            done < <(entries-under "$secrets" "$VIEW_SOURCE/$prefix")
+            continue
+        fi
+        is-explicit "$entry" && entry=${entry#*=}
+        name=${entry%/}
+        if [[ -n $name && ( -f $VIEW_SOURCE/$name.txt || -f $VIEW_SOURCE/$name.gpg ) ]]; then
+            lay-in-view "$view" "$name" "$name"
+        elif [[ -z $name || -d $VIEW_SOURCE/$name ]]; then
+            while IFS= read -r file; do
+                file=${file#"$VIEW_SOURCE"/}
+                [[ -n $name || $file != @* ]] || continue
+                lay-in-view "$view" "${file%.*}" "${file%.*}"
+            done < <(entries-under "$secrets" "$VIEW_SOURCE${name:+/$name}")
+        fi
+        # Anything else is not there: resolve-entries says so.
+    done
+    STORE_PATH=$view
+    export PASSWORD_STORE_DIR=$view
+}
+
+# check-use-prefix <how> <prefix>: die unless <prefix> is one or more namespaces from the front —
+# @app2/@prod, never @app2/server — and is there in the source.
+function check-use-prefix() {
+    local how=$1 prefix=$2 rest=$2/ part
+    [[ -n $prefix ]] || die "$how: --use needs a namespace, e.g. --use @prod."
+    while [[ -n $rest ]]; do
+        part=${rest%%/*} rest=${rest#*/}
+        [[ $part == @?* ]] || die "$how: --use $prefix: '$part' is not a namespace (one starting with @)."
+    done
+    [[ -d $VIEW_SOURCE/$prefix ]] || die "$how: --use $prefix: there is no '$prefix' in $ENTRIES_IN."
+}
+
+# lay-in-view <view> <src> <dst>: copy the item named <src> in the source — its .txt and .txt.sig,
+# its .gpg, whichever it has — to the name <dst> in <view>, over whatever item was there.
+function lay-in-view() {
+    local view=$1 src=$2 dst=$3 ext i
+    mkdir -p "$view/$(dirname "$dst")"
+    rm -f -- "$view/$dst.txt" "$view/$dst.txt.sig" "$view/$dst.gpg"
+    for ext in .txt .txt.sig .gpg; do
+        [[ ! -f $VIEW_SOURCE/$src$ext ]] || cp -- "$VIEW_SOURCE/$src$ext" "$view/$dst$ext"
+    done
+    for (( i = 0; i < ${#VIEW_PATHS[@]}; i++ )); do
+        [[ ${VIEW_PATHS[i]} == "$dst" ]] && { VIEW_FROM[i]=$src ; return 0 ; }
+    done
+    VIEW_PATHS+=("$dst") VIEW_FROM+=("$src")
+}
+
+# view-from <name>: where the item <name> in the view was laid from, when that is another name;
+# else nothing.
+function view-from() {
+    local i
+    for (( i = 0; i < ${#VIEW_PATHS[@]}; i++ )); do
+        [[ ${VIEW_PATHS[i]} == "$1" && ${VIEW_FROM[i]} != "$1" ]] && { echo "${VIEW_FROM[i]}" ; return 0 ; }
+    done
+    return 0
+}
+
 # print-entry-names: what --names shows — each variable and the entry it would get, in order,
-# marked (entry-mark); for one a vars file sets, how its value is made. Nothing is read or decrypted.
+# marked (entry-mark), and where a --use laid it from; for one a vars file sets, how its value is
+# made. Then, with vars files, the entries that only feed them. Nothing is read or decrypted.
 function print-entry-names() {
-    local i width=0 file
+    local i width=0
     for (( i = 0; i < ${#EXEC_VARS[@]}; i++ )); do
         (( ${#EXEC_VARS[i]} > width )) && width=${#EXEC_VARS[i]}
     done
-    for (( i = 0; i < ${#EXEC_VARS[@]}; i++ )); do
-        file=${EXEC_FILES[i]}
-        # Set by a vars file: its value as it would be made, each part shown by where it is from.
-        if [[ $file == =* ]]; then
-            printf '%-*s <- %s\n' "$width" "${EXEC_VARS[i]}" "${VAR_VALUES[${file#=}]}"
-            continue
-        fi
-        printf '%-*s <- %s\n' "$width" "${EXEC_VARS[i]}" "$(entry-mark "$file")"
+    for (( i = 0; i < ${#INPUT_VARS[@]}; i++ )); do
+        (( ${#INPUT_VARS[i]} > width )) && width=${#INPUT_VARS[i]}
     done
+    for (( i = 0; i < ${#EXEC_VARS[@]}; i++ )); do
+        print-entry-name "$width" "${EXEC_VARS[i]}" "${EXEC_FILES[i]}"
+    done
+    (( ${#INPUT_VARS[@]} > 0 )) || return 0
+    echo "Only for the vars files (the command does not get these):"
+    for (( i = 0; i < ${#INPUT_VARS[@]}; i++ )); do
+        print-entry-name "$width" "${INPUT_VARS[i]}" "${INPUT_FILES[i]}"
+    done
+}
+
+# print-entry-name <width> <var> <file>: one line of print-entry-names.
+function print-entry-name() {
+    local width=$1 var=$2 file=$3 from
+    # Set by a vars file: its value as it would be made, each part shown by where it is from.
+    if [[ $file == =* ]]; then
+        printf '%-*s <- %s\n' "$width" "$var" "${VAR_VALUES[${file#=}]}"
+        return 0
+    fi
+    from=$(view-from "${file%.*}")
+    printf '%-*s <- %s%s\n' "$width" "$var" "$(entry-mark "$file")" "${from:+  (--use: $from)}"
 }
 
 # entry-mark <name>.gpg|<name>.txt: "<name>(S)", yellow on a screen with colour (set-marks); for a
@@ -2855,7 +3058,7 @@ FROM_EXPORT=""
 function read-entry-value() {
     local how=$1 file=$2
     if [[ $file == *.txt ]]; then
-        if [[ -n $FROM_EXPORT ]]; then verify-export-text "$how" "${file%.txt}"
+        if [[ -n $FROM_EXPORT ]]; then verify-export-text "$how" "${file%.txt}" "$STORE_PATH"
         else                         verify-text "${file%.txt}"
         fi
         ENTRY_VALUE=$(cat "$STORE_PATH/$file")
@@ -3086,8 +3289,9 @@ function scan-placeholder() {
     SCAN_OUT=$value
 }
 
-# look-up-env <name>: LOOKED_UP gets ${name}: from a variable set before (by --all or an earlier
-# line), else from the environment EnvFolio was started with. Fails when unset or empty.
+# look-up-env <name>: LOOKED_UP gets ${name}: from a variable set before — by an earlier line, else
+# by the entries, --all and --use that feed the vars files — else from the environment EnvFolio
+# was started with. Fails when unset or empty.
 function look-up-env() {
     local i
     for (( i = 0; i < ${#EXEC_VARS[@]}; i++ )); do
@@ -3097,6 +3301,12 @@ function look-up-env() {
             =*) LOOKED_UP=${VAR_VALUES[${EXEC_FILES[i]#=}]} ;;
             *)  read-entry-value "$VARS_HOW" "${EXEC_FILES[i]}" ; LOOKED_UP=$ENTRY_VALUE ;;
         esac
+        [[ -n $LOOKED_UP ]] ; return
+    done
+    for (( i = 0; i < ${#INPUT_VARS[@]}; i++ )); do
+        [[ ${INPUT_VARS[i]} == "$1" ]] || continue
+        if [[ $SCAN_MODE == names ]]; then LOOKED_UP="[\$$1 <- $(entry-mark "${INPUT_FILES[i]}")]" ; return 0 ; fi
+        read-entry-value "$VARS_HOW" "${INPUT_FILES[i]}" ; LOOKED_UP=$ENTRY_VALUE
         [[ -n $LOOKED_UP ]] ; return
     done
     # printenv, not ${!name}: that would see EnvFolio's own variables.
@@ -3362,6 +3572,7 @@ function complete-words() {
             *)   count=$(( count + 1 )) last=$word ;;
         esac
     done
+    if [[ $value == namespaces ]]; then complete-namespaces "$cur" ; return 0 ; fi
     if [[ -n $value ]]; then echo "$value" ; return 0 ; fi
     if (( dashes >= 0 )); then
         # After `--`: exec's command and its arguments; for the others, more of the same arguments.
@@ -3395,6 +3606,20 @@ function complete-words() {
             else echo none ; fi ;;
         *)               echo none ;;
     esac
+}
+
+# complete-namespaces <cur>: as complete-entries does for folders, but only the namespaces (@…),
+# deeper ones too (@app2/@prod/), for --use.
+function complete-namespaces() {
+    local line word
+    complete-entries all "$1" folders | {
+        IFS= read -r line && echo "$line"
+        while IFS= read -r line; do
+            word=${line%%$'\t'*} word=${word%/}
+            [[ ${word##*/} == @* ]] && echo "$line"
+        done
+        return 0
+    }
 }
 
 # completion-args <command>: the kinds of its arguments, in order; one marked ... stands for all
@@ -3495,6 +3720,7 @@ function help-option-lines() {
             -*)                   names+=("${token%%\[*}") ;;     # --clip[=<line>]: its value is optional
             "<file>"*|"<key>"*)   value=files ;;
             "<folder>"*)          value=dirs ;;
+            "<@namespace>"*)      value=namespaces ;;
             "<"*)                 value=none ;;
             *)                    desc=$token ;;
         esac
