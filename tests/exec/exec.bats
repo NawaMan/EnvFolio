@@ -100,10 +100,12 @@ make-store() {
     [[ $stderr == *"'odd/api-key' would be ODD_API-KEY"* ]] || false
 }
 
-@test "exec --all: loads first wherever it is typed; namespaces and VAR= layer over it" {
+@test "exec --all: where it is typed, the last one winning; namespaces and VAR= layer over it" {
     make-store
-    run --separate-stderr "$FOLIO" exec @nawa --all -- printenv GH_USER
+    run --separate-stderr "$FOLIO" exec --all @nawa -- printenv GH_USER
     [ "$output" = "nawa-user" ]
+    run --separate-stderr "$FOLIO" exec @nawa --all -- printenv GH_USER
+    [ "$output" = "shared-user" ]
     run --separate-stderr "$FOLIO" exec --all X=@nawa/gh/user -- sh -c 'echo "$X|$GH_USER"'
     [ "$output" = "nawa-user|shared-user" ]
     # With --secrets, both/x (a text and a secret) is refused; without it, all secrets load.

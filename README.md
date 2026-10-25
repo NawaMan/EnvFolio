@@ -26,7 +26,8 @@ A command-line tool for password management. It is built heavily on top of [`pas
 - `folio secret ...` to deal with secret-related actions like: show, insert, generate, edit, find, ...
 - `folio ls`         to list both types of items (texts/secrets) together, as a tree or flat.
 - `folio exec ...`   to run a command with items as environment variables (secrets only with `--secrets`),
-  named on the command line or in a vars file (`--vars prod-deploy.vars`; `folio vars check` checks one).
+  named on the command line or in a vars file (`--vars prod-deploy.vars`; `folio vars check` checks one),
+  with `--use @prod` to peel a namespace off.
 - `folio shell ...`  to start a shell with items as environment variables.
 - `folio completion bash|zsh` for Tab completion of commands, options and item names.
 
@@ -56,6 +57,37 @@ folio exec --names --vars deploy.vars -- true   # only show which variable gets 
 ```
 
 A secret still needs `--secrets`. See [From a vars file](MANUAL.md#from-a-vars-file).
+
+## One contract, many environments
+
+> **Experimental:** `--use` may change in a later version.
+
+The three pieces fit together:
+
+- **The vars file is the contract**, written for what the command needs, by its own names.
+- **The store, or a `.folio` file a supplier exported**, holds the values.
+- **A namespace is the last-mile choice**: `--use @app2/@prod` takes every item under it as if
+  `@app2/@prod/` were not in its path, so `@app2/@prod/server/user` is `server/user`.
+
+```bash
+# server.vars
+DB_USER=@{server/user}
+PGPASSWORD=${SERVER_PASSWORD}
+DB_URL=postgres://${SERVER_USER}@${SERVER_DB}:${SERVER_PORT:-5432}/app
+```
+
+```bash
+folio exec --secrets --vars server.vars server --use @app2/@prod -- ./deploy.sh
+
+# or: one file for the environment, and no store where it runs
+folio export --secrets server --use @app2/@prod -o app2-prod.folio
+folio exec --from app2-prod.folio --secrets --vars server.vars --all -- ./deploy.sh
+```
+
+Entries, `--all` and `--use` are laid in the order typed, and the last one wins (`server --use
+@app2/@prod`: prod's; `--use @app2/@prod server`: the shared one). With `--vars`, they only feed
+the file: the command gets `DB_USER`, `PGPASSWORD` and `DB_URL`, nothing else. See
+[Peel a namespace with --use](MANUAL.md#peel-a-namespace-with---use).
 
 # Install
 
