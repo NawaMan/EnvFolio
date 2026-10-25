@@ -399,23 +399,26 @@ Copies some items into one file, to bring them into another store with `folio im
 a server, in a booth, or on another machine. Your store's key never leaves this machine.
 
 ```
-folio export [-s|--secrets] [--to <key>|--file-passphrase-stdin|--file-passphrase-fd <n>] [--store-passphrase-fd <n>] [--vars <file>]... [-o|--output <file>|<folder>] [<name>...]
+folio export [-s|--secrets] [--to <key>|--file-passphrase-stdin|--file-passphrase-fd <n>] [--store-passphrase-fd <n>] [--use <@namespace>]... [--vars <file>]... [-o|--output <file>|<folder>] [<name>...]
 ```
 
 | Option | Meaning |
 | --- | --- |
-| `-s`, `--secrets` | Take the secrets in a folder too. A secret named on its own always goes; one a vars file names needs it. |
+| `-s`, `--secrets` | Take the secrets in a folder, or under a `--use`, too. A secret named on its own always goes; one a vars file names needs it. |
 | `--to <key>` | Lock the file to this public key — a key file (`.asc`) or a key in your keyring (fingerprint, key id or email) — instead of a passphrase. Only its secret key can open the file. A key file is never added to your keyring. |
-| `--file-passphrase-stdin` | Read the file's passphrase from the first line of stdin instead of gpg's prompt. Not with `--to`. Needs a `<name>` or `--vars`. An empty passphrase is refused. |
+| `--file-passphrase-stdin` | Read the file's passphrase from the first line of stdin instead of gpg's prompt. Not with `--to`. Needs a `<name>`, `--use` or `--vars`. An empty passphrase is refused. |
 | `--file-passphrase-fd <n>` | Read the file's passphrase from the first line of file descriptor `<n>`. Not with `--to`. stdin stays free, so the items can still be picked. An empty passphrase is refused. |
 | `--store-passphrase-fd <n>` | The store key's passphrase (to read the secrets), from the first line of file descriptor `<n>`, instead of gpg's prompt. See [Passphrases without a prompt](#passphrases-without-a-prompt). |
+| `--use <@namespace>` | Take every item under `<@namespace>` (e.g. `@app2`, or `@app2/@prod`), named without it. Can be given more than once. See [One environment, with --use](#one-environment-with---use). Experimental: it may change. |
 | `--vars <file>` | Take the items a [vars file](#from-a-vars-file) names. Can be given more than once. See [The items a vars file names](#the-items-a-vars-file-names). |
 | `-o`, `--output <file>\|<folder>` | Where to write the file. With no `-o`, EnvFolio asks. |
 | `-h`, `--help` | Show the options and stop. |
 
 A `<name>` is a text or a secret, or a folder: every text under it, and its secrets with
-`--secrets`. With `--vars`, the items a vars file names are taken too. With no `<name>` and no
-`--vars`, EnvFolio lists every item, numbered, and asks which ones (`1 3 5-7`, or `all`).
+`--secrets`. With `--use`, the items under a namespace are taken, named without it, as
+[`folio exec --use`](#peel-a-namespace-with---use) does. With `--vars`, the items a vars file names
+are taken too. With no `<name>`, `--use` or `--vars`, EnvFolio lists every item, numbered, and asks
+which ones (`1 3 5-7`, or `all`).
 
 With neither `--to` nor a passphrase option, EnvFolio asks how to lock the file: with a passphrase
 (gpg asks for it, after EnvFolio says so and waits for Enter), or with a public key — picked from the
@@ -476,6 +479,41 @@ environment where the command runs), and left out with a note when it is not:
 ```
 folio export: prod-deploy.vars:4: 'gh/token' is not a text or secret in the store; left out (it has a fallback or is one).
 ```
+
+A `${NAME}` is not an item either. When the file is fed by entries or `--use` at run time (see
+[Feeding a command](#feeding-a-command-contract-store-and-namespaces)), give them here too, and
+the file holds what feeds it:
+
+```bash
+folio export -s --vars server.vars server --use @app2/@prod -o app2-prod.folio
+folio exec -s --from app2-prod.folio --vars server.vars --all -- ./deploy.sh
+```
+
+### One environment, with --use
+
+> **Experimental:** `--use` may change in a later version.
+
+```
+server/port                       (T)  22
+@app2/@prod/server/{db, user}     (T)
+@app2/@prod/server/password       (S)
+@app2/@staging/server/{db, user}  (T)
+@app2/@staging/server/port        (T)  2222
+@app2/@staging/server/password    (S)
+```
+
+```bash
+folio export --secrets server --use @app2/@staging -o app2-staging.folio
+```
+
+Takes `server/port`, then every item under `@app2/@staging`, laid over it with `@app2/@staging/`
+taken off the front of the path: the file holds `server/{port, db, user, password}` — the port
+being staging's `2222`, as `--use` came last — and nothing of `@app2/@prod`. Typed the other way
+round, `--use @app2/@staging server`, the shared `server/port` would win.
+
+`--use @app2` alone takes both environments, as `@prod/…` and `@staging/…`: whoever opens that
+file has both, and picks one with `folio exec --from … --use @prod`. A file for each environment
+gives each only its own.
 
 One with no fallback that is not there stops the export, as it would stop `folio exec`. Any secret
 in the file needs `--secrets`, as in `folio exec`. `<name>`s can be given too; each item goes
@@ -1278,6 +1316,82 @@ folio secret cp web/github web/github-copy
 
 ---
 
+## Feeding a command: contract, store and namespaces
+
+> **Experimental:** `--use` may change in a later version.
+
+`folio exec` and `folio shell` hand items to a command as environment variables. Three pieces
+decide what it gets, and each can be written by someone else:
+
+| Piece | What it says | Who writes it |
+| --- | --- | --- |
+| A **vars file** (`--vars`) | The contract: which variables the command needs, by its own names, and where each comes from. | The command's side — committed with the app or the deploy script. |
+| The **store**, or a **`.folio` file** (`--from`) | The values. | You; or a supplier, who exports one file per environment with `folio export`. |
+| A **namespace** and **`--use`** | The last-mile choice: which variant, out of what was handed over. | Whoever runs the command, at run time. |
+
+### How a run is worked out
+
+1. **The source.** The store, or with `--from`, the opened `.folio` file — laid out like a store.
+2. **The layers.** The entries, `--all` and `--use`, **in the order typed**. With a `--use`, they
+   are laid over a private copy of the source (see [Peel a namespace with
+   --use](#peel-a-namespace-with---use)): `--use @app2/@prod` puts every item under it where it
+   would be without `@app2/@prod/`. Where two layers give the same item, **the last one wins**.
+3. **The variables.** Each layer's items, named by their path ([Variable
+   names](#folio-exec)); `VAR=<name>` picks a name, and wins.
+4. **The vars files**, when given — **after** every layer. Each line is made in order: `${NAME}`
+   sees the earlier lines, then the layers' variables, then your environment; `@{name}` reads the
+   source through any `--use`. **The command gets only what the vars files set**: the layers only
+   feed them.
+5. **Read, then run.** Every value is read and checked; the copy and any opened file are removed;
+   then the command runs. Nothing is kept on disk.
+
+Without `--vars`, the command gets the layers' variables (step 3). With it, the file decides
+(step 4), and the layers are what it is fed from.
+
+### One contract, two environments, two places
+
+The store:
+
+```
+server/port                       (T)  22
+@app2/@prod/server/{db, user}     (T)
+@app2/@prod/server/password       (S)
+@app2/@staging/server/{db, user}  (T)
+@app2/@staging/server/port        (T)  2222
+@app2/@staging/server/password    (S)
+```
+
+The contract, written once for the app:
+
+```bash
+# server.vars
+DB_USER=@{server/user}
+PGPASSWORD=${SERVER_PASSWORD}
+DB_URL=postgres://${SERVER_USER}@${SERVER_DB}:${SERVER_PORT:-5432}/app
+```
+
+Here, from the store, choosing the environment with `--use`:
+
+```bash
+folio exec --secrets --vars server.vars server --use @app2/@prod    -- ./deploy.sh
+folio exec --secrets --vars server.vars server --use @app2/@staging -- ./deploy.sh
+```
+
+`./deploy.sh` gets `DB_USER`, `PGPASSWORD` and `DB_URL` — `postgres://deploy@db.prod:22/app` for
+prod, with the shared port, and `…db.stg:2222…` for staging, whose own port wins as it comes later.
+
+There — a booth, a CI runner — from one file per environment, with no store:
+
+```bash
+folio export --secrets server --use @app2/@prod -o app2-prod.folio      # here
+folio exec --from app2-prod.folio --secrets --vars server.vars --all -- ./deploy.sh   # there
+```
+
+The file holds `server/{port, db, user, password}` and nothing of staging; `--all` feeds them all
+to the contract. The same `server.vars` works in both places.
+
+---
+
 ## `folio exec`
 
 Runs a command with entries from the EnvFolio store as environment variables, the way `op run` and
@@ -1286,19 +1400,20 @@ on a command line, into a file, or on the screen.
 
 ```
 folio exec [-s|--secrets] [-a|--all] [-n|--names|--debug|--confirm] [--plain]
-           [--vars <file>]... [--store-passphrase-fd <n>] [--from <file> [--file-passphrase-fd <n>]]
-           <entry>... -- <command> [<arg>...]
+           [--use <@namespace>]... [--vars <file>]... [--store-passphrase-fd <n>]
+           [--from <file> [--file-passphrase-fd <n>]] <entry>... -- <command> [<arg>...]
 ```
 
 | Option | Meaning |
 | --- | --- |
 | `-s`, `--secrets` | Also load secrets. Without it, a secret named directly is refused, and the secrets in a folder are left out, with a note on stderr saying how many. |
-| `-a`, `--all` | Load every entry outside the namespaces (top `@` folders) first, wherever it is typed; the entries given then layer over it. With it, `<entry>` is optional. |
-| `-n`, `--names` | Only show which variable would get which entry, in the order they are set, marked (S)ecret or (T)ext — on a screen, coloured as in `folio ls` — and stop. Nothing is read or decrypted (no passphrase, no signature check), and the command, if given, does not run. With `--from`, the file is still opened to see what is in it. |
+| `-a`, `--all` | Load every entry outside the namespaces (top `@` folders), where it is typed among the entries: `--all @nawa` lays `@nawa` over it, `@nawa --all` lays it over `@nawa`. With `--vars`, it only feeds the file. With it, `<entry>` is optional. See [What --all does](#what---all-does-with-and-without-a-vars-file). |
+| `-n`, `--names` | Only show which variable would get which entry, in the order they are set, marked (S)ecret or (T)ext — on a screen, coloured as in `folio ls` — and stop. With `--vars`, the entries that only feed the files follow, under `Only for the vars files`; with `--use`, a peeled one says where it came from. Nothing is read or decrypted (no passphrase, no signature check), and the command, if given, does not run. With `--from`, the file is still opened to see what is in it. |
 | `--debug` | Show the same as `--names`, on stderr, then run the command. The names are shown before any value is read. Not with `--names`. |
 | `--confirm` | Show the same as `--debug`, then ask `run <command>? [y/N]` and run it only on yes. Asked and answered on the terminal (`/dev/tty`), never stdin, which stays the command's; with no terminal it refuses. No value is read or decrypted, and the store key is not unlocked (`--store-passphrase-fd`), before the yes; a `--from` file is opened first, to show its names. |
 | `--plain` | With `--names`, `--debug` or `--confirm`: no colour, even on a screen. |
-| `--vars <file>` | Set the variables a vars file says: constants, values from your environment, entries, with fallbacks. Can be given more than once. With it, `<entry>` is optional. See [From a vars file](#from-a-vars-file). |
+| `--use <@namespace>` | Take every entry under `<@namespace>` as if it were not in the path: `@prod/server/user` is `server/user`. Only namespaces, from the front (`@app2/@prod`). Where it is typed among the entries; can be given more than once. With it, `<entry>` is optional. See [Peel a namespace with --use](#peel-a-namespace-with---use). Experimental: it may change. |
+| `--vars <file>` | Set the variables a vars file says: constants, values from your environment, entries, with fallbacks. Can be given more than once. With it, `<entry>` is optional, and the entries only feed it. See [From a vars file](#from-a-vars-file). |
 | `--from <file>` | Take the entries from a file made by `folio export`, not from the store. No store is needed, and none is made or touched. See [From an export file](#from-an-export-file). |
 | `--file-passphrase-fd <n>` | With `--from`: the file's passphrase, from the first line of file descriptor `<n>`, e.g. `--file-passphrase-fd 3 3< pass.txt`. stdin stays the command's. |
 | `--store-passphrase-fd <n>` | Without `--from`: the store key's passphrase (to read the secrets), from the first line of file descriptor `<n>`, instead of gpg's prompt. See [Passphrases without a prompt](#passphrases-without-a-prompt). |
@@ -1312,13 +1427,13 @@ An `<entry>` is one of:
 | `<folder>` | Every text under the folder, at any depth; with `--secrets`, every secret too. |
 | `VAR=<name>` | One entry, as the variable `VAR`, exactly as written. |
 
-At least one `<entry>` is needed, unless `--all` or `--vars` is given; the whole store is never loaded by
+At least one `<entry>` is needed, unless `--all`, `--use` or `--vars` is given; the whole store is never loaded by
 default. The `--` is
 needed, and everything after it is the command, which EnvFolio never parses. It needs a ready store
 (`folio init`), unless the entries come from a file with `--from`.
 
-**Variable names.** An entry's name comes from its full path in the store, whatever was
-selected:
+**Variable names.** An entry's name comes from its full path in the store — with `--use`, its
+path once the namespace is peeled off — whatever was selected:
 
 1. A namespace — a top folder whose name starts with `@` — is removed.
 2. `/` turns into `_`.
@@ -1338,8 +1453,9 @@ The variables are worked out in this order:
 1. **Explicit names first.** Each `VAR=<name>` takes its entry and claims it. `VAR` must be a
    valid name (`^[A-Za-z_][A-Za-z0-9_]*$`), or the command is refused. If two of them give the
    same `VAR`, the later one wins.
-2. **Then the rule.** The other selections are expanded in order, skipping claimed entries. A
-   later selection overrides an earlier one; this is how a namespace layers over shared entries.
+2. **Then the rule.** The other selections — entries, `--all` and `--use` — are expanded in the
+   order typed, skipping claimed entries. A later selection overrides an earlier one; this is how
+   a namespace layers over shared entries.
 3. **Explicit names last**, so they win over any derived variable of the same name, wherever
    they were typed.
 
@@ -1396,6 +1512,89 @@ folio exec --all --secrets @nawa -- ./deploy
 
 Loads every text and secret outside the namespaces, then `@nawa/` over them. Without
 `--secrets`, only the texts, with a note saying how many secrets were left out.
+
+### Peel a namespace with --use
+
+> **Experimental:** `--use` may change in a later version.
+
+```
+server/port                       (T)  22
+@app2/@prod/server/{db, user}     (T)
+@app2/@prod/server/password       (S)
+@app2/@staging/server/{db, user}  (T)
+@app2/@staging/server/port        (T)  2222
+@app2/@staging/server/password    (S)
+```
+
+```bash
+folio exec --secrets server --use @app2/@prod -- ./deploy.sh
+```
+
+`--use @app2/@prod` takes every entry under `@app2/@prod` as if `@app2/@prod/` were not in its
+path: `@app2/@prod/server/user` is `server/user`, so `SERVER_USER`. Only namespaces peel, and only
+from the front: `--use @app2/server` is refused, and so is `--use @app2 --use @prod` when there is
+no top `@prod` — each `--use` names the whole prefix. It is a change of path, not only of name:
+a vars file's `@{server/user}` reads `@app2/@prod/server/user` too.
+
+Entries, `--all` and `--use` are laid over each other in the order typed, and the last one wins
+where two give the same entry:
+
+| Typed | `SERVER_PORT` |
+| --- | --- |
+| `server --use @app2/@staging` | `2222`, staging's |
+| `--use @app2/@staging server` | `22`, the shared one |
+| `--all --use @app2/@staging` | `2222` |
+
+`--names` says where a peeled one came from:
+
+```
+SERVER_PORT <- server/port(T)
+SERVER_DB   <- server/db(T)  (--use: @app2/@prod/server/db)
+SERVER_USER <- server/user(T)  (--use: @app2/@prod/server/user)
+```
+
+Nothing is changed in the store. The entries are read from a view of it — a private temporary
+copy (`700`) of the store's files, its `.git` left out, with each layer laid over it — removed
+before the command starts. Only files are copied: a secret stays encrypted until it is read, as
+from the store.
+
+### What --all does, with and without a vars file
+
+`--all` takes every item outside the namespaces (the top `@` folders), **where it is typed** among
+the entries — so it is also an overlay control: before a `--use`, the peeled items win; after it,
+the shared ones do.
+
+**Without `--vars`**, it selects: the command gets every item outside the namespaces.
+
+```bash
+folio exec --all -- ./app                                # everything outside the namespaces
+folio exec --all --use @app2/@staging -- ./app           # SERVER_PORT=2222: staging's, laid last
+folio exec --use @app2/@staging --all -- ./app           # SERVER_PORT=22: the shared one, laid last
+```
+
+**With `--vars`**, the file selects, and `--all` gives nothing to the command itself. It still
+does two things:
+
+1. **Order.** It decides whether the shared items sit under or over the peeled ones, and so what
+   the file's `@{…}` reads.
+2. **Inputs for `${NAME}`.** Every item outside the namespaces is there for the file by its
+   variable name — `${GH_USER}` for `gh/user`. (`@{gh/user}` needs no `--all`: it reads the store.)
+
+```bash
+# app.vars
+OWNER=${GH_USER}
+PORT=@{server/port}
+```
+
+```bash
+folio exec --vars app.vars --all -- ./app                          # OWNER=other  PORT=22
+folio exec --vars app.vars --all --use @app2/@staging -- ./app     # PORT=2222
+folio exec --vars app.vars --use @app2/@staging --all -- ./app     # PORT=22
+```
+
+`./app` gets `OWNER` and `PORT` only — not `GH_USER` or the rest. Without `--all`, `OWNER` would be
+empty: nothing else feeds `${GH_USER}`. When a vars file uses no `${…}` from the store and there is
+no `--use` to order against, `--all` beside it changes nothing.
 
 ### Check the names first
 
@@ -1461,7 +1660,7 @@ In a value:
 
 | Write | For |
 | --- | --- |
-| `${NAME}` | The variable `NAME`: set by an earlier line (or `--all`), else from your environment. Empty when it is neither. |
+| `${NAME}` | The variable `NAME`: set by an earlier line, else by the entries, `--all` and `--use` typed, else from your environment. Empty when it is none of them. |
 | `@{name}` | The text or secret `name`. One that is not there stops everything. |
 | `${NAME:-<fallback>}`, `@{name:-<fallback>}` | The same, but the fallback when the variable is unset or empty, or the entry is not there. A fallback is a value too, so they chain, either way round: `${GH_TOKEN:-@{gh/token}}`, `@{gh/token:-${GH_TOKEN:-none}}`. A fallback is only made when needed: `${GH_TOKEN:-@{gh/token}}` reads nothing from the store when `GH_TOKEN` is set. |
 | `'…'` | Text as it is: `'${HOME}'` is `${HOME}`. |
@@ -1483,9 +1682,29 @@ So does a secret without `--secrets`, wherever it is in the file — also in a f
 needed today, so a forgotten `-s` never slips through as a fallback — and an `@{folder/*}` with a
 secret under it (typed on the command line, a folder's secrets are left out with a note instead).
 
-Lines are set in order, a later one overriding an earlier one; `--all` loads before the file, and
-the entries typed after it, so they override it. With several `--vars`, a later file overrides an
-earlier one. The value goes only to the command, as any entry's does.
+Lines are set in order, a later one overriding an earlier one. With several `--vars`, a later file
+overrides an earlier one. The value goes only to the command, as any entry's does.
+
+**The file is the contract.** It is made after the entries, `--all` and `--use` typed, and they
+only feed it: its `${NAME}` sees them, its `@{name}` reads through any `--use`, but the command
+gets only the variables the vars files set. So one file, written for what the command needs, can
+be fed a different environment each time (the whole picture: [Feeding a
+command](#feeding-a-command-contract-store-and-namespaces)):
+
+```bash
+# server.vars — what the app needs, by its own names
+DB_USER=@{server/user}
+PGPASSWORD=${SERVER_PASSWORD}
+DB_URL=postgres://${SERVER_USER}@${SERVER_DB}:${SERVER_PORT:-5432}/app
+```
+
+```bash
+folio exec --secrets --vars server.vars server --use @app2/@prod    -- ./deploy.sh
+folio exec --secrets --vars server.vars server --use @app2/@staging -- ./deploy.sh
+```
+
+`./deploy.sh` gets `DB_USER`, `PGPASSWORD` and `DB_URL` — not `SERVER_USER` and the rest.
+`--names` lists those under `Only for the vars files`.
 
 The file holds where the values are, not the values, so it can be committed with the project it is
 for. A constant is in it as written: put a secret in the store, and `@{…}` it — never a constant.
@@ -1519,9 +1738,14 @@ folio exec --from items.folio --secrets --all -- ./deploy
 ```
 
 Loads the entries from `items.folio`, a file made by `folio export`, on a machine with no EnvFolio
-store at all — a booth in the cloud, say. Entries, `--secrets`, `--all`, namespaces, `VAR=<name>`
-and variable names are as from a store; the file's items are laid out as they were in the store
-they were exported from.
+store at all — a booth in the cloud, say. Entries, `--secrets`, `--all`, `--use`, namespaces,
+`VAR=<name>` and variable names are as from a store; the file's items are laid out as they were in
+the store they were exported from (with any `export --use` taken off).
+
+```bash
+folio export --secrets server --use @app2 -o app2.folio                 # here
+folio exec --from app2.folio --secrets --vars server.vars --all --use @prod -- ./deploy.sh   # there
+```
 
 The file is opened as `folio import` opens it: gpg asks for its passphrase (or it comes from
 `--file-passphrase-fd`), or, when it is locked to your public key, uses your secret key from your
@@ -1554,24 +1778,25 @@ Starts your shell (`$SHELL`, or `/bin/sh`) with entries from the EnvFolio store 
 variables. It is `folio exec <entry>... -- "$SHELL"`, plus a line saying what was loaded.
 
 ```
-folio shell [-s|--secrets] [-a|--all] [-n|--names|--debug|--confirm] [--plain] [--vars <file>]... [--store-passphrase-fd <n>] [--from <file> [--file-passphrase-fd <n>]] <entry>...
+folio shell [-s|--secrets] [-a|--all] [-n|--names|--debug|--confirm] [--plain] [--use <@namespace>]... [--vars <file>]... [--store-passphrase-fd <n>] [--from <file> [--file-passphrase-fd <n>]] <entry>...
 ```
 
 | Option | Meaning |
 | --- | --- |
 | `-s`, `--secrets` | Also load secrets. |
-| `-a`, `--all` | Load every entry outside the namespaces first, as in `folio exec`. |
+| `-a`, `--all` | Load every entry outside the namespaces, where it is typed, as in `folio exec`. |
 | `-n`, `--names` | Only show which variable would get which entry, as in `folio exec`; no shell starts. |
 | `--debug` | Show the same on stderr, then start the shell. |
 | `--confirm` | Show the same on stderr, and start the shell only when you say yes, as in `folio exec`. |
 | `--plain` | With `--names`, `--debug` or `--confirm`: no colour, even on a screen. |
+| `--use <@namespace>` | Take every entry under `<@namespace>`, named without it, as in `folio exec`; can be given more than once. Experimental: it may change. |
 | `--vars <file>` | Set the variables a vars file says, as in `folio exec`; can be given more than once. |
 | `--from <file>` | Take the entries from a file made by `folio export`, as in `folio exec`. |
 | `--file-passphrase-fd <n>` | With `--from`: the file's passphrase, from file descriptor `<n>`, as in `folio exec`. |
 | `--store-passphrase-fd <n>` | Without `--from`: the store key's passphrase, as in `folio exec`. |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
-Entries, vars files, variable names, values and errors are as in `folio exec`. Before the shell starts, EnvFolio
+Entries, `--use`, vars files, variable names, values and errors are as in `folio exec`. Before the shell starts, EnvFolio
 prints the loaded variable names, never their values, to stderr. It sets `FOLIO_SHELL=1`, so your
 own prompt can show it; EnvFolio does not change the prompt. `exit` leaves the shell. It needs a
 ready store (`folio init`), unless the entries come from a file with `--from`.

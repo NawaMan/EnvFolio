@@ -158,6 +158,17 @@ bash-tab() {
     [ "$(words exec -s GH=web/g)" = "GH=web/github" ]
 }
 
+@test "completion: --use takes only namespaces, deeper ones too" {
+    make-names
+    mkdir -p "$FOLIO_STORE_DIR/@app2/@prod" "$FOLIO_STORE_DIR/@app2/server" "$FOLIO_STORE_DIR/@nawa"
+    touch "$FOLIO_STORE_DIR/@app2/@prod/user.txt" "$FOLIO_STORE_DIR/@app2/server/port.txt" \
+          "$FOLIO_STORE_DIR/@nawa/note.txt"
+    [ "$(words exec --use "")" = "@app2/,@nawa/" ]
+    [ "$(words exec --use @app2/)" = "@app2/@prod/" ]
+    [ "$(words export --use @n)" = "@nawa/" ]
+    [ "$(words shell --use=@a)" = "" ]
+}
+
 @test "completion: ls takes only folders" {
     make-names
     [ "$(words ls "")" = "web/" ]
