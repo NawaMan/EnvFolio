@@ -53,8 +53,6 @@ For Tab completion, add `eval "$(folio completion bash)"` to `~/.bashrc`, or
 - `pass`
 - `gpg` — 2.4 is fine; 2.5.21 or later can also make a post-quantum key (see `folio init` in
   the MANUAL, and [Updating gpg for post-quantum keys](#updating-gpg-for-post-quantum-keys)).
-  On 2.5.24, `restore`, `import` and `--from` warn that it may import a secret key it then
-  cannot decrypt with.
 - `git`
 - `tar`
 - `gzip`

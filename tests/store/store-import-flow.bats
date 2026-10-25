@@ -23,6 +23,8 @@ setup() {
     [[ $GNUPGHOME == "$SANDBOX"/* && $FOLIO_STORE_DIR == "$SANDBOX"/* && $HOME == "$SANDBOX"/* ]]
 
     FOLIO="$BATS_TEST_DIRNAME/../../folio"
+    PQC=0
+    if bash -c 'source "$1" && gpg-has-pqc' _ "$FOLIO"; then PQC=1; fi
     EXPORT="$SANDBOX/out/items.folio"
     make-export
     go-there
@@ -64,10 +66,16 @@ make-there-store() {
 }
 
 # import-answering [<answer>...] -- [<option>...]: run `folio import <option>...` with the
-# answers on stdin, one per line (stdin is empty when there are none).
+# answers on stdin, one per line (stdin is empty when there are none). @kind is the answer to
+# "Which kind of key?": 1 (post-quantum) when this gpg can make one and so asks, else none.
 import-answering() {
     local answers=()
-    while (( $# > 0 )) && [[ $1 != -- ]]; do answers+=("$1") ; shift ; done
+    while (( $# > 0 )) && [[ $1 != -- ]]; do
+        if [[ $1 != @kind ]]; then answers+=("$1")
+        elif (( PQC )); then       answers+=(1)
+        fi
+        shift
+    done
     (( $# > 0 )) && shift
     if (( ${#answers[@]} > 0 )); then
         run "$FOLIO" import "$@" < <(printf '%s\n' "${answers[@]}")
@@ -178,7 +186,7 @@ ALL=(aws/key.gpg web/github.gpg web/home.txt web/user.txt)
 
 @test "import flow 9: no store, a new key picked — asks name and email; gpg its passphrase" {
     use-pinentry pw
-    import-answering 2 "Jane Doe" jane@example.com "" -- --file-passphrase-fd 5 --all "$EXPORT" 5< <(printf 'pw\n')
+    import-answering 2 "Jane Doe" jane@example.com @kind "" -- --file-passphrase-fd 5 --all "$EXPORT" 5< <(printf 'pw\n')
     [[ $output == *"Your name"* && $output == *"Your email"* ]]
     [[ $output == *"a new one for Jane Doe <jane@example.com>"* ]]
     assert-imported "${ALL[@]}"

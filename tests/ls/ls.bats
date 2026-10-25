@@ -166,12 +166,12 @@ $g(T)web/home$off" ]
     make-store
     local y=$'\e[33m' g=$'\e[32m' off=$'\e[0m' esc=$'\e'
     TERM=xterm LC_ALL=C.UTF-8 run on-screen ls
-    [[ $output == *"── $g📄note$off"* && $output == *"── $y🔑github$off"* ]]
+    [[ $output == *"── ${g}📄note$off"* && $output == *"── ${y}🔑github$off"* ]]
     [[ $output != *"(S)"* && $output != *"(T)"* ]]
     TERM=xterm LC_ALL=C.UTF-8 run on-screen ls --flat web
-    [ "$output" = "$y🔑web/github$off
-$g📄web/github$off
-$g📄web/home$off" ]
+    [ "$output" = "${y}🔑web/github$off
+${g}📄web/github$off
+${g}📄web/home$off" ]
     TERM=xterm LC_ALL=C.UTF-8 NO_COLOR=1 run on-screen ls --flat web
     [ "$output" = $'🔑web/github\n📄web/github\n📄web/home' ]
 }
