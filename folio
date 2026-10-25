@@ -3870,7 +3870,8 @@ function unlock-store-key() {
 # --- Pass ---------------------------------------------------------------------
 
 # call-pass <help-function> <pass-command> [args...]
-# Show EnvFolio's help on -h/--help (before any --); otherwise hand everything to `pass <command>`.
+# Show EnvFolio's help on -h/--help (before any --); otherwise hand everything to `pass <command>`,
+# dropping what was typed before, as EnvFolio's own prompts do: pass may ask (rm, an overwrite).
 function call-pass() {
     local help=$1 command=$2 arg ; shift 2
     for arg in "$@"; do
@@ -3879,6 +3880,7 @@ function call-pass() {
             -h|--help) "$help" ; return 0 ;;
         esac
     done
+    drop-typeahead
     pass "$command" "$@"
 }
 
@@ -4060,7 +4062,23 @@ function tilde-path() {
 # --- Input --------------------------------------------------------------------
 
 # Every prompt goes through the functions below (plain bash). Prompts go to stderr; only the answer
-# goes to stdout, so `$(ask-...)` captures just the answer.
+# goes to stdout, so `$(ask-...)` captures just the answer. Each drops what was typed before it
+# showed (drop-typeahead), so only what is typed at the prompt answers it.
+
+# drop-typeahead: at a terminal, throw away what was typed before a prompt shows — an extra Enter,
+# the newline at the end of a paste — so that it cannot answer the prompt. stdin from a pipe or a
+# file is left alone: it holds the answers. For /dev/tty: drop-typeahead < /dev/tty. With -icanon
+# and min 0 time 0, a read returns at once with what is waiting, or with nothing: it never waits.
+function drop-typeahead() {
+    [[ -t 0 ]] || return 0
+    local saved dropped
+    saved=$(stty -g 2>/dev/null) || return 0
+    stty -icanon min 0 time 0 2>/dev/null || return 0
+    # shellcheck disable=SC2034  # dropped is read only to be thrown away
+    while IFS= read -r dropped; do :; done
+    stty "$saved" 2>/dev/null
+    unset dropped
+}
 
 # ask-text <header> [placeholder] [guess]: prints the answer; an empty answer keeps the guess.
 function ask-text() {
@@ -4069,6 +4087,7 @@ function ask-text() {
     local guess_value="${3:-}"
     local value hint
     hint=${guess_value:-$placeholder}
+    drop-typeahead
     printf '\n%s%s: ' "$header" "${hint:+ [$hint]}" >&2
     IFS= read -r value || die "Cancelled."
     [[ -n $value ]] || value=$guess_value
@@ -4084,6 +4103,7 @@ function ask-path() {
     local value hint prompt
     hint=${guess_value:-$placeholder}
     prompt="$header${hint:+ [$hint]}: "
+    drop-typeahead
     if [[ -t 0 ]]; then
         printf '\n' >&2
         IFS= read -e -r -p "$prompt" value || { echo >&2 ; die "Cancelled." ; }
@@ -4105,6 +4125,7 @@ function ask-path() {
 # ask-choice <header> <option>...: prints the chosen option; fails on cancel (Ctrl-D).
 function ask-choice() {
     local header=$1 choice ; shift
+    drop-typeahead
     printf '%s\n' "$header" >&2
     local PS3="Pick a number (Ctrl-D cancels): "
     select choice in "$@"; do
@@ -4117,6 +4138,7 @@ function ask-choice() {
 # confirm <question>: succeeds on yes. Anything else — and the default — is no.
 function confirm() {
     local answer
+    drop-typeahead
     printf '%s [y/N] ' "$1" >&2
     IFS= read -r answer || { echo >&2; return 1; }
     [[ $answer == [yY]* ]]
@@ -4127,6 +4149,7 @@ function confirm() {
 function confirm-on-tty() {
     local answer
     { : < /dev/tty ; } 2>/dev/null || die "--confirm needs a terminal to ask on."
+    drop-typeahead < /dev/tty
     printf '%s [y/N] ' "$1" > /dev/tty
     IFS= read -r answer < /dev/tty || { echo > /dev/tty ; return 1 ; }
     [[ $answer == [yY]* ]]
@@ -4136,6 +4159,7 @@ function confirm-on-tty() {
 # Read silently: a passphrase typed here by mistake is never shown, and is dropped.
 function acknowledge() {
     local answer
+    drop-typeahead
     printf '\n' >&2
     printf '%s\n' "$@" >&2
     printf 'Press Enter to continue (Ctrl-D cancels): ' >&2
