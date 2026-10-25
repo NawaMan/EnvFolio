@@ -70,7 +70,7 @@ fake-editor() {
     local before ; before=$(git -C "$FOLIO_STORE_DIR" rev-parse HEAD)
     EDITOR=true run "$FOLIO" text edit web/user
     [ "$status" -eq 1 ]
-    [[ $output == *"Text unchanged."* ]]
+    [[ $output == *"Text unchanged."* ]] || false
     [ "$(git -C "$FOLIO_STORE_DIR" rev-parse HEAD)" = "$before" ]
 }
 
@@ -78,7 +78,7 @@ fake-editor() {
     make-store
     EDITOR=true run "$FOLIO" text edit new/one
     [ "$status" -eq 1 ]
-    [[ $output == *"Text not saved."* ]]
+    [[ $output == *"Text not saved."* ]] || false
     [ ! -e "$FOLIO_STORE_DIR/new/one.txt" ]
 }
 
@@ -88,7 +88,7 @@ fake-editor() {
     printf 'mallory\n' > "$FOLIO_STORE_DIR/web/user.txt"
     run "$FOLIO" text edit web/user
     [ "$status" -eq 1 ]
-    [[ $output == *"does not verify with the store's key"* ]]
+    [[ $output == *"does not verify with the store's key"* ]] || false
     [ ! -e "$SANDBOX/editor-ran" ]
     [ "$(cat "$FOLIO_STORE_DIR/web/user.txt")" = "mallory" ]
 }
@@ -109,28 +109,28 @@ fake-editor() {
     for name in ../out a/../../out -c; do
         run "$FOLIO" text edit "$name"
         [ "$status" -eq 1 ]
-        [[ $output == *"is not a valid name"* ]]
+        [[ $output == *"is not a valid name"* ]] || false
     done
     [ ! -e "$SANDBOX/editor-ran" ]
     run "$FOLIO" text edit a b
     [ "$status" -eq 1 ]
-    [[ $output == *"Usage: folio text edit"* ]]
+    [[ $output == *"Usage: folio text edit"* ]] || false
 }
 
 @test "text edit: no store fails and creates nothing" {
     fake-editor "x"
     run "$FOLIO" text edit web/user
     [ "$status" -eq 1 ]
-    [[ $output == *"No ready EnvFolio store"*"folio init"* ]]
+    [[ $output == *"No ready EnvFolio store"*"folio init"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 
 @test "text edit --help: works without a store" {
     run "$FOLIO" text edit --help
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio text edit"* ]]
+    [[ $output == *"Usage: folio text edit"* ]] || false
     run "$FOLIO" help text edit
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio text edit"* ]]
+    [[ $output == *"Usage: folio text edit"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }

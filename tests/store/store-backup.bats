@@ -61,12 +61,12 @@ is-restored() {
     run "$FOLIO" backup
     [ "$status" -eq 0 ]
     local file ; file=$(backup-file)
-    [[ ${file##*/} =~ ^backup-[0-9]{8}-[0-9]{6}--folio\.tar\.gz$ ]]
+    [[ ${file##*/} =~ ^backup-[0-9]{8}-[0-9]{6}--folio\.tar\.gz$ ]] || false
     [ "$(stat -c %a "$file" 2>/dev/null || stat -f %Lp "$file")" = "600" ]
     local list ; list=$(tar -tzf "$file")
-    [[ $list == *folio-backup.txt* && $list == *key.asc* && $list == *store/.gpg-id* ]]
-    [[ $list == *store/web/home.txt.sig* && $list == *store/web/github.gpg* ]]
-    [[ $list != *store/.git/* ]]
+    [[ $list == *folio-backup.txt* && $list == *key.asc* && $list == *store/.gpg-id* ]] || false
+    [[ $list == *store/web/home.txt.sig* && $list == *store/web/github.gpg* ]] || false
+    [[ $list != *store/.git/* ]] || false
     [ ! -e "$file.partial" ]
 }
 
@@ -76,7 +76,7 @@ is-restored() {
     new-machine
     run "$FOLIO" restore "$(backup-file)" < /dev/null
     [ "$status" -eq 0 ]
-    [[ $output == *"Your EnvFolio store is restored."* && $output == *"History: new"* ]]
+    [[ $output == *"Your EnvFolio store is restored."* && $output == *"History: new"* ]] || false
     is-restored
     # A new history: one commit, of everything restored.
     [ "$(git -C "$FOLIO_STORE_DIR" log --format=%s)" = "Add current contents of password store." ]
@@ -89,11 +89,11 @@ is-restored() {
     make-store
     local head ; head=$(git -C "$FOLIO_STORE_DIR" rev-parse HEAD)
     "$FOLIO" backup --history "$SANDBOX/out" >/dev/null 2>&1
-    [[ $(tar -tzf "$(backup-file)") == *store/.git/* ]]
+    [[ $(tar -tzf "$(backup-file)") == *store/.git/* ]] || false
     new-machine
     run "$FOLIO" restore "$(backup-file)" < /dev/null
     [ "$status" -eq 0 ]
-    [[ $output == *"History: from the backup"* ]]
+    [[ $output == *"History: from the backup"* ]] || false
     is-restored
     [ "$(git -C "$FOLIO_STORE_DIR" rev-parse HEAD)" = "$head" ]
 }
@@ -103,7 +103,7 @@ is-restored() {
     run "$FOLIO" backup --encrypt --file-passphrase-stdin "$SANDBOX/out" < <(printf 'backup pass\n')
     [ "$status" -eq 0 ]
     local file ; file=$(backup-file)
-    [[ $file == *--folio.gpg ]]
+    [[ $file == *--folio.gpg ]] || false
     run tar -tzf "$file"
     [ "$status" -ne 0 ]
     new-machine
@@ -121,32 +121,32 @@ is-restored() {
     [ -f "$SANDBOX/out/mine--folio.tar.gz" ]
     run "$FOLIO" backup "$SANDBOX/out/mine--folio.tar.gz"
     [ "$status" -eq 1 ]
-    [[ $output == *"already exists"* ]]
+    [[ $output == *"already exists"* ]] || false
 }
 
 @test "backup: bad arguments fail and write nothing" {
     make-store
     run "$FOLIO" backup --file-passphrase-stdin "$SANDBOX/out"
     [ "$status" -eq 1 ]
-    [[ $output == *"needs --encrypt"* ]]
+    [[ $output == *"needs --encrypt"* ]] || false
     run "$FOLIO" backup --nope
     [ "$status" -eq 1 ]
-    [[ $output == *"unknown option: --nope"* ]]
+    [[ $output == *"unknown option: --nope"* ]] || false
     run "$FOLIO" backup "$SANDBOX/out/a" "$SANDBOX/out/b"
     [ "$status" -eq 1 ]
     run "$FOLIO" backup --encrypt --file-passphrase-stdin "$SANDBOX/out" < /dev/null
     [ "$status" -eq 1 ]
-    [[ $output == *"No passphrase"* ]]
+    [[ $output == *"No passphrase"* ]] || false
     run "$FOLIO" backup "$SANDBOX/nowhere/x"
     [ "$status" -eq 1 ]
-    [[ $output == *"no folder"* ]]
+    [[ $output == *"no folder"* ]] || false
     [ -z "$(ls -A "$SANDBOX/out")" ]
 }
 
 @test "backup: no store fails" {
     run "$FOLIO" backup "$SANDBOX/out"
     [ "$status" -eq 1 ]
-    [[ $output == *"No ready EnvFolio store"* ]]
+    [[ $output == *"No ready EnvFolio store"* ]] || false
 }
 
 @test "restore: refuses when the store folder exists, and changes nothing" {
@@ -154,7 +154,7 @@ is-restored() {
     "$FOLIO" backup "$SANDBOX/out" >/dev/null 2>&1
     run "$FOLIO" restore "$(backup-file)"
     [ "$status" -eq 1 ]
-    [[ $output == *"already exists"* ]]
+    [[ $output == *"already exists"* ]] || false
     [ "$("$FOLIO" text show web/home)" = "https://example.com" ]
 }
 
@@ -165,7 +165,7 @@ is-restored() {
     mkdir -p "$FOLIO_STORE_DIR" && chmod 755 "$FOLIO_STORE_DIR"
     run "$FOLIO" restore "$(backup-file)" < /dev/null
     [ "$status" -eq 1 ]
-    [[ $output == *"other users can get into"*"anyway? [y/N]"*"Nothing changed"* ]]
+    [[ $output == *"other users can get into"*"anyway? [y/N]"*"Nothing changed"* ]] || false
     [ -z "$(ls -A "$FOLIO_STORE_DIR")" ]
     [ -z "$(gpg --list-secret-keys 2>/dev/null)" ]
 }
@@ -178,10 +178,10 @@ is-restored() {
     ln -s "$SANDBOX/mnt" "$FOLIO_STORE_DIR"
     run "$FOLIO" restore --allow-unsafe-folder "$(backup-file)" < /dev/null
     [ "$status" -eq 0 ]
-    [[ $output == *"Your EnvFolio store is restored."* ]]
-    [[ $output == *"warning: other users can get into $FOLIO_STORE_DIR"* ]]
+    [[ $output == *"Your EnvFolio store is restored."* ]] || false
+    [[ $output == *"warning: other users can get into $FOLIO_STORE_DIR"* ]] || false
     [ -L "$FOLIO_STORE_DIR" ]
-    [ -s "$SANDBOX/mnt/.gpg-id" ] && [ -d "$SANDBOX/mnt/.git" ]
+    [ -s "$SANDBOX/mnt/.gpg-id" ] && [ -d "$SANDBOX/mnt/.git" ] || false
     [ "$(stat -c %a "$SANDBOX/mnt" 2>/dev/null || stat -f %Lp "$SANDBOX/mnt")" = "755" ]
     is-restored
 }
@@ -191,7 +191,7 @@ is-restored() {
     chmod 755 "$FOLIO_STORE_DIR"
     run "$FOLIO" text show web/home
     [ "$status" -eq 0 ]
-    [[ $output == *"warning: other users can get into $FOLIO_STORE_DIR"* && $output == *"https://example.com"* ]]
+    [[ $output == *"warning: other users can get into $FOLIO_STORE_DIR"* && $output == *"https://example.com"* ]] || false
     [ "$("$FOLIO" text show web/home 2>/dev/null)" = "https://example.com" ]
 }
 
@@ -201,7 +201,7 @@ is-restored() {
     new-machine
     run "$FOLIO" restore "$(backup-file)" < /dev/null
     [ "$status" -eq 0 ]
-    [[ $output != *warning* ]]
+    [[ $output != *warning* ]] || false
     [ "$(stat -c %a "$FOLIO_STORE_DIR" 2>/dev/null || stat -f %Lp "$FOLIO_STORE_DIR")" = "700" ]
 }
 
@@ -212,7 +212,7 @@ is-restored() {
     mkdir -p "$FOLIO_STORE_DIR" && : > "$FOLIO_STORE_DIR/.keep"
     run "$FOLIO" restore "$(backup-file)" < /dev/null
     [ "$status" -eq 1 ]
-    [[ $output == *"already exists"* ]]
+    [[ $output == *"already exists"* ]] || false
     [ "$(ls -A "$FOLIO_STORE_DIR")" = ".keep" ]
     [ -z "$(find "$SANDBOX" -maxdepth 1 -name '.folio-restore.*')" ]
 }
@@ -238,16 +238,16 @@ is-restored() {
     cp "$SANDBOX/out/junk--folio.tar.gz" "$SANDBOX/out/junk.tgz"
     run "$FOLIO" restore "$SANDBOX/out/junk.tgz"
     [ "$status" -eq 1 ]
-    [[ $output == *"not an EnvFolio backup"* ]]
+    [[ $output == *"not an EnvFolio backup"* ]] || false
     run "$FOLIO" restore "$SANDBOX/out/junk--folio.tar.gz"
     [ "$status" -eq 1 ]
-    [[ $output == *"no folio-backup.txt"* ]]
+    [[ $output == *"no folio-backup.txt"* ]] || false
     run "$FOLIO" restore "$SANDBOX/out/missing--folio.tar.gz"
     [ "$status" -eq 1 ]
-    [[ $output == *"no file"* ]]
+    [[ $output == *"no file"* ]] || false
     run "$FOLIO" restore
     [ "$status" -eq 1 ]
-    [[ $output == *"Usage: folio restore"* ]]
+    [[ $output == *"Usage: folio restore"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
     [ -z "$(find "$SANDBOX" -maxdepth 1 -name '.folio-restore.*')" ]
 }
@@ -255,8 +255,34 @@ is-restored() {
 @test "backup --help, restore --help: work without a store" {
     run "$FOLIO" backup --help
     [ "$status" -eq 0 ]
-    [[ $output == "Usage: folio backup"* ]]
+    [[ $output == "Usage: folio backup"* ]] || false
     run "$FOLIO" help restore
     [ "$status" -eq 0 ]
-    [[ $output == "Usage: folio restore"* ]]
+    [[ $output == "Usage: folio restore"* ]] || false
+}
+
+@test "restore: a damaged backup — no store, no key, or a key file without the secret key — refused" {
+    make-store
+    "$FOLIO" backup "$SANDBOX/out" >/dev/null 2>&1
+    local good="$SANDBOX/good" bad="$SANDBOX/bad" file
+    file=$(backup-file)
+    mkdir -p "$good" && tar -xzf "$file" -C "$good"
+    gpg --armor --export test@example.com > "$SANDBOX/public.asc"
+    rm -f "$file"
+    new-machine
+    # repack <name> <message>: the good one, as changed in $bad, refused with <message>.
+    repack() {
+        tar -czf "$SANDBOX/out/$1--folio.tar.gz" -C "$bad" .
+        run "$FOLIO" restore "$SANDBOX/out/$1--folio.tar.gz" < /dev/null
+        [ "$status" -eq 1 ]
+        [[ $output == *"$2"* ]] || false
+        [ ! -e "$FOLIO_STORE_DIR" ]
+        [ -z "$(find "$SANDBOX" -maxdepth 1 -name '.folio-restore.*')" ]
+    }
+    rm -rf "$bad" && cp -R "$good" "$bad" && rm -rf "$bad/store"
+    repack no-store "has no store in it."
+    rm -rf "$bad" && cp -R "$good" "$bad" && rm "$bad/key.asc"
+    repack no-key "has no key in it."
+    rm -rf "$bad" && cp -R "$good" "$bad" && cp "$SANDBOX/public.asc" "$bad/key.asc"
+    repack no-secret "The backup's key.asc has no secret key"
 }

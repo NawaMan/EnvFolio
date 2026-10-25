@@ -34,15 +34,15 @@ make-store() {
     make-store
     run "$FOLIO" secret grep jane
     [ "$status" -eq 0 ]
-    [[ $output == *"github"*"user: "*"jane"* ]]
-    [[ $output != *"work"* && $output != *"s3cr3t"* ]]
+    [[ $output == *"github"*"user: "*"jane"* ]] || false
+    [[ $output != *"work"* && $output != *"s3cr3t"* ]] || false
 }
 
 @test "secret grep: grep's options go to grep" {
     make-store
     run "$FOLIO" secret grep -i JANE
     [ "$status" -eq 0 ]
-    [[ $output == *"jane"* ]]
+    [[ $output == *"jane"* ]] || false
 }
 
 @test "secret grep: no match prints nothing" {
@@ -54,16 +54,16 @@ make-store() {
 @test "secret grep --help: works without a store" {
     run "$FOLIO" secret grep --help
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio secret grep"* ]]
+    [[ $output == *"Usage: folio secret grep"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
     run "$FOLIO" help secret grep
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio secret grep"* ]]
+    [[ $output == *"Usage: folio secret grep"* ]] || false
 }
 
 @test "secret grep: no store fails and creates nothing" {
     run "$FOLIO" secret grep web/github x < /dev/null
     [ "$status" -eq 1 ]
-    [[ $output == *"No ready EnvFolio store"*"folio init"* ]]
+    [[ $output == *"No ready EnvFolio store"*"folio init"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }

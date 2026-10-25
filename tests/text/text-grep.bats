@@ -48,9 +48,9 @@ jane" ]
     make-store
     run "$FOLIO" text grep -i jane
     [ "$status" -eq 0 ]
-    [[ $(plain) == *"web/user:"$'\n'"jane"* ]]
-    [[ $(plain) == *"note:"$'\n'"call Jane"* ]]
-    [[ $output != *"buy milk"* ]]
+    [[ $(plain) == *"web/user:"$'\n'"jane"* ]] || false
+    [[ $(plain) == *"note:"$'\n'"call Jane"* ]] || false
+    [[ $output != *"buy milk"* ]] || false
 }
 
 @test "text grep: texts without a match are left out" {
@@ -79,22 +79,22 @@ buy milk" ]
     make-store
     run "$FOLIO" text grep
     [ "$status" -eq 1 ]
-    [[ $output == *"Usage: folio text grep"* ]]
+    [[ $output == *"Usage: folio text grep"* ]] || false
 }
 
 @test "text grep: no store fails and creates nothing" {
     run "$FOLIO" text grep jane
     [ "$status" -eq 1 ]
-    [[ $output == *"No ready EnvFolio store"*"folio init"* ]]
+    [[ $output == *"No ready EnvFolio store"*"folio init"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 
 @test "text grep --help: works without a store" {
     run "$FOLIO" text grep --help
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio text grep"* ]]
+    [[ $output == *"Usage: folio text grep"* ]] || false
     run "$FOLIO" help text grep
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio text grep"* ]]
+    [[ $output == *"Usage: folio text grep"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }

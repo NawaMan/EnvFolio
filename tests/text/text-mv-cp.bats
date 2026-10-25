@@ -101,10 +101,10 @@ clean() { [ -z "$(git -C "$FOLIO_STORE_DIR" status --porcelain)" ] ; }
     for how in mv cp; do
         run "$FOLIO" text "$how" web/github x < /dev/null
         [ "$status" -eq 1 ]
-        [[ $output == *"'web/github' is not in the store"* ]]
+        [[ $output == *"'web/github' is not in the store"* ]] || false
         run "$FOLIO" text "$how" only x < /dev/null
         [ "$status" -eq 1 ]
-        [[ $output == *"'only' holds no texts"* ]]
+        [[ $output == *"'only' holds no texts"* ]] || false
     done
     [ "$(pass show web/github)" = "s3cr3t" ]
 }
@@ -115,13 +115,13 @@ clean() { [ -z "$(git -C "$FOLIO_STORE_DIR" status --porcelain)" ] ; }
     for how in mv cp; do
         run "$FOLIO" text "$how" web/user ../out < /dev/null
         [ "$status" -eq 1 ]
-        [[ $output == *"'../out' is not a valid name"* ]]
+        [[ $output == *"'../out' is not a valid name"* ]] || false
         run "$FOLIO" text "$how" ../web/user x < /dev/null
         [ "$status" -eq 1 ]
-        [[ $output == *"is not a valid name"* ]]
+        [[ $output == *"is not a valid name"* ]] || false
         run "$FOLIO" text "$how" web/user < /dev/null
         [ "$status" -eq 1 ]
-        [[ $output == *"Usage: folio text $how"* ]]
+        [[ $output == *"Usage: folio text $how"* ]] || false
     done
     [ ! -e "$SANDBOX/out.txt" ]
 }
@@ -131,10 +131,10 @@ clean() { [ -z "$(git -C "$FOLIO_STORE_DIR" status --porcelain)" ] ; }
     for how in mv cp; do
         run "$FOLIO" text "$how" a b < /dev/null
         [ "$status" -eq 1 ]
-        [[ $output == *"No ready EnvFolio store"* ]]
+        [[ $output == *"No ready EnvFolio store"* ]] || false
         run "$FOLIO" text "$how" --help
         [ "$status" -eq 0 ]
-        [[ $output == *"Usage: folio text $how"* ]]
+        [[ $output == *"Usage: folio text $how"* ]] || false
         run "$FOLIO" help text "$how"
         [ "$status" -eq 0 ]
     done

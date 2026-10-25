@@ -32,10 +32,10 @@ make-store() {
     make-store
     run "$FOLIO" secret insert web/github < <(printf 's3cr3t\ns3cr3t\n')
     [ "$status" -eq 0 ]
-    [[ $output != *"s3cr3t"* ]]
+    [[ $output != *"s3cr3t"* ]] || false
     [ -f "$FOLIO_STORE_DIR/web/github.gpg" ]
     [ "$(pass show web/github)" = "s3cr3t" ]
-    [[ $(git -C "$FOLIO_STORE_DIR" log -1 --format=%s) == *"web/github"* ]]
+    [[ $(git -C "$FOLIO_STORE_DIR" log -1 --format=%s) == *"web/github"* ]] || false
 }
 
 @test "MANUAL: secret insert — several lines" {
@@ -49,7 +49,7 @@ make-store() {
     make-store
     run "$FOLIO" secret insert one < <(printf 'first\nsecond\n')
     [ "$status" -ne 0 ]
-    [[ $output == *"do not match"* ]]
+    [[ $output == *"do not match"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR/one.gpg" ]
 }
 
@@ -67,7 +67,7 @@ make-store() {
     for arg in --echo -e -fe -em; do
         run "$FOLIO" secret insert "$arg" x < <(printf 'x\n')
         [ "$status" -eq 1 ]
-        [[ $output == *"--echo is not offered"* ]]
+        [[ $output == *"--echo is not offered"* ]] || false
     done
     [ ! -e "$FOLIO_STORE_DIR/x.gpg" ]
 }
@@ -82,7 +82,7 @@ make-store() {
 @test "secret insert: no store fails and creates nothing" {
     run "$FOLIO" secret insert web/github < <(printf 's3cr3t\ns3cr3t\n')
     [ "$status" -eq 1 ]
-    [[ $output == *"No ready EnvFolio store"*"folio init"* ]]
+    [[ $output == *"No ready EnvFolio store"*"folio init"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 
@@ -90,22 +90,22 @@ make-store() {
     mkdir -p "$FOLIO_STORE_DIR"
     run "$FOLIO" secret insert web/github < <(printf 's3cr3t\ns3cr3t\n')
     [ "$status" -eq 1 ]
-    [[ $output == *"No ready EnvFolio store"* ]]
+    [[ $output == *"No ready EnvFolio store"* ]] || false
 }
 
 @test "secret insert: bad arguments get pass's usage" {
     make-store
     run "$FOLIO" secret insert < /dev/null
     [ "$status" -ne 0 ]
-    [[ $output == *"Usage:"*"insert"* ]]
+    [[ $output == *"Usage:"*"insert"* ]] || false
     run "$FOLIO" secret insert a b < /dev/null
     [ "$status" -ne 0 ]
-    [[ $output == *"Usage:"*"insert"* ]]
+    [[ $output == *"Usage:"*"insert"* ]] || false
 }
 
 @test "secret insert --help: works without a store" {
     run "$FOLIO" secret insert --help < /dev/null
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio secret insert"* ]]
+    [[ $output == *"Usage: folio secret insert"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }

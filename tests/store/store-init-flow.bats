@@ -92,7 +92,8 @@ assert-new-key-store() {
     [ "$(key-uid-of "$fpr")" = "$name <$email>" ]
     assert-store "$fpr" "$name <$email>"
     unlocks "$fpr" "$passphrase"
-    ! unlocks "$fpr" "not-$passphrase"
+    run unlocks "$fpr" "not-$passphrase"
+    [ "$status" -ne 0 ]
 }
 
 # Nothing was made: no store folder, and the keyring has <count> secret keys.
@@ -107,24 +108,24 @@ assert-nothing-made() {
 @test "init flow 1: nothing given — asks name, email; gpg asks the passphrase (no picker)" {
     use-pinentry pw-one
     init-answering "Jane Doe" jane@example.com @kind "" --
-    [[ $output == *"Your name"* && $output == *"Your email"* && $output == *"Next, gpg asks you to choose the new key's passphrase"* ]]
-    [[ $output != *"Which GPG key"* ]]
+    [[ $output == *"Your name"* && $output == *"Your email"* && $output == *"Next, gpg asks you to choose the new key's passphrase"* ]] || false
+    [[ $output != *"Which GPG key"* ]] || false
     assert-new-key-store "Jane Doe" jane@example.com pw-one
 }
 
 @test "init flow 2: --name — asks email; gpg asks the passphrase" {
     use-pinentry pw-two
     init-answering jane@example.com @kind "" -- --name "Jane Doe"
-    [[ $output != *"Your name"* ]]
-    [[ $output == *"Your email"* && $output == *"Next, gpg asks you to choose the new key's passphrase"* ]]
+    [[ $output != *"Your name"* ]] || false
+    [[ $output == *"Your email"* && $output == *"Next, gpg asks you to choose the new key's passphrase"* ]] || false
     assert-new-key-store "Jane Doe" jane@example.com pw-two
 }
 
 @test "init flow 3: --name --email — only gpg asks, for the passphrase" {
     use-pinentry pw-three
     init-answering @kind "" -- --name "Jane Doe" --email jane@example.com
-    [[ $output != *"Your name"* && $output != *"Your email"* ]]
-    [[ $output == *"Next, gpg asks you to choose the new key's passphrase"* ]]
+    [[ $output != *"Your name"* && $output != *"Your email"* ]] || false
+    [[ $output == *"Next, gpg asks you to choose the new key's passphrase"* ]] || false
     assert-new-key-store "Jane Doe" jane@example.com pw-three
 }
 
@@ -132,13 +133,13 @@ assert-nothing-made() {
     # bats keeps fd 3 for itself: fd 5 carries the passphrase.
     run "$FOLIO" init --name "Jane Doe" --email jane@example.com --store-passphrase-fd 5 \
         < /dev/null 5< <(printf '%s\n' pw-four)
-    [[ $output != *"Your name"* && $output != *"Your email"* && $output != *"Next, gpg asks you to choose the new key's passphrase"* ]]
+    [[ $output != *"Your name"* && $output != *"Your email"* && $output != *"Next, gpg asks you to choose the new key's passphrase"* ]] || false
     assert-new-key-store "Jane Doe" jane@example.com pw-four
 }
 
 @test "init flow 5: --name --email --store-passphrase-stdin — asks nothing" {
     init-answering pw-five -- --name "Jane Doe" --email jane@example.com --store-passphrase-stdin
-    [[ $output != *"Your name"* && $output != *"Your email"* && $output != *"Next, gpg asks you to choose the new key's passphrase"* ]]
+    [[ $output != *"Your name"* && $output != *"Your email"* && $output != *"Next, gpg asks you to choose the new key's passphrase"* ]] || false
     assert-new-key-store "Jane Doe" jane@example.com pw-five
 }
 
@@ -147,8 +148,8 @@ assert-nothing-made() {
 @test "init flow 6: an existing key, nothing given — the picker, pick that key" {
     add-existing-key
     init-answering 1 --
-    [[ $output == *"Which GPG key"* ]]
-    [[ $output != *"Your name"* && $output != *"Next, gpg asks you to choose the new key's passphrase"* ]]
+    [[ $output == *"Which GPG key"* ]] || false
+    [[ $output != *"Your name"* && $output != *"Next, gpg asks you to choose the new key's passphrase"* ]] || false
     assert-store "$OLD_FPR" "Old Key <old@example.com>"
     [ "$(secret-key-count)" -eq 1 ]
 }
@@ -157,7 +158,7 @@ assert-nothing-made() {
     add-existing-key
     use-pinentry pw-seven
     init-answering 2 "Jane Doe" jane@example.com @kind "" --
-    [[ $output == *"Which GPG key"* && $output == *"Your name"* && $output == *"Your email"* ]]
+    [[ $output == *"Which GPG key"* && $output == *"Your name"* && $output == *"Your email"* ]] || false
     assert-new-key-store "Jane Doe" jane@example.com pw-seven
     [ "$(store-fpr)" != "$OLD_FPR" ]
     [ "$(secret-key-count)" -eq 2 ]
@@ -166,7 +167,7 @@ assert-nothing-made() {
 @test "init flow 8: an existing key, --key — asks nothing" {
     add-existing-key
     init-answering -- --key old@example.com
-    [[ $output != *"Which GPG key"* && $output != *"Your name"* ]]
+    [[ $output != *"Which GPG key"* && $output != *"Your name"* ]] || false
     assert-store "$OLD_FPR" "Old Key <old@example.com>"
     [ "$(secret-key-count)" -eq 1 ]
 }
@@ -176,31 +177,31 @@ assert-nothing-made() {
 @test "init flow: gpg's passphrase prompt cancelled — nothing made" {
     use-pinentry --cancel
     init-answering @kind "" -- --name "Jane Doe" --email jane@example.com
-    [[ $output == *"Creating the key failed"* || $output == *"no key was created"* ]]
+    [[ $output == *"Creating the key failed"* || $output == *"no key was created"* ]] || false
     assert-nothing-made 0
 }
 
 @test "init flow: an empty passphrase on stdin — nothing made" {
     init-answering "" -- --name "Jane Doe" --email jane@example.com --store-passphrase-stdin
-    [[ $output == *"No passphrase on stdin"* ]]
+    [[ $output == *"No passphrase on stdin"* ]] || false
     assert-nothing-made 0
 }
 
 @test "init flow: input ends at the name — nothing made" {
     init-answering --
-    [[ $output == *"Cancelled"* ]]
+    [[ $output == *"Cancelled"* ]] || false
     assert-nothing-made 0
 }
 
 @test "init flow: --store-passphrase-fd on a closed fd — nothing made" {
     init-answering -- --name "Jane Doe" --email jane@example.com --store-passphrase-fd 7
-    [[ $output == *"no such file descriptor"* ]]
+    [[ $output == *"no such file descriptor"* ]] || false
     assert-nothing-made 0
 }
 
 @test "init flow: input ends before gpg asks the new key's passphrase — nothing made" {
     use-pinentry pw
-    init-answering -- --name "Jane Doe" --email jane@example.com
-    [[ $output == *"Next, gpg asks you to choose the new key's passphrase"* && $output == *"Cancelled"* ]]
+    init-answering @kind -- --name "Jane Doe" --email jane@example.com
+    [[ $output == *"Next, gpg asks you to choose the new key's passphrase"* && $output == *"Cancelled"* ]] || false
     assert-nothing-made 0
 }

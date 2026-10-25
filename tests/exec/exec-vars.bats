@@ -145,7 +145,7 @@ ATL_HOST  <- atl/host(T)
 ATL_NAME  <- atl/name(T)' ]
 }
 
-@test "exec --names: on a screen, 🔑/📄in front and coloured; --plain as before" {
+@test "exec --names: on a screen, coloured; --plain as before" {
     make-store
     vars 'TOKEN=@{gh/token}' 'URL=//@{prod/db/user}' '@{atl/name}'
     local y=$'\e[33m' g=$'\e[32m' off=$'\e[0m'
@@ -153,9 +153,9 @@ ATL_NAME  <- atl/name(T)' ]
     on-screen() { bash -c 'source "$1"; shift; function on-screen() { return 0; }; Main "$@"' _ "$FOLIO" "$@" ; }
     TERM=xterm LC_ALL=C.UTF-8 run on-screen exec -s --names --vars "$SANDBOX/a.vars"
     [ "$status" -eq 0 ]
-    [ "$output" = "TOKEN    <- [${y}🔑gh/token$off]
-URL      <- //[${g}📄prod/db/user$off]
-ATL_NAME <- ${g}📄atl/name$off" ]
+    [ "$output" = "TOKEN    <- [${y}gh/token(S)$off]
+URL      <- //[${g}prod/db/user(T)$off]
+ATL_NAME <- ${g}atl/name(T)$off" ]
     TERM=xterm LC_ALL=C.UTF-8 run on-screen exec -s --names --plain --vars "$SANDBOX/a.vars"
     [ "$output" = 'TOKEN    <- [gh/token(S)]
 URL      <- //[prod/db/user(T)]
@@ -169,7 +169,7 @@ ATL_NAME <- atl/name(T)' ]
     vars 'A=${SECRET_ENV}' 'B=@{gh/token}' 'C=@{prod/db/user}'
     SECRET_ENV=hunter2 run "$FOLIO" exec -s --names --vars "$SANDBOX/a.vars"
     [ "$status" -eq 0 ]
-    [[ $output != *hunter2* && $output != *shared-token* && $output != *dbuser* ]]
+    [[ $output != *hunter2* && $output != *shared-token* && $output != *dbuser* ]] || false
 }
 
 @test "exec --debug --vars: shows how each value is made, never a value; then runs" {
@@ -191,7 +191,7 @@ C <- x-[prod/db/user(T)]' ]
     on-screen() { bash -c 'source "$1"; shift; function on-screen() { (( SCREEN_FD == 2 )); }; Main "$@"' _ "$FOLIO" "$@" ; }
     TERM=xterm LC_ALL=C.UTF-8 run --separate-stderr on-screen exec --debug atl/name -- true
     [ "$status" -eq 0 ]
-    [ "$stderr" = "ATL_NAME <- ${g}📄atl/name$off" ]
+    [ "$stderr" = "ATL_NAME <- ${g}atl/name(T)$off" ]
     TERM=xterm LC_ALL=C.UTF-8 run --separate-stderr on-screen exec --debug --plain atl/name -- true
     [ "$stderr" = "ATL_NAME <- atl/name(T)" ]
 }
@@ -201,16 +201,16 @@ C <- x-[prod/db/user(T)]' ]
     vars 'A=${HOME:-@{gh/token}}'
     run "$FOLIO" exec --vars "$SANDBOX/a.vars" -- touch "$SANDBOX/ran"
     [ "$status" -eq 1 ]
-    [[ $output == *"a.vars:1: 'gh/token' is a secret; add --secrets to load it."* ]]
+    [[ $output == *"a.vars:1: 'gh/token' is a secret; add --secrets to load it."* ]] || false
     vars '@{gh/token}'
     run "$FOLIO" exec --vars "$SANDBOX/a.vars" -- touch "$SANDBOX/ran"
-    [[ $output == *"a.vars:1: 'gh/token' is a secret; add --secrets to load it."* ]]
+    [[ $output == *"a.vars:1: 'gh/token' is a secret; add --secrets to load it."* ]] || false
     vars '@{prod/*}'
     run "$FOLIO" exec --vars "$SANDBOX/a.vars" -- touch "$SANDBOX/ran"
-    [[ $output == *"a.vars:1: 'prod' has 1 secret(s); add --secrets to load them."* ]]
+    [[ $output == *"a.vars:1: 'prod' has 1 secret(s); add --secrets to load them."* ]] || false
     vars 'X=@{both/x}'
     run "$FOLIO" exec -s --vars "$SANDBOX/a.vars" -- touch "$SANDBOX/ran"
-    [[ $output == *"a.vars:1: 'both/x' is both a text and a secret; rename one."* ]]
+    [[ $output == *"a.vars:1: 'both/x' is both a text and a secret; rename one."* ]] || false
     [ ! -e "$SANDBOX/ran" ]
 }
 
@@ -219,13 +219,13 @@ C <- x-[prod/db/user(T)]' ]
     vars 'OK=1' 'X=@{no/such}'
     run "$FOLIO" exec --vars "$SANDBOX/a.vars" -- touch "$SANDBOX/ran"
     [ "$status" -eq 1 ]
-    [[ $output == *"a.vars:2: 'no/such' is not a text or secret in the store, and there is no fallback."* ]]
+    [[ $output == *"a.vars:2: 'no/such' is not a text or secret in the store, and there is no fallback."* ]] || false
     vars '@{no/such}'
     run "$FOLIO" exec --vars "$SANDBOX/a.vars" -- touch "$SANDBOX/ran"
-    [[ $output == *"a.vars:1: 'no/such' is not a text or secret in the store."* ]]
+    [[ $output == *"a.vars:1: 'no/such' is not a text or secret in the store."* ]] || false
     vars '@{no/*}'
     run "$FOLIO" exec --vars "$SANDBOX/a.vars" -- touch "$SANDBOX/ran"
-    [[ $output == *"a.vars:1: 'no' is not a folder in the store."* ]]
+    [[ $output == *"a.vars:1: 'no' is not a folder in the store."* ]] || false
     [ ! -e "$SANDBOX/ran" ]
 }
 
@@ -243,8 +243,8 @@ C <- x-[prod/db/user(T)]' ]
     vars 'A=@{gh/token}' 'B=${UNSET_FOR_TEST:-@{no/such}}'
     PATH="$SANDBOX/bin:$PATH" run "$FOLIO" exec -s --vars "$SANDBOX/a.vars" -- touch "$SANDBOX/ran"
     [ "$status" -eq 1 ]
-    [[ $output == *"a.vars:2: 'no/such' is not a text or secret in the store, and there is no fallback."* ]]
-    [ ! -e "$SANDBOX/pass.log" ] && [ ! -e "$SANDBOX/ran" ]
+    [[ $output == *"a.vars:2: 'no/such' is not a text or secret in the store, and there is no fallback."* ]] || false
+    [ ! -e "$SANDBOX/pass.log" ] && [ ! -e "$SANDBOX/ran" ] || false
 }
 
 @test "exec --vars: a mistake in the file stops it before anything is read; nothing runs" {
@@ -252,13 +252,13 @@ C <- x-[prod/db/user(T)]' ]
     vars 'A=1' 'B=$(touch '"$SANDBOX"'/pwned)'
     run "$FOLIO" exec --vars "$SANDBOX/a.vars" -- touch "$SANDBOX/ran"
     [ "$status" -eq 1 ]
-    [[ $output == *"a.vars:2: a \$ starts \${NAME} or \${NAME:-<fallback>}; write \\\$ for a \$ itself."* ]]
+    [[ $output == *"a.vars:2: a \$ starts \${NAME} or \${NAME:-<fallback>}; write \\\$ for a \$ itself."* ]] || false
     vars 'A=`touch '"$SANDBOX"'/pwned`'
     run "$FOLIO" exec --vars "$SANDBOX/a.vars" -- touch "$SANDBOX/ran"
-    [[ $output == *"a.vars:1: a \` is refused: nothing in a vars file runs."* ]]
+    [[ $output == *"a.vars:1: a \` is refused: nothing in a vars file runs."* ]] || false
     run "$FOLIO" exec --vars "$SANDBOX/nope.vars" -- touch "$SANDBOX/ran"
-    [[ $output == *"cannot read the vars file"* ]]
-    [ ! -e "$SANDBOX/ran" ] && [ ! -e "$SANDBOX/pwned" ]
+    [[ $output == *"cannot read the vars file"* ]] || false
+    [ ! -e "$SANDBOX/ran" ] && [ ! -e "$SANDBOX/pwned" ] || false
 }
 
 @test "exec --vars: Windows line ends and a last line without one" {
@@ -275,7 +275,7 @@ B=[Jane]" ]
     vars '# nothing yet'
     run "$FOLIO" exec --vars "$SANDBOX/a.vars" -- true
     [ "$status" -eq 1 ]
-    [[ $output == *"Usage: folio exec"* ]]
+    [[ $output == *"Usage: folio exec"* ]] || false
 }
 
 @test "MANUAL: shell — from a vars file" {

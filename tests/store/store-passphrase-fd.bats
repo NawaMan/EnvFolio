@@ -69,7 +69,7 @@ forget() { gpgconf --kill gpg-agent ; }
     forget
     run "$FOLIO" secret grep --store-passphrase-fd 3 -e s3cr3t -e AKIA 3< <(printf 'pw\n')
     [ "$status" -eq 0 ]
-    [[ $output == *s3cr3t* && $output == *AKIA* ]]
+    [[ $output == *s3cr3t* && $output == *AKIA* ]] || false
 }
 
 @test "store passphrase: secret edit" {
@@ -88,7 +88,7 @@ forget() { gpgconf --kill gpg-agent ; }
     [ "$status" -eq 0 ]
     forget
     run --separate-stderr "$FOLIO" secret show --store-passphrase-fd 3 web/github 3< <(printf 'pw\n')
-    [ "${#lines[0]}" -eq 12 ] && [ "${lines[1]}" = "user: jane" ]
+    [ "${#lines[0]}" -eq 12 ] && [ "${lines[1]}" = "user: jane" ] || false
 }
 
 @test "store passphrase: text insert, edit and generate sign with it" {
@@ -127,7 +127,28 @@ forget() { gpgconf --kill gpg-agent ; }
     SHELL=/bin/sh run "$FOLIO" shell --secrets --store-passphrase-fd 5 web/github 5< <(printf 'pw\n') \
         < <(echo 'echo "got $WEB_GITHUB"')
     [ "$status" -eq 0 ]
-    [[ $output == *"got s3cr3t"* ]]
+    [[ $output == *"got s3cr3t"* ]] || false
+}
+
+@test "store passphrase: exec --confirm unlocks the key only after the yes; --names never" {
+    forget
+    command -v setsid >/dev/null || skip "no setsid here (macOS)"
+    # A wrong passphrase: had the key been unlocked first, that would be the error. setsid: no
+    # terminal to ask on, so the answer is no.
+    run --separate-stderr setsid "$FOLIO" exec --confirm --secrets --store-passphrase-fd 5 web -- \
+        touch "$SANDBOX/ran" 5< <(printf 'wrong\n')
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"--confirm needs a terminal to ask on."* && $stderr != *"does not unlock"* ]] || false
+    [ ! -e "$SANDBOX/ran" ]
+    run --separate-stderr "$FOLIO" exec --names --secrets --store-passphrase-fd 5 web -- true 5< <(printf 'wrong\n')
+    [ "$status" -eq 0 ]
+    [ "$output" = $'WEB_GITHUB <- web/github(S)\nWEB_HOME   <- web/home(T)' ]
+    # Going on, it is still checked before anything runs.
+    run --separate-stderr "$FOLIO" exec --debug --secrets --store-passphrase-fd 5 web -- \
+        touch "$SANDBOX/ran" 5< <(printf 'wrong\n')
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"does not unlock the store's key"* ]] || false
+    [ ! -e "$SANDBOX/ran" ]
 }
 
 @test "store passphrase: exec --from does not take it" {
@@ -136,24 +157,24 @@ forget() { gpgconf --kill gpg-agent ; }
     run "$FOLIO" exec --from "$SANDBOX/out/items.folio" --store-passphrase-fd 5 web/home -- true \
         5< <(printf 'pw\n')
     [ "$status" -eq 1 ]
-    [[ $output == *"--store-passphrase-fd is for the store; --from does not use it."* ]]
+    [[ $output == *"--store-passphrase-fd is for the store; --from does not use it."* ]] || false
 }
 
 @test "store passphrase: a wrong one stops before anything changes" {
     forget
     run "$FOLIO" text insert --store-passphrase-fd 3 -t "jane" web/user 3< <(printf 'wrong\n')
     [ "$status" -eq 1 ]
-    [[ $output == *"The passphrase on file descriptor 3 does not unlock the store's key"* ]]
+    [[ $output == *"The passphrase on file descriptor 3 does not unlock the store's key"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR/web/user.txt" ]
 }
 
 @test "store passphrase: an empty one, a closed fd, or not a number — refused" {
     run "$FOLIO" secret show --store-passphrase-fd 3 web/github 3< /dev/null
-    [ "$status" -eq 1 ] && [[ $output == *"No passphrase on file descriptor 3."* ]]
+    [ "$status" -eq 1 ] && [[ $output == *"No passphrase on file descriptor 3."* ]] || false
     run "$FOLIO" secret show --store-passphrase-fd 7 web/github
-    [ "$status" -eq 1 ] && [[ $output == *"--store-passphrase-fd 7: no such file descriptor is open."* ]]
+    [ "$status" -eq 1 ] && [[ $output == *"--store-passphrase-fd 7: no such file descriptor is open."* ]] || false
     run "$FOLIO" secret show --store-passphrase-fd x web/github
-    [ "$status" -eq 1 ] && [[ $output == *"--store-passphrase-fd needs a file descriptor number, not 'x'."* ]]
+    [ "$status" -eq 1 ] && [[ $output == *"--store-passphrase-fd needs a file descriptor number, not 'x'."* ]] || false
 }
 
 @test "store passphrase: a command that never needs it does not take it" {
@@ -192,7 +213,7 @@ forget() { gpgconf --kill gpg-agent ; }
     run "$FOLIO" import --all --file-passphrase-fd 3 --store-passphrase-fd 4 "$SANDBOX/out/items.folio" \
         3< <(printf 'file-pw\n') 4< <(printf 'new-pw\n') < <(printf '2\nJane Doe\njane@example.com\n')
     [ "$status" -eq 0 ]
-    [[ $output == *"its passphrase from --store-passphrase-fd"* ]]
+    [[ $output == *"its passphrase from --store-passphrase-fd"* ]] || false
     [ "$("$FOLIO" text show web/home)" = "https://example.com" ]
     forget
     "$FOLIO" text insert --store-passphrase-fd 3 -t x web/x 3< <(printf 'new-pw\n') >/dev/null
@@ -216,37 +237,37 @@ forget() { gpgconf --kill gpg-agent ; }
     forget
     run "$FOLIO" backup "$SANDBOX/out" < /dev/null
     [ "$status" -eq 1 ]
-    [[ $output == *"Exporting the key failed."* ]]
+    [[ $output == *"Exporting the key failed."* ]] || false
 }
 
 @test "backup --file-passphrase-fd needs --encrypt; restore's only for an encrypted backup" {
     run "$FOLIO" backup --file-passphrase-fd 3 "$SANDBOX/out" 3< <(printf 'x\n')
-    [ "$status" -eq 1 ] && [[ $output == *"--file-passphrase-fd needs --encrypt."* ]]
+    [ "$status" -eq 1 ] && [[ $output == *"--file-passphrase-fd needs --encrypt."* ]] || false
     "$FOLIO" backup --store-passphrase-fd 3 "$SANDBOX/out" 3< <(printf 'pw\n') >/dev/null 2>&1
     local file=("$SANDBOX"/out/*--folio.tar.gz)
     rm -rf "$FOLIO_STORE_DIR"
     run "$FOLIO" restore --file-passphrase-fd 3 "${file[0]}" 3< <(printf 'x\n')
-    [ "$status" -eq 1 ] && [[ $output == *"are only for an encrypted backup"* ]]
+    [ "$status" -eq 1 ] && [[ $output == *"are only for an encrypted backup"* ]] || false
 }
 
 # --- The old names stop and say the new ones -------------------------------------
 
 @test "old names: --passphrase-stdin / --passphrase-fd say what to use instead" {
     run "$FOLIO" init --passphrase-stdin
-    [ "$status" -eq 1 ] && [[ $output == *"init: --passphrase-stdin is now --store-passphrase-stdin."* ]]
+    [ "$status" -eq 1 ] && [[ $output == *"init: --passphrase-stdin is now --store-passphrase-stdin."* ]] || false
     run "$FOLIO" init --passphrase-fd=3
-    [ "$status" -eq 1 ] && [[ $output == *"init: --passphrase-fd is now --store-passphrase-fd."* ]]
+    [ "$status" -eq 1 ] && [[ $output == *"init: --passphrase-fd is now --store-passphrase-fd."* ]] || false
     run "$FOLIO" export --passphrase-fd 3 web
-    [ "$status" -eq 1 ] && [[ $output == *"export: --passphrase-fd is now --file-passphrase-fd."* ]]
+    [ "$status" -eq 1 ] && [[ $output == *"export: --passphrase-fd is now --file-passphrase-fd."* ]] || false
     run "$FOLIO" import --passphrase-stdin x.folio
-    [ "$status" -eq 1 ] && [[ $output == *"import: --passphrase-stdin is now --file-passphrase-stdin."* ]]
+    [ "$status" -eq 1 ] && [[ $output == *"import: --passphrase-stdin is now --file-passphrase-stdin."* ]] || false
     run "$FOLIO" backup --encrypt --passphrase-stdin
-    [ "$status" -eq 1 ] && [[ $output == *"backup: --passphrase-stdin is now --file-passphrase-stdin."* ]]
+    [ "$status" -eq 1 ] && [[ $output == *"backup: --passphrase-stdin is now --file-passphrase-stdin."* ]] || false
     run "$FOLIO" restore --passphrase-stdin x--folio.gpg
-    [ "$status" -eq 1 ] && [[ $output == *"restore: --passphrase-stdin is now --file-passphrase-stdin."* ]]
+    [ "$status" -eq 1 ] && [[ $output == *"restore: --passphrase-stdin is now --file-passphrase-stdin."* ]] || false
     run "$FOLIO" exec --from x.folio --passphrase-fd 3 a -- true
-    [ "$status" -eq 1 ] && [[ $output == *"exec: --passphrase-fd is now --file-passphrase-fd."* ]]
+    [ "$status" -eq 1 ] && [[ $output == *"exec: --passphrase-fd is now --file-passphrase-fd."* ]] || false
     # After --, it is the command's own.
     run "$FOLIO" exec web/home -- echo --passphrase-fd
-    [ "$status" -eq 0 ] && [ "$output" = "--passphrase-fd" ]
+    [ "$status" -eq 0 ] && [ "$output" = "--passphrase-fd" ] || false
 }

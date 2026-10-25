@@ -36,7 +36,7 @@ make-store() {
     [ "$status" -eq 0 ]
     [ ! -e "$FOLIO_STORE_DIR/web/github.gpg" ]
     [ "$(pass show web/gh | head -1)" = "s3cr3t" ]
-    [[ $(git -C "$FOLIO_STORE_DIR" log -1 --format=%s) == "Rename web/github to web/gh"* ]]
+    [[ $(git -C "$FOLIO_STORE_DIR" log -1 --format=%s) == "Rename web/github to web/gh"* ]] || false
 }
 
 @test "secret mv: into a folder" {
@@ -55,16 +55,16 @@ make-store() {
 @test "secret mv --help: works without a store" {
     run "$FOLIO" secret mv --help
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio secret mv"* ]]
+    [[ $output == *"Usage: folio secret mv"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
     run "$FOLIO" help secret mv
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio secret mv"* ]]
+    [[ $output == *"Usage: folio secret mv"* ]] || false
 }
 
 @test "secret mv: no store fails and creates nothing" {
     run "$FOLIO" secret mv web/github x < /dev/null
     [ "$status" -eq 1 ]
-    [[ $output == *"No ready EnvFolio store"*"folio init"* ]]
+    [[ $output == *"No ready EnvFolio store"*"folio init"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
