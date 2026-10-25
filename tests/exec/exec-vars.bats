@@ -108,18 +108,22 @@ S=[a #b]
 B=[a\]' ]
 }
 
-@test "exec --vars: \${NAME} sees earlier lines first; a later line overrides; typed entries override the file" {
+@test "exec --vars: \${NAME} sees earlier lines first, then the typed entries; a later line overrides" {
     make-store
-    vars 'BASE=https://example.com' 'URL=${BASE}/api' 'BASE=changed' 'NAME=${ATL_NAME:-none}' '@{atl/name}' 'AFTER=${ATL_NAME}'
-    run "$FOLIO" exec --vars "$SANDBOX/a.vars" BASE=atl/host -- sh -c "$(show URL BASE NAME AFTER)"
+    vars 'BASE=https://example.com' 'URL=${BASE}/api' 'BASE=changed' 'NAME=${ATL_NAME:-none}' '@{atl/name}' 'AFTER=${ATL_NAME}' \
+         'HOST=${HOST_IN}'
+    run "$FOLIO" exec --vars "$SANDBOX/a.vars" BASE=atl/host HOST_IN=atl/host -- sh -c "$(show URL BASE NAME AFTER HOST HOST_IN)"
     [ "$status" -eq 0 ]
+    # The typed entries only feed the file: HOST_IN is seen there, but the command does not get it.
     [ "$output" = "URL=[https://example.com/api]
-BASE=[jira.example]
+BASE=[changed]
 NAME=[none]
-AFTER=[Jane]" ]
+AFTER=[Jane]
+HOST=[jira.example]
+HOST_IN=[]" ]
 }
 
-@test "exec --vars: several files, the later overriding; --vars=<file>; --all loads first" {
+@test "exec --vars: several files, the later overriding; --vars=<file>; --all only feeds them" {
     make-store
     printf '%s\n' 'A=one' 'B=one' > "$SANDBOX/1.vars"
     printf '%s\n' 'B=two' 'ATL_NAME=from-vars' > "$SANDBOX/2.vars"
@@ -128,7 +132,7 @@ AFTER=[Jane]" ]
     [ "$output" = "A=[one]
 B=[two]
 ATL_NAME=[from-vars]
-ATL_HOST=[jira.example]" ]
+ATL_HOST=[]" ]
 }
 
 @test "MANUAL: exec — check a vars file against the store first" {

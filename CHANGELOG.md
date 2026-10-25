@@ -10,6 +10,11 @@ now stable. A change that breaks any of them will come with a new major version.
 
 ### Added
 
+- **Experimental, may change:** `--use <@namespace>` for `exec`, `shell` and `export`: takes every
+  item under the namespace as if it were not in the path (`--use @app2/@prod`:
+  `@app2/@prod/server/user` is `server/user`, so `SERVER_USER`), also for a vars file's `@{…}`. Only
+  namespaces, from the front. `export --use` writes the items so, e.g. one file per environment.
+  `--names` says where a peeled one came from.
 - `folio init` makes a post-quantum key (ML-KEM + ECC) with gpg 2.5.21 or later — asked, when
   anything else is asked, with classical as the other choice. `--key-type pqc|classical` picks it
   without asking. With an older gpg, nothing changes (`--key-type pqc` is refused). The summary
@@ -26,6 +31,13 @@ now stable. A change that breaks any of them will come with a new major version.
 
 ### Changed
 
+- **`exec`/`shell`: the entries, `--all` and `--use` are taken in the order typed, and the last one
+  wins.** `--all` used to load first wherever it was typed: `@nawa --all` now lets the shared
+  entries win; write `--all @nawa` for the old way.
+- **`exec`/`shell --vars`: the vars files are made after the entries, `--all` and `--use`, and they
+  only feed them.** `${NAME}` sees them, but the command gets only what the vars files set. The
+  entries typed used to be set after the file, over it, and went to the command too; to pass one
+  on, set it in the file (`GH_TOKEN=${GH_TOKEN}`, or `@{gh/token}`).
 - `folio ls`, `text ls`, `secret ls` and `text find`/`secret find` show secrets in yellow and texts
   in green, on a screen that shows colour; `exec`/`shell --names` too. Sent to a pipe or a file, or
   with `NO_COLOR` set or `TERM=dumb`, they now print no colour codes at all (folders used to keep
@@ -42,6 +54,9 @@ now stable. A change that breaks any of them will come with a new major version.
 
 ### Fixed
 
+- A prompt (`[y/N]`, a name, a number, Enter to continue — `pass`'s too) is no longer answered by
+  keys typed before it showed: an extra Enter, or the newline at the end of a paste. At a terminal,
+  what is waiting is dropped first; answers piped in are read as before.
 - `folio completion zsh` no longer fails with `compinit: initialization aborted` and
   `command not found: compdef` when zsh finds a completion file it does not trust (one owned by
   another user, or in a world-writable folder) and no one can answer its question — as at
