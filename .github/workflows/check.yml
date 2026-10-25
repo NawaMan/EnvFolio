@@ -46,8 +46,8 @@ jobs:
           ln -s "$(brew --prefix)/bin/gtimeout" "$RUNNER_TEMP/bin/timeout"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
       # gpg 2.4.7, the stable line the booth and Linux run, built from source: Homebrew has only
-      # its current gnupg (pulled in by pass), and 2.5.24 imports a secret key it then cannot
-      # decrypt with. The build links Homebrew's libraries, so their versions are in the cache key.
+      # its current gnupg (pulled in by pass), which test-macos-homebrew-gpg runs. The build links
+      # Homebrew's libraries, so their versions are in the cache key.
       - name: Libraries for gnupg 2.4.7
         id: gnupg-libs
         run: |
@@ -87,3 +87,23 @@ jobs:
       # /bin/bash on macOS is 3.2; put it first so `env bash` (bats and folio) finds it,
       # not a Homebrew bash 5. test-all.sh fails if it is not 3.x.
       - run: PATH="/bin:$PATH" perl -e '$SIG{PIPE} = "DEFAULT"; exec @ARGV' /bin/bash tests/test-all.sh 3
+
+  # Homebrew's own gpg (2.5.24 at the time of writing), the one a Mac gets: every test, and a real
+  # post-quantum key (tests/gpg/gpg-pqc-real.bats, skipped on a gpg that cannot make one).
+  test-macos-homebrew-gpg:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install dependencies
+        run: |
+          brew install bats-core pass coreutils gnupg
+          mkdir -p "$RUNNER_TEMP/bin"
+          ln -s "$(brew --prefix)/bin/gtimeout" "$RUNNER_TEMP/bin/timeout"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - run: gpg --version | head -n 1 && { gpg2 --version 2>/dev/null | head -n 1 || true; }
+      - name: Post-quantum key, real gpg
+        run: PATH="/bin:$PATH" perl -e '$SIG{PIPE} = "DEFAULT"; exec @ARGV' bats --print-output-on-failure tests/gpg/gpg-pqc-real.bats
+      - name: Every test
+        if: ${{ !cancelled() }}
+        run: PATH="/bin:$PATH" perl -e '$SIG{PIPE} = "DEFAULT"; exec @ARGV' /bin/bash tests/test-all.sh 3
