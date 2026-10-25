@@ -32,6 +32,31 @@ A command-line tool for password management. It is built heavily on top of [`pas
 
 Every command, with examples: [MANUAL.md](MANUAL.md).
 
+## Naming the variables
+
+An item's variable name comes from its path: a top `@namespace` folder is dropped, `/` turns into
+`_`, and it is uppercased (`@nawa/gh/token` -> `GH_TOKEN`). To pick the name yourself, write
+`VAR=<name>` on the command line, or `VAR=@{name}` in a vars file:
+
+```bash
+folio exec --secrets GITHUB_TOKEN=gh/token -- gh release list
+```
+
+```bash
+# deploy.vars
+GITHUB_TOKEN=@{gh/token}                  # gh/token, as GITHUB_TOKEN
+AUTH=Bearer @{gh/token}                   # put into a longer value
+REGION=@{aws/region:-${AWS_REGION}}       # with a fallback when the item is not there
+@{aws/*}                                  # every item under aws/, each named by its path
+```
+
+```bash
+folio exec --secrets --vars deploy.vars -- ./deploy.sh
+folio exec --names --vars deploy.vars -- true   # only show which variable gets what
+```
+
+A secret still needs `--secrets`. See [From a vars file](MANUAL.md#from-a-vars-file).
+
 # Install
 
 EnvFolio is one bash script. Download `folio` from the
