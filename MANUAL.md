@@ -580,8 +580,11 @@ Takes `aws/key` and `web/user`; one already in the store stays as it is.
 Lists the texts and secrets in the EnvFolio store together as one tree: names only, never values.
 Each name is marked **(S)** for a secret or **(T)** for a text. A name that is both shows twice.
 On a screen, secrets are yellow and texts green — the colours in `text ls`, `secret ls` and `find`
-too. Sent to a pipe or a file, with `NO_COLOR` set or `TERM=dumb`, or with `--plain`, there is no
-colour — what scripts and the examples below see.
+too — and, when the terminal draws emoji, marked 🔑 and 📄 instead: `🔑github`. folio asks the
+terminal (it writes 🔑, asks where the cursor went, and wipes the line), so a terminal that cannot
+draw them keeps (S)/(T), as does `TERM=linux` or a locale that is not UTF-8. Sent to a pipe or a
+file, with `TERM=dumb`, or with `--plain`, there are neither colours nor emoji (`NO_COLOR` takes
+only the colours away) — what scripts and the examples below see.
 Signatures (`.txt.sig`) are left out.
 
 ```
@@ -591,7 +594,7 @@ folio ls [--flat] [--plain] [<subfolder>]
 | Option | Meaning |
 | --- | --- |
 | `--flat` | Full names, one per line, sorted, instead of a tree: `(S)web/github`. |
-| `--plain` | No colour, even on a screen. |
+| `--plain` | Mark secrets (S) and texts (T), with no colour, even on a screen. |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
 Only a folder can be listed. It needs a ready store (`folio init`).
@@ -1408,10 +1411,10 @@ folio exec [-s|--secrets] [-a|--all] [-n|--names|--debug|--confirm] [--plain]
 | --- | --- |
 | `-s`, `--secrets` | Also load secrets. Without it, a secret named directly is refused, and the secrets in a folder are left out, with a note on stderr saying how many. |
 | `-a`, `--all` | Load every entry outside the namespaces (top `@` folders), where it is typed among the entries: `--all @nawa` lays `@nawa` over it, `@nawa --all` lays it over `@nawa`. With `--vars`, it only feeds the file. With it, `<entry>` is optional. See [What --all does](#what---all-does-with-and-without-a-vars-file). |
-| `-n`, `--names` | Only show which variable would get which entry, in the order they are set, marked (S)ecret or (T)ext — on a screen, coloured as in `folio ls` — and stop. With `--vars`, the entries that only feed the files follow, under `Only for the vars files`; with `--use`, a peeled one says where it came from. Nothing is read or decrypted (no passphrase, no signature check), and the command, if given, does not run. With `--from`, the file is still opened to see what is in it. |
+| `-n`, `--names` | Only show which variable would get which entry, in the order they are set, marked (S)ecret or (T)ext — on a screen, coloured and with 🔑/📄 as in `folio ls` (`🔑gh/token`) — and stop. With `--vars`, the entries that only feed the files follow, under `Only for the vars files`; with `--use`, a peeled one says where it came from. Nothing is read or decrypted (no passphrase, no signature check), and the command, if given, does not run. With `--from`, the file is still opened to see what is in it. |
 | `--debug` | Show the same as `--names`, on stderr, then run the command. The names are shown before any value is read. Not with `--names`. |
 | `--confirm` | Show the same as `--debug`, then ask `run <command>? [y/N]` and run it only on yes. Asked and answered on the terminal (`/dev/tty`), never stdin, which stays the command's; with no terminal it refuses. No value is read or decrypted, and the store key is not unlocked (`--store-passphrase-fd`), before the yes; a `--from` file is opened first, to show its names. |
-| `--plain` | With `--names`, `--debug` or `--confirm`: no colour, even on a screen. |
+| `--plain` | With `--names`, `--debug` or `--confirm`: mark secrets (S) and texts (T), with no colour, even on a screen. |
 | `--use <@namespace>` | Take every entry under `<@namespace>` as if it were not in the path: `@prod/server/user` is `server/user`. Only namespaces, from the front (`@app2/@prod`). Where it is typed among the entries; can be given more than once. With it, `<entry>` is optional. See [Peel a namespace with --use](#peel-a-namespace-with---use). Experimental: it may change. |
 | `--vars <file>` | Set the variables a vars file says: constants, values from your environment, entries, with fallbacks. Can be given more than once. With it, `<entry>` is optional, and the entries only feed it. See [From a vars file](#from-a-vars-file). |
 | `--from <file>` | Take the entries from a file made by `folio export`, not from the store. No store is needed, and none is made or touched. See [From an export file](#from-an-export-file). |
@@ -1788,7 +1791,7 @@ folio shell [-s|--secrets] [-a|--all] [-n|--names|--debug|--confirm] [--plain] [
 | `-n`, `--names` | Only show which variable would get which entry, as in `folio exec`; no shell starts. |
 | `--debug` | Show the same on stderr, then start the shell. |
 | `--confirm` | Show the same on stderr, and start the shell only when you say yes, as in `folio exec`. |
-| `--plain` | With `--names`, `--debug` or `--confirm`: no colour, even on a screen. |
+| `--plain` | With `--names`, `--debug` or `--confirm`: mark secrets (S) and texts (T), with no colour, even on a screen. |
 | `--use <@namespace>` | Take every entry under `<@namespace>`, named without it, as in `folio exec`; can be given more than once. Experimental: it may change. |
 | `--vars <file>` | Set the variables a vars file says, as in `folio exec`; can be given more than once. |
 | `--from <file>` | Take the entries from a file made by `folio export`, as in `folio exec`. |

@@ -149,17 +149,23 @@ ATL_HOST  <- atl/host(T)
 ATL_NAME  <- atl/name(T)' ]
 }
 
-@test "exec --names: on a screen, coloured; --plain as before" {
+@test "exec --names: on a screen, 🔑/📄 in front and coloured; --plain as before" {
     make-store
     vars 'TOKEN=@{gh/token}' 'URL=//@{prod/db/user}' '@{atl/name}'
     local y=$'\e[33m' g=$'\e[32m' off=$'\e[0m'
     # As if stdout were a screen (on-screen says yes).
-    on-screen() { bash -c 'source "$1"; shift; function on-screen() { return 0; }; Main "$@"' _ "$FOLIO" "$@" ; }
+    # The terminal is never asked: it draws emoji.
+    on-screen() {
+        bash -c 'source "$1"; shift
+                 function on-screen() { return 0; }
+                 function terminal-draws-emoji() { return 0; }
+                 Main "$@"' _ "$FOLIO" "$@"
+    }
     TERM=xterm LC_ALL=C.UTF-8 run on-screen exec -s --names --vars "$SANDBOX/a.vars"
     [ "$status" -eq 0 ]
-    [ "$output" = "TOKEN    <- [${y}gh/token(S)$off]
-URL      <- //[${g}prod/db/user(T)$off]
-ATL_NAME <- ${g}atl/name(T)$off" ]
+    [ "$output" = "TOKEN    <- [${y}🔑gh/token$off]
+URL      <- //[${g}📄prod/db/user$off]
+ATL_NAME <- ${g}📄atl/name$off" ]
     TERM=xterm LC_ALL=C.UTF-8 run on-screen exec -s --names --plain --vars "$SANDBOX/a.vars"
     [ "$output" = 'TOKEN    <- [gh/token(S)]
 URL      <- //[prod/db/user(T)]
@@ -192,10 +198,16 @@ C <- x-[prod/db/user(T)]' ]
     make-store
     local g=$'\e[32m' off=$'\e[0m'
     # As if stderr were a screen and stdout not.
-    on-screen() { bash -c 'source "$1"; shift; function on-screen() { (( SCREEN_FD == 2 )); }; Main "$@"' _ "$FOLIO" "$@" ; }
+    # The terminal is never asked: it draws emoji.
+    on-screen() {
+        bash -c 'source "$1"; shift
+                 function on-screen() { (( SCREEN_FD == 2 )); }
+                 function terminal-draws-emoji() { return 0; }
+                 Main "$@"' _ "$FOLIO" "$@"
+    }
     TERM=xterm LC_ALL=C.UTF-8 run --separate-stderr on-screen exec --debug atl/name -- true
     [ "$status" -eq 0 ]
-    [ "$stderr" = "ATL_NAME <- ${g}atl/name(T)$off" ]
+    [ "$stderr" = "ATL_NAME <- ${g}📄atl/name$off" ]
     TERM=xterm LC_ALL=C.UTF-8 run --separate-stderr on-screen exec --debug --plain atl/name -- true
     [ "$stderr" = "ATL_NAME <- atl/name(T)" ]
 }

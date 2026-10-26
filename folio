@@ -2452,12 +2452,13 @@ function list-help() {
 Usage: folio ls [--flat] [--plain] [<subfolder>]
 
 List the texts and secrets in the EnvFolio store together as a tree — names only, never values.
-Each name is marked (S) for a secret or (T) for a text — on a screen, secrets yellow and texts
-green (no colour with NO_COLOR set). Give a subfolder to list only what is under it.
+Each name is marked (S) for a secret or (T) for a text — on a screen that draws emoji, 🔑 and 📄;
+secrets yellow and texts green (no colour with NO_COLOR set). Give a subfolder to list only what
+is under it.
 
 Options:
       --flat          Full names, one per line, sorted, instead of a tree.
-      --plain         No colour, even on a screen.
+      --plain         Mark secrets (S) and texts (T), with no colour, even on a screen.
   -h, --help          Show this help and stop.
 EOF
 }
@@ -2510,7 +2511,8 @@ Options:
       --confirm       Show the same on stderr, and go on only when you say yes (asked on the
                       terminal, not stdin). No value is read, and the store key is not
                       unlocked, before the yes; a --from file is opened first, to show its names.
-      --plain         With --names, --debug or --confirm: no colour, even on a screen.
+      --plain         With --names, --debug or --confirm: mark secrets (S) and texts (T), with no
+                      colour, even on a screen.
   --use <@namespace>  Take every entry under <@namespace> (e.g. @prod, or @app2/@prod), named
                       without it, where it is typed among the entries; can be given more than
                       once. <entry> is then optional.
@@ -2551,7 +2553,8 @@ Options:
       --confirm       Show the same on stderr, and go on only when you say yes (asked on the
                       terminal, not stdin). No value is read, and the store key is not
                       unlocked, before the yes; a --from file is opened first, to show its names.
-      --plain         With --names, --debug or --confirm: no colour, even on a screen.
+      --plain         With --names, --debug or --confirm: mark secrets (S) and texts (T), with no
+                      colour, even on a screen.
   --use <@namespace>  Take every entry under <@namespace>, named without it, as in `folio exec`;
                       can be given more than once. <entry> is then optional.
                       Experimental: it may change in a later version.
@@ -2976,12 +2979,14 @@ function print-entry-name() {
     printf '%-*s <- %s%s\n' "$width" "$var" "$(entry-mark "$file")" "${from:+  (--use: $from)}"
 }
 
-# entry-mark <name>.gpg|<name>.txt: "<name>(S)", yellow on a screen with colour (set-marks); for a
-# text, "<name>(T)", green.
+# entry-mark <name>.gpg|<name>.txt: the name marked as set-marks says — "🔑<name>" in yellow on a
+# screen that draws emoji, "<name>(S)" elsewhere; for a text, 📄, green and (T).
 function entry-mark() {
     local name=${1%.*} on=$TEXT_ON mark=$TEXT_MARK
     [[ $1 != *.gpg ]] || on=$SECRET_ON mark=$SECRET_MARK
-    echo "$on$name$mark$COLOR_OFF"
+    if (( EMOJI )); then echo "$on$mark$name$COLOR_OFF"
+    else                 echo "$on$name$mark$COLOR_OFF"
+    fi
 }
 
 # is-explicit <entry>: true for VAR=<name> (no / or [ before the =).
@@ -3945,7 +3950,7 @@ function store-tree() {
                  -e "s/^(.*(── |-- ))($esc\[[0-9;]*m)?(.*)\.txt($esc\[[0-9;]*m)?( ->.*)?\$/\1$TEXT_ON$t\4$COLOR_OFF\6/"
 }
 
-# --plain: no colour, even on a screen.
+# --plain: (S)/(T) and no colour, even on a screen.
 PLAIN=0
 # on-screen: stdout (or SCREEN_FD, where the marks are shown) is a terminal.
 SCREEN_FD=1
@@ -3953,11 +3958,40 @@ function on-screen() { [[ -t $SCREEN_FD ]] ; }
 # use-color: true when stdout is a screen that shows colour — a terminal, not TERM=dumb, and no
 # NO_COLOR (https://no-color.org) or --plain.
 function use-color() { (( ! PLAIN )) && on-screen && [[ -z ${NO_COLOR:-} && ${TERM:-dumb} != dumb ]] ; }
-# set-marks: how a secret and a text are marked, for this stdout — SECRET_MARK and TEXT_MARK ((S)
-# and (T)), SECRET_ON and TEXT_ON (yellow and green on a screen with colour, else nothing) and
-# COLOR_OFF. Call it outside $(…), where stdout is not the screen.
+# use-emoji: true when stdout is a screen that draws emoji — a terminal, a UTF-8 locale, not
+# TERM=dumb or the Linux console (TERM=linux), no --plain, and the terminal says so when asked
+# (terminal-draws-emoji, asked once: its answer is kept in DRAWS_EMOJI).
+DRAWS_EMOJI=''
+function use-emoji() {
+    (( ! PLAIN )) && on-screen && [[ ${TERM:-dumb} != dumb && $TERM != linux ]] || return 1
+    case ${LC_ALL:-${LC_CTYPE:-${LANG:-}}} in *[Uu][Tt][Ff]-8*|*[Uu][Tt][Ff]8*) ;; *) return 1 ;; esac
+    if [[ -z $DRAWS_EMOJI ]]; then
+        if terminal-draws-emoji; then DRAWS_EMOJI=1; else DRAWS_EMOJI=0; fi
+    fi
+    (( DRAWS_EMOJI ))
+}
+# terminal-draws-emoji: ask the terminal (TTY_PATH) whether it draws an emoji as one, two cells
+# wide: write 🔑 at the start of the line, ask where the cursor is (ESC[6n, answered ESC[<row>;<col>R),
+# then wipe the line. Column 3: yes. Another column (drawn narrow, or as its bytes), no terminal, or
+# no answer within a second: no. What was typed before is dropped, so it cannot pass for the answer.
+# The wait is read's own -t: with -d, read sets the terminal to wait for a key, whatever stty says.
+TTY_PATH=/dev/tty    # the terminal asked; tests point it elsewhere
+# shellcheck disable=SC2094  # a terminal is read and written both: that is how it is asked
+function terminal-draws-emoji() {
+    local reply=''
+    drop-typeahead
+    printf '\r🔑\e[6n'
+    IFS= read -r -s -d R -t 1 reply
+    printf '\r\e[K'
+    [[ $reply == *\;3 ]]
+} 2>/dev/null <"$TTY_PATH" >"$TTY_PATH"
+# set-marks: how a secret and a text are marked, for this stdout — SECRET_MARK and TEXT_MARK (🔑
+# and 📄 on a screen that draws emoji, else (S) and (T)), SECRET_ON and TEXT_ON (yellow and green
+# on a screen with colour, else nothing) and COLOR_OFF. Call it outside $(…), where stdout is not
+# the screen.
 function set-marks() {
-    SECRET_MARK='(S)' TEXT_MARK='(T)' SECRET_ON='' TEXT_ON='' COLOR_OFF=''
+    SECRET_MARK='(S)' TEXT_MARK='(T)' SECRET_ON='' TEXT_ON='' COLOR_OFF='' EMOJI=0
+    if use-emoji; then SECRET_MARK='🔑' TEXT_MARK='📄' EMOJI=1; fi
     if use-color; then SECRET_ON=$'\e[33m' TEXT_ON=$'\e[32m' COLOR_OFF=$'\e[0m'; fi
 }
 

@@ -26,8 +26,12 @@ now stable. A change that breaks any of them will come with a new major version.
   then run. `--confirm`: show the same and ask on the terminal (not stdin) first. No value is read,
   and the store key is not unlocked (`--store-passphrase-fd`), before the yes; a `--from` file is
   opened first, to show its names.
+- On a terminal that draws emoji, `folio ls` and `exec`/`shell --names` mark a secret 🔑 and a text
+  📄 instead of (S)/(T): `🔑gh/token`. folio asks the terminal — it writes 🔑, asks where the
+  cursor went (two cells: yes), and wipes the line — so one that cannot draw them keeps (S)/(T), as
+  do the Linux console and a locale that is not UTF-8. In a pipe or a file it stays (S)/(T).
 - `--plain` for `ls`, `text ls`, `secret ls`, `text find`, `secret find`, `exec` and `shell`: no
-  colour, even on a screen.
+  colour, even on a screen; for `ls`, `exec` and `shell`, (S)/(T) rather than emoji.
 
 ### Changed
 

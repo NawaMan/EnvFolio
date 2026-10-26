@@ -141,7 +141,13 @@ web
 }
 
 # Run folio as if stdout were a screen (on-screen says yes); TERM and the locale as given around it.
-on-screen() { bash -c 'source "$1"; shift; function on-screen() { return 0; }; Main "$@"' _ "$FOLIO" "$@" ; }
+# The terminal is never asked: it draws emoji unless FAKE_EMOJI=0.
+on-screen() {
+    bash -c 'source "$1"; shift
+             function on-screen() { return 0; }
+             function terminal-draws-emoji() { (( ${FAKE_EMOJI:-1} )); }
+             Main "$@"' _ "$FOLIO" "$@"
+}
 
 @test "ls: on a screen with colour, secrets are yellow and texts green" {
     make-store
@@ -162,27 +168,41 @@ $g(T)web/home$off" ]
     [[ $(plain) != *".txt"* && $(plain) != *".gpg"* ]] || false
 }
 
-@test "ls: on a screen with UTF-8, the same (S)/(T) and colours; NO_COLOR takes the colours away" {
+@test "ls: on a screen that draws emoji, 🔑 for a secret and 📄 for a text; NO_COLOR keeps them, no colour" {
     make-store
     local y=$'\e[33m' g=$'\e[32m' off=$'\e[0m'
     TERM=xterm LC_ALL=C.UTF-8 run on-screen ls
-    [[ $output == *"── ${g}(T)note$off"* && $output == *"── ${y}(S)github$off"* ]] || false
+    [[ $output == *"── ${g}📄note$off"* && $output == *"── ${y}🔑github$off"* ]] || false
+    [[ $output != *"(S)"* && $output != *"(T)"* ]] || false
     TERM=xterm LC_ALL=C.UTF-8 run on-screen ls --flat web
+    [ "$output" = "${y}🔑web/github$off
+${g}📄web/github$off
+${g}📄web/home$off" ]
+    TERM=xterm LC_ALL=C.UTF-8 NO_COLOR=1 run on-screen ls --flat web
+    [ "$output" = $'🔑web/github\n📄web/github\n📄web/home' ]
+}
+
+@test "ls: a terminal that does not draw emoji, or a locale that is not UTF-8: (S)/(T)" {
+    make-store
+    local y=$'\e[33m' g=$'\e[32m' off=$'\e[0m'
+    TERM=xterm LC_ALL=C.UTF-8 FAKE_EMOJI=0 run on-screen ls --flat web
     [ "$output" = "${y}(S)web/github$off
 ${g}(T)web/github$off
 ${g}(T)web/home$off" ]
-    TERM=xterm LC_ALL=C.UTF-8 NO_COLOR=1 run on-screen ls --flat web
-    [ "$output" = $'(S)web/github\n(T)web/github\n(T)web/home' ]
+    TERM=xterm LC_ALL=C run on-screen ls --flat web
+    [ "$output" = "${y}(S)web/github$off
+${g}(T)web/github$off
+${g}(T)web/home$off" ]
 }
 
-@test "ls: --plain or TERM=dumb: no colour; the Linux console has colour" {
+@test "ls: --plain, TERM=dumb or the Linux console: (S)/(T), and colour only on the console" {
     make-store
     local esc=$'\e' cmd
     for cmd in "ls --plain" "ls --flat --plain" "text ls --plain" "secret find --plain git" "text find git --plain"; do
         # shellcheck disable=SC2086  # the words of the command
         TERM=xterm LC_ALL=C.UTF-8 run on-screen $cmd
         [ "$status" -eq 0 ]
-        [[ $output != *"$esc"* ]] || false
+        [[ $output != *"$esc"* && $output != *"🔑"* && $output != *"📄"* ]] || false
     done
     TERM=xterm LC_ALL=C.UTF-8 run on-screen ls --plain --flat web
     [ "$output" = $'(S)web/github\n(T)web/github\n(T)web/home' ]
