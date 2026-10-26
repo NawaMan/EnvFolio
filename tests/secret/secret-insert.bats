@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 
-# folio secret insert, through the real ./folio, against a throwaway GPG home and store.
+# folio insert secret, through the real ./folio, against a throwaway GPG home and store.
 
 setup() {
     SANDBOX=$(mktemp -d)
@@ -28,9 +28,9 @@ make-store() {
     "$FOLIO" init --key test@example.com < /dev/null >/dev/null 2>&1
 }
 
-@test "MANUAL: secret insert — pipe a secret in" {
+@test "MANUAL: insert secret — pipe a secret in" {
     make-store
-    run "$FOLIO" secret insert web/github < <(printf 's3cr3t\ns3cr3t\n')
+    run "$FOLIO" insert secret web/github < <(printf 's3cr3t\ns3cr3t\n')
     [ "$status" -eq 0 ]
     [[ $output != *"s3cr3t"* ]] || false
     [ -f "$FOLIO_STORE_DIR/web/github.gpg" ]
@@ -38,74 +38,74 @@ make-store() {
     [[ $(git -C "$FOLIO_STORE_DIR" log -1 --format=%s) == *"web/github"* ]] || false
 }
 
-@test "MANUAL: secret insert — several lines" {
+@test "MANUAL: insert secret — several lines" {
     make-store
-    run "$FOLIO" secret insert -m note < <(printf 'line one\nline two\n')
+    run "$FOLIO" insert secret -m note < <(printf 'line one\nline two\n')
     [ "$status" -eq 0 ]
     [ "$(pass show note)" = $'line one\nline two' ]
 }
 
-@test "secret insert: two different lines do not match, nothing is saved" {
+@test "insert secret: two different lines do not match, nothing is saved" {
     make-store
-    run "$FOLIO" secret insert one < <(printf 'first\nsecond\n')
+    run "$FOLIO" insert secret one < <(printf 'first\nsecond\n')
     [ "$status" -ne 0 ]
     [[ $output == *"do not match"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR/one.gpg" ]
 }
 
-@test "secret insert: --force overwrites" {
+@test "insert secret: --force overwrites" {
     make-store
-    "$FOLIO" secret insert -m dup < <(printf 'old\n')
-    run "$FOLIO" secret insert -f -m dup < <(printf 'new\n')
+    "$FOLIO" insert secret -m dup < <(printf 'old\n')
+    run "$FOLIO" insert secret -f -m dup < <(printf 'new\n')
     [ "$status" -eq 0 ]
     [ "$(pass show dup)" = "new" ]
 }
 
-@test "secret insert: --echo is refused, in any spelling" {
+@test "insert secret: --echo is refused, in any spelling" {
     make-store
     local arg
     for arg in --echo -e -fe -em; do
-        run "$FOLIO" secret insert "$arg" x < <(printf 'x\n')
+        run "$FOLIO" insert secret "$arg" x < <(printf 'x\n')
         [ "$status" -eq 1 ]
         [[ $output == *"--echo is not offered"* ]] || false
     done
     [ ! -e "$FOLIO_STORE_DIR/x.gpg" ]
 }
 
-@test "secret insert: a name after -- is not an option" {
+@test "insert secret: a name after -- is not an option" {
     make-store
-    run "$FOLIO" secret insert -m -- -e < <(printf 'x\n')
+    run "$FOLIO" insert secret -m -- -e < <(printf 'x\n')
     [ "$status" -eq 0 ]
     [ "$(pass show -- -e)" = "x" ]
 }
 
-@test "secret insert: no store fails and creates nothing" {
-    run "$FOLIO" secret insert web/github < <(printf 's3cr3t\ns3cr3t\n')
+@test "insert secret: no store fails and creates nothing" {
+    run "$FOLIO" insert secret web/github < <(printf 's3cr3t\ns3cr3t\n')
     [ "$status" -eq 1 ]
     [[ $output == *"No ready EnvFolio store"*"folio init"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 
-@test "secret insert: an unfinished store fails" {
+@test "insert secret: an unfinished store fails" {
     mkdir -p "$FOLIO_STORE_DIR"
-    run "$FOLIO" secret insert web/github < <(printf 's3cr3t\ns3cr3t\n')
+    run "$FOLIO" insert secret web/github < <(printf 's3cr3t\ns3cr3t\n')
     [ "$status" -eq 1 ]
     [[ $output == *"No ready EnvFolio store"* ]] || false
 }
 
-@test "secret insert: bad arguments get pass's usage" {
+@test "insert secret: bad arguments get pass's usage" {
     make-store
-    run "$FOLIO" secret insert < /dev/null
+    run "$FOLIO" insert secret < /dev/null
     [ "$status" -ne 0 ]
     [[ $output == *"Usage:"*"insert"* ]] || false
-    run "$FOLIO" secret insert a b < /dev/null
+    run "$FOLIO" insert secret a b < /dev/null
     [ "$status" -ne 0 ]
     [[ $output == *"Usage:"*"insert"* ]] || false
 }
 
-@test "secret insert --help: works without a store" {
-    run "$FOLIO" secret insert --help < /dev/null
+@test "insert secret --help: works without a store" {
+    run "$FOLIO" insert secret --help < /dev/null
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio secret insert"* ]] || false
+    [[ $output == *"Usage: folio insert secret"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }

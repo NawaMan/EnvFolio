@@ -28,8 +28,8 @@ teardown() {
 make-store() {
     gpg --batch --passphrase '' --quick-generate-key "Test User <test@example.com>" default default never 2>/dev/null
     "$FOLIO" init --key test@example.com < /dev/null >/dev/null 2>&1
-    "$FOLIO" text insert -t "https://example.com" web/home < /dev/null >/dev/null
-    "$FOLIO" secret insert web/github < <(printf 's3cr3t\ns3cr3t\n') >/dev/null
+    "$FOLIO" insert text -t "https://example.com" web/home < /dev/null >/dev/null
+    "$FOLIO" insert secret web/github < <(printf 's3cr3t\ns3cr3t\n') >/dev/null
 }
 
 # Wipe the store and the keyring, as on a new machine.
@@ -49,8 +49,8 @@ backup-file() {
 
 # The restored store works: the text verifies, the secret decrypts, the history is clean.
 is-restored() {
-    [ "$("$FOLIO" text show web/home)" = "https://example.com" ]
-    [ "$("$FOLIO" secret show web/github)" = "s3cr3t" ]
+    [ "$("$FOLIO" show text web/home)" = "https://example.com" ]
+    [ "$("$FOLIO" show secret web/github)" = "s3cr3t" ]
     [ -z "$(git -C "$FOLIO_STORE_DIR" status --porcelain)" ]
     [ -z "$(find "$SANDBOX" -maxdepth 1 -name '.folio-restore.*')" ]
 }
@@ -82,7 +82,7 @@ is-restored() {
     [ "$(git -C "$FOLIO_STORE_DIR" log --format=%s)" = "Add current contents of password store." ]
     git -C "$FOLIO_STORE_DIR" ls-files --error-unmatch web/home.txt web/home.txt.sig web/github.gpg >/dev/null
     # The key is trusted, so pass can add to the restored store.
-    "$FOLIO" secret insert web/new < <(printf 'x\nx\n') >/dev/null
+    "$FOLIO" insert secret web/new < <(printf 'x\nx\n') >/dev/null
 }
 
 @test "MANUAL: backup — with the git history" {
@@ -155,7 +155,7 @@ is-restored() {
     run "$FOLIO" restore "$(backup-file)"
     [ "$status" -eq 1 ]
     [[ $output == *"already exists"* ]] || false
-    [ "$("$FOLIO" text show web/home)" = "https://example.com" ]
+    [ "$("$FOLIO" show text web/home)" = "https://example.com" ]
 }
 
 @test "restore: an open existing empty folder is asked about; no answer, nothing changed" {
@@ -189,10 +189,10 @@ is-restored() {
 @test "store: every command warns about an open store folder, and still works" {
     make-store
     chmod 755 "$FOLIO_STORE_DIR"
-    run "$FOLIO" text show web/home
+    run "$FOLIO" show text web/home
     [ "$status" -eq 0 ]
     [[ $output == *"warning: other users can get into $FOLIO_STORE_DIR"* && $output == *"https://example.com"* ]] || false
-    [ "$("$FOLIO" text show web/home 2>/dev/null)" = "https://example.com" ]
+    [ "$("$FOLIO" show text web/home 2>/dev/null)" = "https://example.com" ]
 }
 
 @test "restore: a store folder it makes is private (700), no warning" {

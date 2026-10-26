@@ -6,10 +6,10 @@
 #
 # Usage: folio <command> [args...]        (`folio help` lists the commands)
 #   folio init | path | backup | restore | export | import
-#   folio text   ls | find | grep | show | insert | edit | generate | rm | mv | cp
-#   folio secret ls | find | grep | show | insert | edit | generate | rm | mv | cp
-#   folio vars   check
+#   folio ls | find | grep | show | insert | edit | generate | rm | mv | cp   text|secret
+#   folio check vars
 #   folio ls | exec | shell | completion | version | help [command]
+#   (The kind can also come first: `folio text show` is `folio show text`.)
 #
 # Environment:
 #   FOLIO_STORE_DIR  The EnvFolio store (default ~/.folio). Laid out like a pass store, but
@@ -44,6 +44,8 @@ export PASSWORD_STORE_DIR="$STORE_PATH"
 Main() {
     # Asked at every Tab press, by the scripts of `folio completion`: quick, and quiet.
     if [[ ${1:-} == __complete ]]; then shift ; complete-words "$@" ; return 0 ; fi
+    # `folio show text …` is run as `folio text show …`, the order the code below takes.
+    if is-action-first "${1:-}" "${2:-}"; then set -- "$2" "$1" "${@:3}" ; fi
     # Quiet when all is there; otherwise show the table and stop.
     if ! ensure-requirements "$@" >/dev/null; then ensure-requirements "$@" ; return 1 ; fi
     set-gpg-tty
@@ -77,6 +79,9 @@ Main() {
         version) Version "$@" ;;
         help)    Help    "$@" ;;
         store)   store-is-gone "$@" ;;
+        find|grep|show|insert|edit|generate|rm|mv|cp)
+                 die "$category: a text or a secret? \`folio $category text …\` or \`folio $category secret …\`." ;;
+        check)   die "check: check what? \`folio check vars <file>…\`." ;;
         "")      echo    "Usage: folio <init|path|backup|restore|export|import|text|secret|vars|ls|exec|shell|completion|version|help> [args...]" >&2 ; return 1 ;;
         *)       echo    "folio: unknown command: $category" >&2 ; return 1 ;;
     esac
@@ -88,6 +93,7 @@ Version() {
 
 # folio help [command...]
 Help() {
+    if is-action-first "${1:-}" "${2:-}"; then set -- "$2" "$1" "${@:3}" ; fi
     case "$*" in
         "")                folio-help            ;;
         "init")      init-help      ;;
@@ -136,34 +142,35 @@ Commands:
   restore           Bring the store and its key back from a backup
   export            Copy some items into one locked file, with a key of its own
   import            Bring items from an export into the store (made if missing)
-  text ls           List texts
-  text find         Find texts by name
-  text grep         Find texts by value
-  text show         Show a text (its signature checked), or copy it to the clipboard
-  text insert       Add a text (plain, signed)
-  text edit         Edit a text in $EDITOR
-  text generate     Generate a random text
-  text rm           Remove a text
-  text mv           Rename or move a text
-  text cp           Copy a text
-  secret ls         List secrets
-  secret find       Find secrets by name
-  secret grep       Find secrets by value
-  secret show       Show a secret, or copy it to the clipboard
-  secret insert     Add a secret
-  secret edit       Edit a secret in $EDITOR
-  secret generate   Generate a random secret
-  secret rm         Remove a secret
-  secret mv         Rename or move a secret
-  secret cp         Copy a secret
-  vars check        Check vars files (for exec and shell --vars) for mistakes
   ls                List texts and secrets together
+  ls text           List texts
+  ls secret         List secrets
+  find text         Find texts by name
+  find secret       Find secrets by name
+  grep text         Find texts by value
+  grep secret       Find secrets by value
+  show text         Show a text (its signature checked), or copy it to the clipboard
+  show secret       Show a secret, or copy it to the clipboard
+  insert text       Add a text (plain, signed)
+  insert secret     Add a secret
+  edit text         Edit a text in $EDITOR
+  edit secret       Edit a secret in $EDITOR
+  generate text     Generate a random text
+  generate secret   Generate a random secret
+  rm text           Remove a text
+  rm secret         Remove a secret
+  mv text           Rename or move a text
+  mv secret         Rename or move a secret
+  cp text           Copy a text
+  cp secret         Copy a secret
+  check vars        Check vars files (for exec and shell --vars) for mistakes
   exec              Run a command with entries as environment variables
   shell             Start a shell with entries as environment variables
   completion        Print the Tab completion script for bash or zsh
   version           Print EnvFolio's version
   help [command]    Show help, e.g. `folio help init`
 
+The kind can also come first: `folio text show` is `folio show text`.
 The store is $FOLIO_STORE_DIR, default ~/.folio. EnvFolio warns when that folder is someone
 else's or open to other users.
 Details and examples: MANUAL.md
@@ -173,6 +180,20 @@ EOF
 #== Common Constants ===========================================================
 
 EXTRA_LINE=$'\n'
+
+# is-action-first <word> <word>: whether they are an action and then a kind (`folio show text`).
+# The code takes the kind first (`folio text show`), so Main and Help swap them; typed kind first,
+# a command still works.
+function is-action-first() {
+    case $2 in
+        text|secret) [[ " ls find grep show insert edit generate rm mv cp " == *" $1 "* ]] ;;
+        vars)        [[ $1 == check ]] ;;
+        *)           return 1 ;;
+    esac
+}
+
+# is-action <word>: whether it is an action of a kind (show, check, …).
+function is-action() { is-action-first "$1" text || is-action-first "$1" vars ; }
 
 #== Old commands ===============================================================
 
@@ -1684,7 +1705,7 @@ function verify-text() {
     local name=$1 file=$STORE_PATH/$1.txt store_key signer check
     check="Uncommitted change:  git -C $STORE_PATH diff -- $name.txt${EXTRA_LINE}"
     check+="Its history:         git -C $STORE_PATH log -p -- $name.txt${EXTRA_LINE}"
-    check+="If the text is right, sign it again:  folio text insert -f -m $name < $file"
+    check+="If the text is right, sign it again:  folio insert text -f -m $name < $file"
     [[ -f $file.sig ]] || die "'$name' has no signature.${EXTRA_LINE}$check"
     # VALIDSIG's last field is the signing key's primary fingerprint; gpg prints it for a good one only.
     store_key=$(gpg --list-keys --with-colons "$(head -n 1 "$STORE_PATH/.gpg-id")" 2>/dev/null \
@@ -1698,7 +1719,7 @@ function verify-text() {
 
 function text-ls-help() {
     cat <<'EOF'
-Usage: folio text ls [--flat] [--plain] [<subfolder>]
+Usage: folio ls text [--flat] [--plain] [<subfolder>]
 
 List the texts in the EnvFolio store as a tree — names only. Give a subfolder to list only what is
 under it.
@@ -1710,19 +1731,19 @@ Options:
 EOF
 }
 
-# folio text ls [<subfolder>]
-# As `secret ls`: `pass ls`, for the texts. Only a folder; a text is shown by `text show`.
+# folio ls text [<subfolder>]
+# As `ls secret`: `pass ls`, for the texts. Only a folder; a text is shown by `show text`.
 TextLs() {
     case ${1:-} in -h|--help) text-ls-help ; return 0 ;; esac
     require-store
-    list-store txt "Text Store" "text ls" "$@"
+    list-store txt "Text Store" "ls text" "$@"
 }
 
 # --- text find ----------------------------------------------------------------
 
 function text-find-help() {
     cat <<'EOF'
-Usage: folio text find [--plain] <part>...
+Usage: folio find text [--plain] <part>...
 
 List the texts whose names contain any of the parts (ignoring case), as a tree — names only.
 
@@ -1732,8 +1753,8 @@ Options:
 EOF
 }
 
-# folio text find [--plain] <part>...
-# As `secret find`: `pass find`, for the texts.
+# folio find text [--plain] <part>...
+# As `find secret`: `pass find`, for the texts.
 TextFind() {
     local arg terms
     local parts=()
@@ -1745,7 +1766,7 @@ TextFind() {
         esac
     done
     set -- ${parts[@]+"${parts[@]}"}
-    (( $# > 0 )) || die "Usage: folio text find [--plain] <part>..."
+    (( $# > 0 )) || die "Usage: folio find text [--plain] <part>..."
     require-store
     terms="*$(printf '%s*|*' "$@")"
     printf 'Search Terms: %s\n' "$*"
@@ -1756,7 +1777,7 @@ TextFind() {
 
 function text-grep-help() {
     cat <<'EOF'
-Usage: folio text grep [<grep-option>...] <pattern>
+Usage: folio grep text [<grep-option>...] <pattern>
 
 Print the lines of every text that match <pattern>, under each text's name.
 
@@ -1766,12 +1787,12 @@ Options:
 EOF
 }
 
-# folio text grep [<grep-option>...] <pattern>
+# folio grep text [<grep-option>...] <pattern>
 # As `pass grep`, over the texts: the same loop, reading each .txt instead of decrypting a .gpg.
 TextGrep() {
     local arg file found dir
     for arg in "$@"; do case $arg in --) break ;; -h|--help) text-grep-help ; return 0 ;; esac ; done
-    (( $# > 0 )) || die "Usage: folio text grep [<grep-option>...] <pattern>"
+    (( $# > 0 )) || die "Usage: folio grep text [<grep-option>...] <pattern>"
     require-store
     while IFS= read -r -d '' file; do
         found=$(grep --color=always "$@" < "$file") || continue
@@ -1786,7 +1807,7 @@ TextGrep() {
 
 function text-show-help() {
     cat <<'EOF'
-Usage: folio text show [-c|--clip[=<line>]] <name>
+Usage: folio show text [-c|--clip[=<line>]] <name>
 
 Show a text: check its signature, then print it. A text whose signature is missing, does not
 match, or is not by the store's key is not shown — it was changed outside EnvFolio.
@@ -1799,7 +1820,7 @@ Options:
 EOF
 }
 
-# folio text show [-c|--clip[=<line>]] <name>
+# folio show text [-c|--clip[=<line>]] <name>
 # Only a text that verifies is shown: signed (<name>.txt.sig) by the store's key, unchanged since.
 # --clip picks a line as `pass show --clip` does.
 TextShow() {
@@ -1812,30 +1833,30 @@ TextShow() {
             -c[0-9]*)   clip=${arg#-c} ;;
             --clip=*)   clip=${arg#*=} ;;
             --)         names+=("$@") ; break ;;
-            -*)         die "text show: unknown option: $arg" ;;
+            -*)         die "show text: unknown option: $arg" ;;
             *)          names+=("$arg") ;;
         esac
     done
-    (( ${#names[@]} == 1 )) || die "Usage: folio text show [-c|--clip[=<line>]] <name>"
+    (( ${#names[@]} == 1 )) || die "Usage: folio show text [-c|--clip[=<line>]] <name>"
     local name=${names[0]} line copy
-    [[ $name != -* && /$name/ != */../* ]] || die "text show: '$name' is not a valid name."
-    [[ -z $clip || $clip =~ ^[1-9][0-9]*$ ]] || die "text show: '$clip' is not a line number."
+    [[ $name != -* && /$name/ != */../* ]] || die "show text: '$name' is not a valid name."
+    [[ -z $clip || $clip =~ ^[1-9][0-9]*$ ]] || die "show text: '$clip' is not a line number."
     require-store
-    [[ -f $STORE_PATH/$name.txt ]] || die "text show: '$name' is not a text in the store."
+    [[ -f $STORE_PATH/$name.txt ]] || die "show text: '$name' is not a text in the store."
     verify-text "$name"
     [[ -n $clip ]] || { cat "$STORE_PATH/$name.txt" ; return ; }
 
     line=$(tail -n "+$clip" "$STORE_PATH/$name.txt" | head -n 1)
-    [[ -n $line ]] || die "text show: '$name' has no text at line $clip."
+    [[ -n $line ]] || die "show text: '$name' has no text at line $clip."
     # The same tool ensure-requirements checks for.
     if   [[ $(uname -s) == Darwin    ]]; then copy=(pbcopy)
     elif [[ -n ${WAYLAND_DISPLAY:-}  ]]; then copy=(wl-copy)
     elif [[ -n ${DISPLAY:-}          ]]; then copy=(xclip -selection clipboard)
-    else die "text show: no clipboard: no X11 or Wayland display."
+    else die "show text: no clipboard: no X11 or Wayland display."
     fi
     # stdout away: a clipboard tool that stays to serve the copy must not hold `$(folio ...)`
     # open.
-    printf '%s' "$line" | "${copy[@]}" >/dev/null || die "text show: could not copy to the clipboard."
+    printf '%s' "$line" | "${copy[@]}" >/dev/null || die "show text: could not copy to the clipboard."
     echo "Copied $name to clipboard. A text is not a secret: the clipboard is not cleared."
 }
 
@@ -1843,7 +1864,7 @@ TextShow() {
 
 function text-insert-help() {
     cat <<'EOF'
-Usage: folio text insert [-m|--multiline] [-f|--force] [-t|--text <text>] [--store-passphrase-fd <n>]
+Usage: folio insert text [-m|--multiline] [-f|--force] [-t|--text <text>] [--store-passphrase-fd <n>]
                          <name>
 
 Add a text to the EnvFolio store — kept plain, not encrypted — and sign it with the store's key
@@ -1861,7 +1882,7 @@ Options:
 EOF
 }
 
-# folio text insert [-m|--multiline] [-f|--force] [-t|--text <text>] <name>
+# folio insert text [-m|--multiline] [-f|--force] [-t|--text <text>] <name>
 # Like `pass insert`, but the text is written plain and signed, not encrypted.
 TextInsert() {
     local multiline=0 force=0 given=0 text="" names=() arg
@@ -1874,14 +1895,14 @@ TextInsert() {
             -t|--text)      (( $# > 0 )) || die "$arg needs a value." ; text=$1 ; given=1 ; shift ;;
             --text=*)       text=${arg#*=} ; given=1 ;;
             --)             names+=("$@") ; break ;;
-            -*)             die "text insert: unknown option: $arg" ;;
+            -*)             die "insert text: unknown option: $arg" ;;
             *)              names+=("$arg") ;;
         esac
     done
-    (( ${#names[@]} == 1 )) || die "Usage: folio text insert [-m|--multiline] [-f|--force] [-t|--text <text>] <name>"
+    (( ${#names[@]} == 1 )) || die "Usage: folio insert text [-m|--multiline] [-f|--force] [-t|--text <text>] <name>"
     local name=${names[0]} file content
     # As pass's check_sneaky_paths: no way out of the store.
-    [[ -n $name && $name != */ && /$name/ != */../* ]] || die "text insert: '$name' is not a valid name."
+    [[ -n $name && $name != */ && /$name/ != */../* ]] || die "insert text: '$name' is not a valid name."
     require-store
     file=$STORE_PATH/$name.txt
 
@@ -1896,7 +1917,7 @@ TextInsert() {
         content=$(cat ; printf .) ; content=${content%.}   # the dot keeps trailing newlines
     else
         [[ -t 0 ]] && printf 'Enter text for %s: ' "$name" >&2
-        IFS= read -r text || [[ -n $text ]] || die "text insert: no text given."
+        IFS= read -r text || [[ -n $text ]] || die "insert text: no text given."
         content=$text$'\n'
     fi
 
@@ -1907,7 +1928,7 @@ TextInsert() {
 
 function text-edit-help() {
     cat <<'EOF'
-Usage: folio text edit [--store-passphrase-fd <n>] <name>
+Usage: folio edit text [--store-passphrase-fd <n>] <name>
 
 Edit a text in $EDITOR (vi if unset), or add it if it is new; then sign and commit it. The text's
 signature is checked first: a text changed outside EnvFolio is not opened.
@@ -1920,14 +1941,14 @@ Options:
 EOF
 }
 
-# folio text edit <name>
+# folio edit text <name>
 # As `pass edit`: edit a copy, keep it only if it changed. A text is checked first, so editing never
 # signs a text that was changed outside EnvFolio.
 TextEdit() {
     case ${1:-} in -h|--help) text-edit-help ; return 0 ;; esac
-    (( $# == 1 )) || die "Usage: folio text edit <name>"
+    (( $# == 1 )) || die "Usage: folio edit text <name>"
     local name=${1%/} file tmp_dir tmp_file action=Add editor=${EDITOR:-vi}
-    [[ -n $name && $name != -* && /$name/ != */../* ]] || die "text edit: '$name' is not a valid name."
+    [[ -n $name && $name != -* && /$name/ != */../* ]] || die "edit text: '$name' is not a valid name."
     require-store
     file=$STORE_PATH/$name.txt
     tmp_dir=$(mktemp -d)
@@ -1951,11 +1972,11 @@ TextEdit() {
 
 function text-generate-help() {
     cat <<'EOF'
-Usage: folio text generate [-n|--no-symbols] [-i|--in-place|-f|--force] [--store-passphrase-fd <n>]
+Usage: folio generate text [-n|--no-symbols] [-i|--in-place|-f|--force] [--store-passphrase-fd <n>]
                            <name> [<length>]
 
 Generate a random text (25 characters unless <length> is given), save and sign it, and print it.
-It is a text, kept plain — for a random password, use `folio secret generate`.
+It is a text, kept plain — for a random password, use `folio generate secret`.
 
 Options:
   -n, --no-symbols    Letters and digits only.
@@ -1968,7 +1989,7 @@ Options:
 EOF
 }
 
-# folio text generate [-n|--no-symbols] [-i|--in-place|-f|--force] <name> [<length>]
+# folio generate text [-n|--no-symbols] [-i|--in-place|-f|--force] <name> [<length>]
 # As `pass generate`, for a text: the same characters and length, then saved and signed.
 TextGenerate() {
     local chars=${PASSWORD_STORE_CHARACTER_SET:-[:punct:][:alnum:]} inplace=0 force=0 args=() arg
@@ -1980,15 +2001,15 @@ TextGenerate() {
             -i|--in-place)   inplace=1 ;;
             -f|--force)      force=1 ;;
             --)              args+=("$@") ; break ;;
-            -*)              die "text generate: unknown option: $arg" ;;
+            -*)              die "generate text: unknown option: $arg" ;;
             *)               args+=("$arg") ;;
         esac
     done
     (( (${#args[@]} == 1 || ${#args[@]} == 2) && !(inplace && force) )) \
-        || die "Usage: folio text generate [-n|--no-symbols] [-i|--in-place|-f|--force] <name> [<length>]"
+        || die "Usage: folio generate text [-n|--no-symbols] [-i|--in-place|-f|--force] <name> [<length>]"
     local name=${args[0]} length=${args[1]:-${PASSWORD_STORE_GENERATED_LENGTH:-25}} file text
-    [[ -n $name && $name != */ && /$name/ != */../* ]] || die "text generate: '$name' is not a valid name."
-    [[ $length =~ ^[0-9]+$ && $length -gt 0 ]] || die "text generate: the length must be a number above 0."
+    [[ -n $name && $name != */ && /$name/ != */../* ]] || die "generate text: '$name' is not a valid name."
+    [[ $length =~ ^[0-9]+$ && $length -gt 0 ]] || die "generate text: the length must be a number above 0."
     require-store
     file=$STORE_PATH/$name.txt
 
@@ -1996,7 +2017,7 @@ TextGenerate() {
         confirm "An entry already exists for $name. Overwrite it?" || exit 1
     fi
     read -r -n "$length" text < <(LC_ALL=C tr -dc "$chars" < /dev/urandom 2>/dev/null)
-    [[ ${#text} -eq $length ]] || die "text generate: could not generate a text from /dev/urandom."
+    [[ ${#text} -eq $length ]] || die "generate text: could not generate a text from /dev/urandom."
 
     if (( inplace )) && [[ -f $file ]]; then
         # The rest of the text is kept, so it must be the one EnvFolio signed.
@@ -2013,7 +2034,7 @@ TextGenerate() {
 
 function text-rm-help() {
     cat <<'EOF'
-Usage: folio text rm [-r|--recursive] [-f|--force] <name>
+Usage: folio rm text [-r|--recursive] [-f|--force] <name>
 
 Remove a text, or every text in a folder with --recursive (secrets in it are kept). At a
 terminal, asks first unless --force; from a script or pipe, it does not ask.
@@ -2026,7 +2047,7 @@ Options:
 EOF
 }
 
-# folio text rm [-r|--recursive] [-f|--force] <name>
+# folio rm text [-r|--recursive] [-f|--force] <name>
 # As `pass rm`, for texts: <name> is a text, or — ending in / or not a text — a folder.
 TextRm() {
     local recursive=0 force=0 names=() arg
@@ -2037,22 +2058,22 @@ TextRm() {
             -r|--recursive) recursive=1 ;;
             -f|--force)     force=1 ;;
             --)             names+=("$@") ; break ;;
-            -*)             die "text rm: unknown option: $arg" ;;
+            -*)             die "rm text: unknown option: $arg" ;;
             *)              names+=("$arg") ;;
         esac
     done
-    (( ${#names[@]} == 1 )) || die "Usage: folio text rm [-r|--recursive] [-f|--force] <name>"
+    (( ${#names[@]} == 1 )) || die "Usage: folio rm text [-r|--recursive] [-f|--force] <name>"
     local name=${names[0]} path=${names[0]%/} folder=0
-    [[ -n $path && /$path/ != */../* ]] || die "text rm: '$name' is not a valid name."
+    [[ -n $path && /$path/ != */../* ]] || die "rm text: '$name' is not a valid name."
     require-store
 
     if [[ -f $STORE_PATH/$path.txt && ! ( $name == */ && -d $STORE_PATH/$path ) ]]; then
         folder=0
     elif [[ -d $STORE_PATH/$path ]]; then
-        (( recursive )) || die "text rm: '$path' is a folder; use -r to remove the texts in it."
+        (( recursive )) || die "rm text: '$path' is a folder; use -r to remove the texts in it."
         folder=1
     else
-        die "text rm: '$name' is not in the store."
+        die "rm text: '$name' is not in the store."
     fi
     (( force )) || [[ ! -t 0 ]] || confirm "Are you sure you would like to delete $path?" || exit 1
 
@@ -2073,7 +2094,7 @@ TextRm() {
 
 function text-mv-help() {
     cat <<'EOF'
-Usage: folio text mv [-f|--force] <old-name> <new-name>
+Usage: folio mv text [-f|--force] <old-name> <new-name>
 
 Rename or move a text, or every text in a folder (secrets in it stay where they are). At a
 terminal, asks before overwriting unless --force; from a script or pipe, it overwrites.
@@ -2086,7 +2107,7 @@ EOF
 
 function text-cp-help() {
     cat <<'EOF'
-Usage: folio text cp [-f|--force] <old-name> <new-name>
+Usage: folio cp text [-f|--force] <old-name> <new-name>
 
 Copy a text, or every text in a folder (secrets in it are not copied). At a terminal, asks before
 overwriting unless --force; from a script or pipe, it overwrites.
@@ -2111,14 +2132,14 @@ function text-copy-move() {
             -h|--help)  "text-$how-help" ; return 0 ;;
             -f|--force) force=1 ;;
             --)         names+=("$@") ; break ;;
-            -*)         die "text $how: unknown option: $arg" ;;
+            -*)         die "$how text: unknown option: $arg" ;;
             *)          names+=("$arg") ;;
         esac
     done
-    (( ${#names[@]} == 2 )) || die "Usage: folio text $how [-f|--force] <old-name> <new-name>"
+    (( ${#names[@]} == 2 )) || die "Usage: folio $how text [-f|--force] <old-name> <new-name>"
     local old=${names[0]} new=${names[1]} src=${names[0]%/} dest
-    [[ -n $src     && /$src/ != */../* ]] || die "text $how: '$old' is not a valid name."
-    [[ -n ${new%/} && /$new/ != */../* ]] || die "text $how: '$new' is not a valid name."
+    [[ -n $src     && /$src/ != */../* ]] || die "$how text: '$old' is not a valid name."
+    [[ -n ${new%/} && /$new/ != */../* ]] || die "$how text: '$new' is not a valid name."
     require-store
 
     # The names to carry over: each old one in from[], its new one in to[].
@@ -2136,9 +2157,9 @@ function text-copy-move() {
             rel=${file#"$STORE_PATH/$src"/} ; rel=${rel%.txt}
             from+=("$src/$rel") ; to+=("$dest/$rel")
         done < <(find "$STORE_PATH/$src" -type f -name '*.txt' -print0)
-        (( ${#from[@]} > 0 )) || die "text $how: '$old' holds no texts."
+        (( ${#from[@]} > 0 )) || die "$how text: '$old' holds no texts."
     else
-        die "text $how: '$old' is not in the store."
+        die "$how text: '$old' is not in the store."
     fi
 
     for (( i = 0; i < ${#from[@]}; i++ )); do
@@ -2190,7 +2211,7 @@ Secret() {
 
 function secret-ls-help() {
     cat <<'EOF'
-Usage: folio secret ls [--flat] [--plain] [<subfolder>]
+Usage: folio ls secret [--flat] [--plain] [<subfolder>]
 
 List the secrets in the EnvFolio store as a tree — names only, never their values.
 Give a subfolder to list only what is under it.
@@ -2202,18 +2223,18 @@ Options:
 EOF
 }
 
-# folio secret ls [<subfolder>]
+# folio ls secret [<subfolder>]
 # `pass ls`, minus the texts. Only a folder: given an entry, `pass ls` would print the secret.
 SecretLs() {
     case ${1:-} in -h|--help) secret-ls-help ; return 0 ;; esac
-    list-store gpg "Secret Store" "secret ls" "$@"
+    list-store gpg "Secret Store" "ls secret" "$@"
 }
 
 # --- secret find --------------------------------------------------------------
 
 function secret-find-help() {
     cat <<'EOF'
-Usage: folio secret find [--plain] <part>...
+Usage: folio find secret [--plain] <part>...
 
 List the secrets whose names contain any of the parts (ignoring case), as a tree — names only,
 never their values.
@@ -2224,7 +2245,7 @@ Options:
 EOF
 }
 
-# folio secret find [--plain] <part>...
+# folio find secret [--plain] <part>...
 # `pass find`, minus the texts.
 SecretFind() {
     local arg terms
@@ -2237,7 +2258,7 @@ SecretFind() {
         esac
     done
     set -- ${parts[@]+"${parts[@]}"}
-    (( $# > 0 )) || die "Usage: folio secret find [--plain] <part>..."
+    (( $# > 0 )) || die "Usage: folio find secret [--plain] <part>..."
     terms="*$(printf '%s*|*' "$@")"
     printf 'Search Terms: %s\n' "$*"
     store-tree gpg "$STORE_PATH" -P "${terms%|*}" --matchdirs --ignore-case
@@ -2247,7 +2268,7 @@ SecretFind() {
 
 function secret-grep-help() {
     cat <<'EOF'
-Usage: folio secret grep [--store-passphrase-fd <n>] [<grep-option>...] <pattern>
+Usage: folio grep secret [--store-passphrase-fd <n>] [<grep-option>...] <pattern>
 
 Decrypt every secret and print the lines that match <pattern>, under each secret's name.
 The matching lines are secret values: they are shown on screen.
@@ -2261,14 +2282,14 @@ Options:
 EOF
 }
 
-# folio secret grep [<grep-option>...] <pattern>
+# folio grep secret [<grep-option>...] <pattern>
 SecretGrep() { call-pass secret-grep-help grep "$@" ; }
 
 # --- secret show --------------------------------------------------------------
 
 function secret-show-help() {
     cat <<'EOF'
-Usage: folio secret show [-c|--clip[=<line>]] [--store-passphrase-fd <n>] <name>
+Usage: folio show secret [-c|--clip[=<line>]] [--store-passphrase-fd <n>] <name>
 
 Show a secret: decrypt it and print it. With --clip, copy its first line to the clipboard
 instead; the clipboard is cleared after 45 seconds (PASSWORD_STORE_CLIP_TIME).
@@ -2282,7 +2303,7 @@ Options:
 EOF
 }
 
-# folio secret show [-c|--clip[=<line>]] <name>
+# folio show secret [-c|--clip[=<line>]] <name>
 # Only an entry goes through: given a folder, `pass show` would list it.
 SecretShow() {
     local clip=() names=() arg
@@ -2291,14 +2312,14 @@ SecretShow() {
         case $arg in
             -h|--help)                   secret-show-help ; return 0 ;;
             -c|-c[0-9]*|--clip|--clip=*) clip=("$arg") ;;
-            -q*|--qrcode*)               die "secret show: --qrcode is not offered." ;;
+            -q*|--qrcode*)               die "show secret: --qrcode is not offered." ;;
             --)                          names+=("$@") ; break ;;
-            -*)                          die "secret show: unknown option: $arg" ;;
+            -*)                          die "show secret: unknown option: $arg" ;;
             *)                           names+=("$arg") ;;
         esac
     done
-    (( ${#names[@]} == 1 ))              || die "Usage: folio secret show [-c|--clip[=<line>]] <name>"
-    [[ -f $STORE_PATH/${names[0]}.gpg ]] || die "secret show: '${names[0]}' is not a secret in the store."
+    (( ${#names[@]} == 1 ))              || die "Usage: folio show secret [-c|--clip[=<line>]] <name>"
+    [[ -f $STORE_PATH/${names[0]}.gpg ]] || die "show secret: '${names[0]}' is not a secret in the store."
     pass show "${clip[@]}" -- "${names[0]}"
 }
 
@@ -2306,7 +2327,7 @@ SecretShow() {
 
 function secret-insert-help() {
     cat <<'EOF'
-Usage: folio secret insert [-m|--multiline] [-f|--force] <name>
+Usage: folio insert secret [-m|--multiline] [-f|--force] <name>
 
 Add a secret to the EnvFolio store, encrypted with the store's key. The secret is asked for twice,
 without echo. Piped in, give it twice (one per line), or use --multiline to take all of stdin.
@@ -2318,7 +2339,7 @@ Options:
 EOF
 }
 
-# folio secret insert [-m|--multiline] [-f|--force] <name>
+# folio insert secret [-m|--multiline] [-f|--force] <name>
 # Everything goes to `pass insert` — except --help, and --echo, which would show the secret.
 SecretInsert() {
     local arg
@@ -2326,7 +2347,7 @@ SecretInsert() {
         case $arg in
             --)                  break ;;
             -h|--help)           break ;;
-            --echo|-e*|-[!-]*e*) die "secret insert: --echo is not offered; it would show the secret." ;;
+            --echo|-e*|-[!-]*e*) die "insert secret: --echo is not offered; it would show the secret." ;;
         esac
     done
     call-pass secret-insert-help insert "$@"
@@ -2336,7 +2357,7 @@ SecretInsert() {
 
 function secret-edit-help() {
     cat <<'EOF'
-Usage: folio secret edit [--store-passphrase-fd <n>] <name>
+Usage: folio edit secret [--store-passphrase-fd <n>] <name>
 
 Edit a secret in $EDITOR, or add it if it is new. The secret is decrypted to a temporary file
 for the editor (in /dev/shm, a RAM disk, where there is one) and removed afterwards.
@@ -2349,14 +2370,14 @@ Options:
 EOF
 }
 
-# folio secret edit <name>
+# folio edit secret <name>
 SecretEdit() { call-pass secret-edit-help edit "$@" ; }
 
 # --- secret generate ----------------------------------------------------------
 
 function secret-generate-help() {
     cat <<'EOF'
-Usage: folio secret generate [-n|--no-symbols] [-c|--clip] [-i|--in-place|-f|--force]
+Usage: folio generate secret [-n|--no-symbols] [-c|--clip] [-i|--in-place|-f|--force]
                              [--store-passphrase-fd <n>] <name> [<length>]
 
 Generate a random secret (25 characters unless <length> is given), save it, and print it.
@@ -2376,7 +2397,7 @@ Options:
 EOF
 }
 
-# folio secret generate [-n|--no-symbols] [-c|--clip] [-i|--in-place|-f|--force] <name> [<length>]
+# folio generate secret [-n|--no-symbols] [-c|--clip] [-i|--in-place|-f|--force] <name> [<length>]
 # Everything goes to `pass generate` — except --help, and --qrcode (it needs qrencode).
 SecretGenerate() {
     local arg
@@ -2384,7 +2405,7 @@ SecretGenerate() {
         case $arg in
             --)                     break ;;
             -h|--help)              break ;;
-            --qrcode|-q*|-[!-]*q*)  die "secret generate: --qrcode is not offered." ;;
+            --qrcode|-q*|-[!-]*q*)  die "generate secret: --qrcode is not offered." ;;
         esac
     done
     call-pass secret-generate-help generate "$@"
@@ -2394,7 +2415,7 @@ SecretGenerate() {
 
 function secret-rm-help() {
     cat <<'EOF'
-Usage: folio secret rm [-r|--recursive] [-f|--force] <name>
+Usage: folio rm secret [-r|--recursive] [-f|--force] <name>
 
 Remove a secret, or a whole folder with --recursive. At a terminal, asks first unless --force;
 from a script or pipe, it does not ask.
@@ -2407,14 +2428,14 @@ Options:
 EOF
 }
 
-# folio secret rm [-r|--recursive] [-f|--force] <name>
+# folio rm secret [-r|--recursive] [-f|--force] <name>
 SecretRm() { call-pass secret-rm-help rm "$@" ; }
 
 # --- secret mv ----------------------------------------------------------------
 
 function secret-mv-help() {
     cat <<'EOF'
-Usage: folio secret mv [-f|--force] <old-name> <new-name>
+Usage: folio mv secret [-f|--force] <old-name> <new-name>
 
 Rename or move a secret or a folder. At a terminal, asks before overwriting unless --force;
 from a script or pipe, it overwrites.
@@ -2425,14 +2446,14 @@ Options:
 EOF
 }
 
-# folio secret mv [-f|--force] <old-name> <new-name>
+# folio mv secret [-f|--force] <old-name> <new-name>
 SecretMv() { call-pass secret-mv-help mv "$@" ; }
 
 # --- secret cp ----------------------------------------------------------------
 
 function secret-cp-help() {
     cat <<'EOF'
-Usage: folio secret cp [-f|--force] <old-name> <new-name>
+Usage: folio cp secret [-f|--force] <old-name> <new-name>
 
 Copy a secret or a folder. At a terminal, asks before overwriting unless --force;
 from a script or pipe, it overwrites.
@@ -2443,7 +2464,7 @@ Options:
 EOF
 }
 
-# folio secret cp [-f|--force] <old-name> <new-name>
+# folio cp secret [-f|--force] <old-name> <new-name>
 SecretCp() { call-pass secret-cp-help cp "$@" ; }
 
 #== Command: List ==============================================================
@@ -2456,6 +2477,7 @@ List the texts and secrets in the EnvFolio store together as a tree — names on
 Each name is marked (S) for a secret or (T) for a text — on a screen that draws emoji, 🔑 and 📄;
 secrets yellow and texts green (no colour with NO_COLOR set). Give a subfolder to list only what
 is under it.
+`folio ls text` and `folio ls secret` list one kind; a top folder named so: `folio ls text/`.
 
 Options:
       --flat          Full names, one per line, sorted, instead of a tree.
@@ -2465,7 +2487,7 @@ EOF
 }
 
 # folio ls [<subfolder>]
-# `secret ls` and `text ls` in one tree. Only a folder, as they are.
+# `ls secret` and `ls text` in one tree. Only a folder, as they are.
 Ls() {
     case ${1:-} in -h|--help) list-help ; return 0 ;; esac
     require-store
@@ -2501,7 +2523,7 @@ A vars file (--vars) sets variables, one line each:
                       An entry, or every entry under a folder, named by its path as above.
 Blank lines and # comments are left out; nothing in it runs. It is made after the entries,
 --all and --use, and they only feed it: ${NAME} sees them, but the command gets only what the
-vars files set. `folio vars check` checks one without a store; --names shows what it gives.
+vars files set. `folio check vars` checks one without a store; --names shows what it gives.
 
 Options:
   -s, --secrets       Also load secrets.
@@ -3152,7 +3174,7 @@ Vars() {
 
 function vars-check-help() {
     cat <<'EOF'
-Usage: folio vars check <file>...
+Usage: folio check vars <file>...
 
 Check vars files — the ones `folio exec --vars` and `folio shell --vars` read — for mistakes:
 every line is a VAR=<value> or an @{…} of its own, every ${…} and @{…} is whole, nothing would
@@ -3165,14 +3187,14 @@ Options:
 EOF
 }
 
-# folio vars check <file>...
+# folio check vars <file>...
 VarsCheck() {
     local file failed=0 count
     case ${1:-} in -h|--help) vars-check-help ; return 0 ;; esac
-    (( $# > 0 )) || die "Usage: folio vars check <file>..."
+    (( $# > 0 )) || die "Usage: folio check vars <file>..."
     for file in "$@"; do
         count=${#VARS_KIND[@]}
-        if read-vars-file "vars check" "$file" each; then
+        if read-vars-file "check vars" "$file" each; then
             echo "$file: fine ($(( ${#VARS_KIND[@]} - count )) line(s) to load)."
         else
             failed=1
@@ -3617,6 +3639,16 @@ function complete-words() {
     if [[ $key == text || $key == secret || $key == vars ]]; then
         if (( ${#words[@]} == 2 )); then complete-commands "$key" "$cur" ; return 0 ; fi
         key="$key ${words[1]}" at=2
+    elif (( ${#words[@]} == 2 )) && is-action "$key"; then
+        # The kinds it is for; ls also lists both together, so its folders too.
+        if [[ $key == ls ]]; then
+            { complete-commands ls "$cur" ; complete-entries all "$cur" folders | tail -n +2 ; }
+        else
+            complete-commands "$key" "$cur"
+        fi
+        return 0
+    elif is-action-first "$key" "${words[1]}"; then
+        key="${words[1]} $key" at=2
     fi
     kind=$(completion-args "$key") || { echo none ; return 0 ; }
     read -r -a kinds <<< "$kind"
@@ -3662,7 +3694,8 @@ function complete-words() {
         shell)           printf 'words\nbash\tFor bash\nzsh\tFor zsh\n' | complete-matching "$cur" ;;
         help)
             if (( count == 0 )); then complete-commands "" "$cur"
-            elif (( count == 1 )) && [[ $last == text || $last == secret || $last == vars ]]; then complete-commands "$last" "$cur"
+            elif (( count == 1 )) && { [[ $last == text || $last == secret || $last == vars ]] || is-action "$last" ; }; then
+                complete-commands "$last" "$cur"
             else echo none ; fi ;;
         *)               echo none ;;
     esac
@@ -3686,8 +3719,11 @@ function complete-namespaces() {
 # the rest. Fails for a command it does not know. Kinds: none, files, dirs, text, secret, entry
 # (either, or a folder of them), text-folder, secret-folder, entry-folder, shell, help.
 # A new command needs a line here: tests/completion/completion.bats fails until it has one.
+# <command> is the kind first (text show), as the code takes it; show text is taken as that too.
 function completion-args() {
-    case $1 in
+    local command=$1
+    is-action-first "${command%% *}" "${command#* }" && command="${command#* } ${command%% *}"
+    case $command in
         init|path|version)            echo none ;;
         backup|restore)               echo files ;;
         import)                       echo "files none..." ;;
@@ -3721,30 +3757,50 @@ function complete-matching() {
     return 0
 }
 
-# complete-commands <group> <cur>: the commands in `folio help` (with <group>, text, secret or vars: its
-# own ones) that start with <cur>, each with its description from there.
+# complete-commands <group> <cur>: the commands in `folio help` that start with <cur>, each with its
+# description from there. A kind's command (show text) is offered a word at a time: without
+# <group>, its action (show, described "text|secret"); with <group>, what goes after it — a
+# kind's actions (text: ls, find, …) or an action's kinds (show: text, secret).
 function complete-commands() {
-    local group=$1 line name desc seen=" " in=0
+    local group=$1 line name desc in=0 i k kind action kinds seen=" " singles=" " kind_actions=" "
+    local -a names=() descs=()
+    while IFS= read -r line; do
+        [[ $line == Commands:* ]] && { in=1 ; continue ; }
+        [[ -z $line ]] && in=0
+        [[ $in == 1 && $line == "  "[a-z]* ]] || continue
+        line=${line#  } name=${line%%  *}
+        desc=${line#"$name"} ; desc=${desc#"${desc%%[! ]*}"}
+        name=${name%% \[*}                                       # "help [command]"
+        if [[ $name == *" "* ]]; then
+            # Kept as <kind>:<action>, whichever way round `folio help` lists it.
+            is-action-first "${name%% *}" "${name#* }" && name="${name#* } ${name%% *}"
+            name=${name/ /:} ; kind_actions+="$name "
+        else
+            singles+="$name "
+        fi
+        names+=("$name") descs+=("$desc")
+    done < <(folio-help)
     {
         echo words
-        while IFS= read -r line; do
-            [[ $line == Commands:* ]] && { in=1 ; continue ; }
-            [[ -z $line ]] && in=0
-            [[ $in == 1 && $line == "  "[a-z]* ]] || continue
-            line=${line#  } name=${line%%  *}
-            desc=${line#"$name"} ; desc=${desc#"${desc%%[! ]*}"}
-            name=${name%% \[*}                                   # "help [command]"
-            if [[ -n $group ]]; then
-                [[ $name == "$group "* ]] || continue
-                name=${name#"$group "}
-            elif [[ $name == *" "* ]]; then
-                name=${name%% *} desc="Work with ${name}s"         # text ls … -> text
-                [[ $name == vars ]] && desc="Work with vars files (exec and shell --vars)"
+        for (( i = 0; i < ${#names[@]}; i++ )); do
+            name=${names[i]} desc=${descs[i]}
+            if [[ $name == *:* ]]; then
+                kind=${name%:*} action=${name#*:}
+                if   [[ $group == "$kind" ]];   then name=$action
+                elif [[ $group == "$action" ]]; then name=$kind
+                elif [[ -n $group || $singles == *" $action "* ]]; then continue   # ls: its own line
+                else
+                    name=$action kinds=""
+                    for k in text secret vars; do [[ $kind_actions == *" $k:$action "* ]] && kinds+="${kinds:+|}$k" ; done
+                    desc=$kinds
+                fi
+            elif [[ -n $group ]]; then
+                continue
             fi
             [[ $seen == *" $name "* ]] && continue
             seen+="$name "
             printf '%s\t%s\n' "$name" "$desc"
-        done < <(folio-help)
+        done
     } | complete-matching "$2"
 }
 
@@ -3944,8 +4000,8 @@ function call-pass() {
     pass "$command" "$@"
 }
 
-# list-store <gpg|txt|all> <title> <command> [--flat] [--plain] [<subfolder>]: what `folio ls`, `text ls`
-# and `secret ls` share — the tree under <title>, or with --flat, the full names one per line.
+# list-store <gpg|txt|all> <title> <command> [--flat] [--plain] [<subfolder>]: what `folio ls`, `ls text`
+# and `ls secret` share — the tree under <title>, or with --flat, the full names one per line.
 function list-store() {
     local kind=$1 title=$2 command=$3 flat=0 args=() arg ; shift 3
     for arg in "$@"; do
@@ -4102,7 +4158,7 @@ function ensure-requirements() {
 function info() { printf '%s\n' "$*"; }
 function die()  { printf 'folio: %s\n' "$*" >&2; exit 1; }
 # set-gpg-tty: gpg's pinentry asks for a passphrase on the terminal GPG_TTY names, else on the one
-# gpg's stdin is — none when stdin is a pipe or a file (`echo x | folio text insert x`, a
+# gpg's stdin is — none when stdin is a pipe or a file (`echo x | folio insert text x`, a
 # --file-passphrase-stdin), and then gpg stops with "Inappropriate ioctl for device". So, unless it
 # is set already, point it at the terminal stderr (else stdout) is. Its own name (/dev/pts/3), not
 # /dev/tty: gpg-agent, which opens it, has no terminal of its own. Only the terminal's path: no

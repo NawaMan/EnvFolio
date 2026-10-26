@@ -27,6 +27,12 @@ folio help init
 
 The usage and options of `folio init` — the same as `folio init --help`.
 
+### The action first, then the kind
+
+A command on items names the action, then the kind: `folio show text web/user`,
+`folio insert secret web/github`, `folio check vars prod.vars`. Typed the other way round
+(`folio text show web/user`), it works the same.
+
 ---
 
 ## Passphrase prompts in a window (GUI)
@@ -76,7 +82,7 @@ echo test | gpg --clearsign > /dev/null
 ```
 
 The window should open and ask for your key's passphrase. Then any EnvFolio command that needs it
-(`folio secret show`, `folio text insert`, `folio export`, …) asks the same way.
+(`folio show secret`, `folio insert text`, `folio export`, …) asks the same way.
 
 ### Good to know
 
@@ -88,7 +94,7 @@ The window should open and ask for your key's passphrase. Then any EnvFolio comm
   there is no display.
 - A terminal pinentry asks on the terminal in `GPG_TTY`. When it is not set, EnvFolio sets it to
   the terminal it runs in, so gpg can still ask when stdin is a pipe or a file
-  (`echo x | folio text insert x`, `--file-passphrase-stdin`). A `GPG_TTY` you set is kept, and
+  (`echo x | folio insert text x`, `--file-passphrase-stdin`). A `GPG_TTY` you set is kept, and
   the command `exec` and `shell` run gets the one you had, if any.
 - If the window opens on the wrong screen, or never opens and gpg waits, the agent was started
   from another session: run `gpg-connect-agent updatestartuptty /bye` in the current one.
@@ -103,7 +109,7 @@ EnvFolio deals with two kinds of passphrase, and each has its own options:
 
 | Option | Gives | Taken by |
 | --- | --- | --- |
-| `--store-passphrase-fd <n>` | The store key's passphrase: to read secrets, sign texts, and copy the key into a backup. | `init` (a new key), `backup`, `export`, `import`, `exec`, `shell`, `text insert`, `text edit`, `text generate`, `secret show`, `secret grep`, `secret edit`, `secret generate` |
+| `--store-passphrase-fd <n>` | The store key's passphrase: to read secrets, sign texts, and copy the key into a backup. | `init` (a new key), `backup`, `export`, `import`, `exec`, `shell`, `insert text`, `edit text`, `generate text`, `show secret`, `grep secret`, `edit secret`, `generate secret` |
 | `--store-passphrase-stdin` | The same, from stdin. | `init` only |
 | `--file-passphrase-fd <n>` | A file's own passphrase: an encrypted backup, or an export. | `backup --encrypt`, `restore`, `export`, `import`, `exec --from`, `shell --from` |
 | `--file-passphrase-stdin` | The same, from stdin. | `backup --encrypt`, `restore`, `export`, `import` |
@@ -112,7 +118,7 @@ Each reads the **first line** of file descriptor `<n>` (or stdin) and refuses an
 shell opens the file on `<n>`; the option takes the number, not a path:
 
 ```bash
-folio secret show --store-passphrase-fd 3 web/github 3< ~/.store-pass
+folio show secret --store-passphrase-fd 3 web/github 3< ~/.store-pass
 folio export --secrets --store-passphrase-fd 3 --file-passphrase-fd 4 web 3< ~/.store-pass 4< ~/.export-pass
 ```
 
@@ -583,7 +589,7 @@ Takes `aws/key` and `web/user`; one already in the store stays as it is.
 
 Lists the texts and secrets in the EnvFolio store together as one tree: names only, never values.
 Each name is marked **(S)** for a secret or **(T)** for a text. A name that is both shows twice.
-On a screen, secrets are yellow and texts green — the colours in `text ls`, `secret ls` and `find`
+On a screen, secrets are yellow and texts green — the colours in `ls text`, `ls secret` and `find`
 too — and, when the terminal draws emoji, marked 🔑 and 📄 instead: `🔑github`. folio asks the
 terminal (it writes 🔑, asks where the cursor went, and wipes the line), so a terminal that cannot
 draw them keeps (S)/(T), as does `TERM=linux` or a locale that is not UTF-8. Sent to a pipe or a
@@ -601,7 +607,9 @@ folio ls [--flat] [--plain] [<subfolder>]
 | `--plain` | Mark secrets (S) and texts (T), with no colour, even on a screen. |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
-Only a folder can be listed. It needs a ready store (`folio init`).
+Only a folder can be listed. It needs a ready store (`folio init`). `folio ls text` and
+`folio ls secret` list one kind (below); a folder named `text` or `secret` at the top is listed
+with its `/`: `folio ls text/`.
 
 ### List everything
 
@@ -643,14 +651,14 @@ One full name per line, ready for `grep` or a script.
 
 ---
 
-## `folio text ls`
+## `folio ls text`
 
-Lists the texts in the EnvFolio store as a tree: names only. It mirrors `folio secret ls`: the same
+Lists the texts in the EnvFolio store as a tree: names only. It mirrors `folio ls secret`: the same
 tree as `pass ls`, but with the texts instead of the secrets. Signatures (`.txt.sig`) and folders
 holding no texts are left out.
 
 ```
-folio text ls [--flat] [--plain] [<subfolder>]
+folio ls text [--flat] [--plain] [<subfolder>]
 ```
 
 | Option | Meaning |
@@ -659,13 +667,13 @@ folio text ls [--flat] [--plain] [<subfolder>]
 | `--plain` | No colour, even on a screen. |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
-Only a folder can be listed; a text's own name is refused (use `folio text show` once it exists).
+Only a folder can be listed; a text's own name is refused (use `folio show text` once it exists).
 It needs a ready store (`folio init`).
 
 ### List every text
 
 ```bash
-folio text ls
+folio ls text
 ```
 
 ```
@@ -679,20 +687,20 @@ Text Store
 ### List one folder
 
 ```bash
-folio text ls web
+folio ls text web
 ```
 
 Lists only what is under `web`.
 
 ---
 
-## `folio text find`
+## `folio find text`
 
 Lists the texts whose names contain any of the given parts, ignoring case, as a tree: names
-only. It mirrors `folio secret find`: `pass find`, for the texts.
+only. It mirrors `folio find secret`: `pass find`, for the texts.
 
 ```
-folio text find [--plain] <part>...
+folio find text [--plain] <part>...
 ```
 
 | Option | Meaning |
@@ -705,7 +713,7 @@ It needs a ready store (`folio init`).
 ### Find by name
 
 ```bash
-folio text find home
+folio find text home
 ```
 
 ```
@@ -716,14 +724,14 @@ Search Terms: home
 
 ---
 
-## `folio text grep`
+## `folio grep text`
 
 Prints the lines of every text that match, each under its text's name. It mirrors
-`folio secret grep`: the same loop as `pass grep`, reading the plain texts instead of decrypting
-secrets. Secrets are never searched. Signatures are not checked here (`folio text show` will).
+`folio grep secret`: the same loop as `pass grep`, reading the plain texts instead of decrypting
+secrets. Secrets are never searched. Signatures are not checked here (`folio show text` will).
 
 ```
-folio text grep [<grep-option>...] <pattern>
+folio grep text [<grep-option>...] <pattern>
 ```
 
 | Option | Meaning |
@@ -736,7 +744,7 @@ It needs a ready store (`folio init`).
 ### Find by value
 
 ```bash
-folio text grep jane
+folio grep text jane
 ```
 
 ```
@@ -746,13 +754,13 @@ jane
 
 ---
 
-## `folio text show`
+## `folio show text`
 
 Prints a text, after checking its signature: `<name>.txt.sig` must be there, match the text, and
 be by the store's key (the first key in `.gpg-id`). Checking needs no passphrase.
 
 ```
-folio text show [-c|--clip[=<line>]] <name>
+folio show text [-c|--clip[=<line>]] <name>
 ```
 
 | Option | Meaning |
@@ -760,13 +768,13 @@ folio text show [-c|--clip[=<line>]] <name>
 | `-c`, `--clip[=<line>]` | Copy the first line, or line `<line>`, to the clipboard and print nothing. **The clipboard is not cleared** afterwards: a text is not a secret. Needs `pbcopy`, `wl-copy` or `xclip`. |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
-Only a text can be shown; a folder or a secret is refused (use `folio secret show` for secrets).
+Only a text can be shown; a folder or a secret is refused (use `folio show secret` for secrets).
 It needs a ready store (`folio init`).
 
 ### Show a text
 
 ```bash
-folio text show web/user
+folio show text web/user
 ```
 
 Prints the text exactly as it was inserted.
@@ -774,7 +782,7 @@ Prints the text exactly as it was inserted.
 ### Copy to the clipboard
 
 ```bash
-folio text show -c web/user
+folio show text -c web/user
 ```
 
 Copies the text's first line, once its signature is checked. `--clip=2` copies line 2 instead.
@@ -786,12 +794,12 @@ is not printed and the command fails. The message says how to see what changed
 (`git diff` / `git log -p` in the store), and how to sign it again if the text is right:
 
 ```bash
-folio text insert -f -m web/user < ~/.folio/web/user.txt
+folio insert text -f -m web/user < ~/.folio/web/user.txt
 ```
 
 ---
 
-## `folio text insert`
+## `folio insert text`
 
 Adds a text to the EnvFolio store. A text is **not a secret**: it is kept plain, not encrypted, as
 `<name>.txt` in the same folders as the secrets, and signed with the store's key as
@@ -799,7 +807,7 @@ Adds a text to the EnvFolio store. A text is **not a secret**: it is kept plain,
 Signing uses the key's secret half, so gpg may ask for its passphrase.
 
 ```
-folio text insert [-m|--multiline] [-f|--force] [-t|--text <text>] [--store-passphrase-fd <n>] <name>
+folio insert text [-m|--multiline] [-f|--force] [-t|--text <text>] [--store-passphrase-fd <n>] <name>
 ```
 
 | Option | Meaning |
@@ -818,13 +826,13 @@ history). If signing fails, nothing is saved and the old text stays. It needs a 
 ### Give the text
 
 ```bash
-folio text insert -t "https://example.com" web/home
+folio insert text -t "https://example.com" web/home
 ```
 
 ### Type a text
 
 ```bash
-folio text insert web/user
+folio insert text web/user
 ```
 
 Asks for the text once, and shows it as you type.
@@ -834,7 +842,7 @@ Asks for the text once, and shows it as you type.
 ### Pipe a text in
 
 ```bash
-whoami | folio text insert web/user
+whoami | folio insert text web/user
 ```
 
 Only the first line is the text. For more, use `-m` below.
@@ -842,21 +850,21 @@ Only the first line is the text. For more, use `-m` below.
 ### Several lines
 
 ```bash
-folio text insert -m notes/todo < todo.txt
+folio insert text -m notes/todo < todo.txt
 ```
 
 All of stdin is the text, kept exactly.
 
 ---
 
-## `folio text edit`
+## `folio edit text`
 
 Opens a text in `$EDITOR` (`vi` if unset), or adds it if it is new, then signs and commits it. It
-mirrors `folio secret edit` (`pass edit`): you edit a temporary copy, removed afterwards, and the
+mirrors `folio edit secret` (`pass edit`): you edit a temporary copy, removed afterwards, and the
 text is saved only if you changed it. Signing may ask for the key's passphrase.
 
 ```
-folio text edit [--store-passphrase-fd <n>] <name>
+folio edit text [--store-passphrase-fd <n>] <name>
 ```
 
 | Option | Meaning |
@@ -864,28 +872,28 @@ folio text edit [--store-passphrase-fd <n>] <name>
 | `--store-passphrase-fd <n>` | The store key's passphrase (to sign), from the first line of file descriptor `<n>`, instead of gpg's prompt. See [Passphrases without a prompt](#passphrases-without-a-prompt). |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
-**The signature is checked first**, as `folio text show` does: a text changed outside EnvFolio is not
+**The signature is checked first**, as `folio show text` does: a text changed outside EnvFolio is not
 opened, so editing never signs it by accident. If you save it unchanged, it fails with *Text
 unchanged.* and nothing is committed. It needs a ready store (`folio init`).
 
 ### Edit a text
 
 ```bash
-folio text edit web/user
+folio edit text web/user
 ```
 
 *Interactive — checked by hand, and tested with a stand-in editor.*
 
 ---
 
-## `folio text generate`
+## `folio generate text`
 
 Generates a random text, saves, signs and commits it, then prints it. It mirrors
-`folio secret generate` (`pass generate`): the same characters and default length. It is kept
+`folio generate secret` (`pass generate`): the same characters and default length. It is kept
 plain, so use it for things like IDs, not passwords. Signing may ask for the key's passphrase.
 
 ```
-folio text generate [-n|--no-symbols] [-i|--in-place|-f|--force] [--store-passphrase-fd <n>] <name> [<length>]
+folio generate text [-n|--no-symbols] [-i|--in-place|-f|--force] [--store-passphrase-fd <n>] <name> [<length>]
 ```
 
 | Option | Meaning |
@@ -903,21 +911,21 @@ pipe, it is overwritten (the old one stays in the git history).
 ### Generate a text
 
 ```bash
-folio text generate -n id/session 12
+folio generate text -n id/session 12
 ```
 
 Saves a 12-character text of letters and digits as `id/session`, and prints it.
 
 ---
 
-## `folio text rm`
+## `folio rm text`
 
 Removes a text, or every text in a folder with `-r`, and commits the removal. The text stays in
-the store's git history. It mirrors `folio secret rm` (`pass rm`), but **only texts are removed**:
+the store's git history. It mirrors `folio rm secret` (`pass rm`), but **only texts are removed**:
 `-r` on a folder keeps the secrets in it.
 
 ```
-folio text rm [-r|--recursive] [-f|--force] <name>
+folio rm text [-r|--recursive] [-f|--force] <name>
 ```
 
 | Option | Meaning |
@@ -932,19 +940,19 @@ text and a folder means the text; end it with `/` for the folder.
 ### Remove a text
 
 ```bash
-folio text rm -f mail/work
+folio rm text -f mail/work
 ```
 
 ---
 
-## `folio text mv`
+## `folio mv text`
 
 Renames or moves a text, or every text in a folder, and commits the change. It mirrors
-`folio secret mv` (`pass mv`), but **only texts are moved**: secrets in a moved folder stay where
+`folio mv secret` (`pass mv`), but **only texts are moved**: secrets in a moved folder stay where
 they are. A signature covers the text, not its name, so a moved text still verifies.
 
 ```
-folio text mv [-f|--force] <old-name> <new-name>
+folio mv text [-f|--force] <old-name> <new-name>
 ```
 
 | Option | Meaning |
@@ -958,18 +966,18 @@ it. At a terminal, it asks before overwriting. **From a script or pipe, it overw
 ### Rename a text
 
 ```bash
-folio text mv web/user web/login
+folio mv text web/user web/login
 ```
 
 ---
 
-## `folio text cp`
+## `folio cp text`
 
-Copies a text, or every text in a folder, and commits the copy. It mirrors `folio secret cp`
+Copies a text, or every text in a folder, and commits the copy. It mirrors `folio cp secret`
 (`pass cp`), but **only texts are copied**.
 
 ```
-folio text cp [-f|--force] <old-name> <new-name>
+folio cp text [-f|--force] <old-name> <new-name>
 ```
 
 | Option | Meaning |
@@ -982,18 +990,18 @@ At a terminal, it asks before overwriting. **From a script or pipe, it overwrite
 ### Copy a text
 
 ```bash
-folio text cp web/user web/user-copy
+folio cp text web/user web/user-copy
 ```
 
 ---
 
-## `folio secret ls`
+## `folio ls secret`
 
 Lists the secrets in the EnvFolio store as a tree: names only, never their values. It is `pass ls`
 without the texts: the same tree, minus `*.txt`/`*.txt.sig` files and folders holding only texts.
 
 ```
-folio secret ls [--flat] [--plain] [<subfolder>]
+folio ls secret [--flat] [--plain] [<subfolder>]
 ```
 
 | Option | Meaning |
@@ -1003,13 +1011,13 @@ folio secret ls [--flat] [--plain] [<subfolder>]
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
 Only a folder can be listed. A secret's own name is refused, because `pass ls <name>` would
-print the secret (use `folio secret show` once it exists). The same goes for `pass`'s other
+print the secret (use `folio show secret` once it exists). The same goes for `pass`'s other
 options, such as `-c`. It needs a ready store (`folio init`).
 
 ### List every secret
 
 ```bash
-folio secret ls
+folio ls secret
 ```
 
 ```
@@ -1022,20 +1030,20 @@ Secret Store
 ### List one folder
 
 ```bash
-folio secret ls web
+folio ls secret web
 ```
 
 Lists only what is under `web`.
 
 ---
 
-## `folio secret find`
+## `folio find secret`
 
 Lists the secrets whose names contain any of the given parts, ignoring case, as a tree. It shows
 names only, never values. It is `pass find` without the texts.
 
 ```
-folio secret find [--plain] <part>...
+folio find secret [--plain] <part>...
 ```
 
 | Option | Meaning |
@@ -1046,7 +1054,7 @@ folio secret find [--plain] <part>...
 ### Find by name
 
 ```bash
-folio secret find git
+folio find secret git
 ```
 
 ```
@@ -1057,14 +1065,14 @@ Search Terms: git
 
 ---
 
-## `folio secret grep`
+## `folio grep secret`
 
 Decrypts every secret and prints the lines that match, each under its secret's name. **The
 matching lines are secret values, and they are shown on screen.** It is `pass grep`, so gpg may
 ask for the key's passphrase.
 
 ```
-folio secret grep [--store-passphrase-fd <n>] [<grep-option>...] <pattern>
+folio grep secret [--store-passphrase-fd <n>] [<grep-option>...] <pattern>
 ```
 
 | Option | Meaning |
@@ -1076,7 +1084,7 @@ folio secret grep [--store-passphrase-fd <n>] [<grep-option>...] <pattern>
 ### Find by value
 
 ```bash
-folio secret grep jane
+folio grep secret jane
 ```
 
 ```
@@ -1086,13 +1094,13 @@ user: jane
 
 ---
 
-## `folio secret show`
+## `folio show secret`
 
 Decrypts a secret and prints it, or copies it to the clipboard. It is `pass show`, so gpg may
 ask for the key's passphrase.
 
 ```
-folio secret show [-c|--clip[=<line>]] [--store-passphrase-fd <n>] <name>
+folio show secret [-c|--clip[=<line>]] [--store-passphrase-fd <n>] <name>
 ```
 
 | Option | Meaning |
@@ -1102,13 +1110,13 @@ folio secret show [-c|--clip[=<line>]] [--store-passphrase-fd <n>] <name>
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
 Only a secret can be shown. A folder is refused, because `pass show <folder>` would list it
-(use `folio secret ls`). `pass`'s `-q`/`--qrcode` is not offered. It needs a ready store
+(use `folio ls secret`). `pass`'s `-q`/`--qrcode` is not offered. It needs a ready store
 (`folio init`).
 
 ### Print a secret
 
 ```bash
-folio secret show web/github
+folio show secret web/github
 ```
 
 Prints the whole secret, every line of it.
@@ -1116,7 +1124,7 @@ Prints the whole secret, every line of it.
 ### Copy to the clipboard
 
 ```bash
-folio secret show -c web/github
+folio show secret -c web/github
 ```
 
 Copies the secret's first line without showing it, and says when the clipboard will clear. As in
@@ -1125,20 +1133,20 @@ Copies the secret's first line without showing it, and says when the clipboard w
 ### Copy one line
 
 ```bash
-folio secret show --clip=2 note
+folio show secret --clip=2 note
 ```
 
 Copies only line 2 of `note`, e.g. the user name kept under a password.
 
 ---
 
-## `folio secret insert`
+## `folio insert secret`
 
 Adds a secret to the EnvFolio store, encrypted with the store's key, and commits it to the store's git
 history. It is a plain `pass` entry, so `PASSWORD_STORE_DIR=~/.folio pass show <name>` reads it too.
 
 ```
-folio secret insert [-m|--multiline] [-f|--force] <name>
+folio insert secret [-m|--multiline] [-f|--force] <name>
 ```
 
 | Option | Meaning |
@@ -1154,7 +1162,7 @@ as an argument. It needs a ready store (`folio init`).
 ### Type a secret
 
 ```bash
-folio secret insert web/github
+folio insert secret web/github
 ```
 
 Asks for the secret twice, without echo. If `web/github` already exists, asks before overwriting it.
@@ -1164,7 +1172,7 @@ Asks for the secret twice, without echo. If `web/github` already exists, asks be
 ### Pipe a secret in
 
 ```bash
-printf '%s\n%s\n' "$value" "$value" | folio secret insert web/github
+printf '%s\n%s\n' "$value" "$value" | folio insert secret web/github
 ```
 
 As at the prompt, the secret is given twice — one per line — and must match. Nothing is asked:
@@ -1174,14 +1182,14 @@ history). For a single copy, use `-m` below.
 ### Several lines
 
 ```bash
-folio secret insert -m note < note.txt
+folio insert secret -m note < note.txt
 ```
 
 All of stdin is the secret.
 
 ---
 
-## `folio secret edit`
+## `folio edit secret`
 
 Opens a secret in `$EDITOR` (vi if unset), or adds it if it is new, and commits the change. It
 is `pass edit`: the secret is decrypted to a temporary file for the editor, in `/dev/shm` (a RAM
@@ -1189,7 +1197,7 @@ disk) where there is one, and removed afterwards. Without `/dev/shm` (macOS), `p
 asks first. If you save it unchanged, nothing is committed.
 
 ```
-folio secret edit [--store-passphrase-fd <n>] <name>
+folio edit secret [--store-passphrase-fd <n>] <name>
 ```
 
 | Option | Meaning |
@@ -1200,20 +1208,20 @@ folio secret edit [--store-passphrase-fd <n>] <name>
 ### Edit a secret
 
 ```bash
-folio secret edit web/github
+folio edit secret web/github
 ```
 
 *Interactive — checked by hand, and tested with a stand-in editor.*
 
 ---
 
-## `folio secret generate`
+## `folio generate secret`
 
 Generates a random secret, saves and commits it, then prints it, or copies it with `-c`. It is
 `pass generate`.
 
 ```
-folio secret generate [-n|--no-symbols] [-c|--clip] [-i|--in-place|-f|--force] [--store-passphrase-fd <n>] <name> [<length>]
+folio generate secret [-n|--no-symbols] [-c|--clip] [-i|--in-place|-f|--force] [--store-passphrase-fd <n>] <name> [<length>]
 ```
 
 | Option | Meaning |
@@ -1232,7 +1240,7 @@ terminal.** From a script or pipe, it is overwritten (the old one stays in the g
 ### Generate a secret
 
 ```bash
-folio secret generate -n api 12
+folio generate secret -n api 12
 ```
 
 Saves a 12-character secret of letters and digits as `api`, and prints it.
@@ -1240,20 +1248,20 @@ Saves a 12-character secret of letters and digits as `api`, and prints it.
 ### Copy to the clipboard
 
 ```bash
-folio secret generate -c api
+folio generate secret -c api
 ```
 
 Saves the new secret and copies it without showing it.
 
 ---
 
-## `folio secret rm`
+## `folio rm secret`
 
 Removes a secret, or a folder with `-r`, and commits the removal. The secret stays in the store's
 git history. It is `pass rm`.
 
 ```
-folio secret rm [-r|--recursive] [-f|--force] <name>
+folio rm secret [-r|--recursive] [-f|--force] <name>
 ```
 
 | Option | Meaning |
@@ -1263,23 +1271,23 @@ folio secret rm [-r|--recursive] [-f|--force] <name>
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
 At a terminal it asks first. **From a script or pipe, it does not ask.** On a folder, `-r` removes
-everything in it, **texts included** — `pass` acts on the whole folder. (`folio text rm -r` removes
+everything in it, **texts included** — `pass` acts on the whole folder. (`folio rm text -r` removes
 only the texts.)
 
 ### Remove a secret
 
 ```bash
-folio secret rm -f mail/work
+folio rm secret -f mail/work
 ```
 
 ---
 
-## `folio secret mv`
+## `folio mv secret`
 
 Renames or moves a secret or a folder, and commits the change. It is `pass mv`.
 
 ```
-folio secret mv [-f|--force] <old-name> <new-name>
+folio mv secret [-f|--force] <old-name> <new-name>
 ```
 
 | Option | Meaning |
@@ -1294,17 +1302,17 @@ in it, **texts included**.
 ### Rename a secret
 
 ```bash
-folio secret mv web/github web/gh
+folio mv secret web/github web/gh
 ```
 
 ---
 
-## `folio secret cp`
+## `folio cp secret`
 
 Copies a secret or a folder, and commits the copy. It is `pass cp`.
 
 ```
-folio secret cp [-f|--force] <old-name> <new-name>
+folio cp secret [-f|--force] <old-name> <new-name>
 ```
 
 | Option | Meaning |
@@ -1318,7 +1326,7 @@ copied with everything in it, **texts included**.
 ### Copy a secret
 
 ```bash
-folio secret cp web/github web/github-copy
+folio cp secret web/github web/github-copy
 ```
 
 ---
@@ -1485,7 +1493,7 @@ command would not get the value; load it under another name with `VAR=<name>`.
 
 **Values.** An entry's whole content, with trailing newlines removed (as `$(pass show x)` gives
 it), so multi-line values such as keys come through whole. Each text's signature is checked as
-in `folio text show`; each secret is decrypted with `pass show`, so gpg may ask for the key's
+in `folio show text`; each secret is decrypted with `pass show`, so gpg may ask for the key's
 passphrase. **All or nothing:** every entry is checked and read before the command starts; if one
 fails, the command does not run and EnvFolio exits 1.
 
@@ -1723,7 +1731,7 @@ folio exec --secrets --vars server.vars server --use @app2/@staging -- ./deploy.
 
 The file holds where the values are, not the values, so it can be committed with the project it is
 for. A constant is in it as written: put a secret in the store, and `@{…}` it — never a constant.
-`folio vars check` checks a file's writing without a store (in CI, say); `--names` shows where each
+`folio check vars` checks a file's writing without a store (in CI, say); `--names` shows where each
 variable would come from. To run the command elsewhere, `folio export --vars` takes just the items
 the file names — see [The items a vars file names](#the-items-a-vars-file-names).
 
@@ -1837,7 +1845,7 @@ it prints counts them as `from vars files`.
 
 ---
 
-## `folio vars check`
+## `folio check vars`
 
 Checks vars files — the ones `folio exec --vars` and `folio shell --vars` read — for mistakes in
 how they are written: every line a `VAR=<value>` or an `@{…}` of its own, every `${…}` and `@{…}`
@@ -1846,7 +1854,7 @@ editor's save hook. Whether the entries are there, and where each variable would
 what [`folio exec --names --vars`](#check-a-vars-file-against-the-store-first) shows.
 
 ```
-folio vars check <file>...
+folio check vars <file>...
 ```
 
 | Option | Meaning |
@@ -1856,7 +1864,7 @@ folio vars check <file>...
 ### A good file
 
 ```bash
-folio vars check prod-deploy.vars
+folio check vars prod-deploy.vars
 ```
 
 ```
@@ -1866,13 +1874,13 @@ prod-deploy.vars: fine (5 line(s) to load).
 ### Every mistake, with its line
 
 ```bash
-folio vars check bad.vars
+folio check vars bad.vars
 ```
 
 ```
-folio: vars check: bad.vars:2: not VAR=<value>, nor @{<entry>}: 'BAD LINE'.
-folio: vars check: bad.vars:3: a $ starts ${NAME} or ${NAME:-<fallback>}; write \$ for a $ itself.
-folio: vars check: bad.vars:5: ${HOME is not closed with }.
+folio: check vars: bad.vars:2: not VAR=<value>, nor @{<entry>}: 'BAD LINE'.
+folio: check vars: bad.vars:3: a $ starts ${NAME} or ${NAME:-<fallback>}; write \$ for a $ itself.
+folio: check vars: bad.vars:5: ${HOME is not closed with }.
 ```
 
 Every mistake in every file is shown, not only the first; it fails when there is any.
@@ -1893,9 +1901,10 @@ folio completion bash|zsh
 
 What Tab offers:
 
-- the commands, and `text`'s and `secret`'s own ones (zsh shows what each does);
+- the commands, and after an action the kinds it is for (`show` → `text`, `secret`; zsh shows what
+  each does);
 - a command's options, from its help — so only the ones it takes;
-- text names after `text …`, secret names after `secret …`, both after `export`, `exec` and
+- text names after `… text`, secret names after `… secret`, both after `export`, `exec` and
   `shell` (also after `VAR=`), folders only after `ls`. A level at a time: `web/` first, then what
   is in it; a folder that is the only choice opens at once;
 - file names where a file goes (`restore`, `import`, `backup`, `--from`, `-o`, `--to`), and after
@@ -1913,8 +1922,8 @@ eval "$(folio completion bash)"
 ```
 
 ```
-$ folio secret sh<Tab>          → folio secret show
-$ folio secret show web/<Tab>
+$ folio show s<Tab>             → folio show secret
+$ folio show secret web/<Tab>
 web/github   web/gitlab   web/deep/
 ```
 

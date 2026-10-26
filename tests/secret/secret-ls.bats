@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 
-# folio secret ls, through the real ./folio, against a throwaway GPG home and store.
+# folio ls secret, through the real ./folio, against a throwaway GPG home and store.
 
 setup() {
     SANDBOX=$(mktemp -d)
@@ -26,13 +26,13 @@ teardown() {
 make-store() {
     gpg --batch --passphrase '' --quick-generate-key "Test User <test@example.com>" default default never 2>/dev/null
     "$FOLIO" init --key test@example.com < /dev/null >/dev/null 2>&1
-    "$FOLIO" secret insert -m web/github < <(printf 's3cr3t\n') >/dev/null
-    "$FOLIO" secret insert -m note       < <(printf 'n0te\n')   >/dev/null
+    "$FOLIO" insert secret -m web/github < <(printf 's3cr3t\n') >/dev/null
+    "$FOLIO" insert secret -m note       < <(printf 'n0te\n')   >/dev/null
 }
 
-@test "MANUAL: secret ls — list every secret" {
+@test "MANUAL: ls secret — list every secret" {
     make-store
-    run "$FOLIO" secret ls
+    run "$FOLIO" ls secret
     [ "$status" -eq 0 ]
     [ "${lines[0]}" = "Secret Store" ]
     [[ $output != *"Password Store"* ]] || false
@@ -41,55 +41,55 @@ make-store() {
     [[ $output != *"s3cr3t"* && $output != *"n0te"* ]] || false
 }
 
-@test "MANUAL: secret ls — list one folder" {
+@test "MANUAL: ls secret — list one folder" {
     make-store
-    run "$FOLIO" secret ls web
+    run "$FOLIO" ls secret web
     [ "$status" -eq 0 ]
     [[ $output == *"github"* ]] || false
     [[ $output != *"note"* && $output != *"s3cr3t"* ]] || false
 }
 
-@test "secret ls: a secret's name is refused, its value never shown" {
+@test "ls secret: a secret's name is refused, its value never shown" {
     make-store
-    run "$FOLIO" secret ls web/github
+    run "$FOLIO" ls secret web/github
     [ "$status" -eq 1 ]
     [[ $output == *"not a folder"* ]] || false
     [[ $output != *"s3cr3t"* ]] || false
 }
 
-@test "secret ls: pass's options are refused" {
+@test "ls secret: pass's options are refused" {
     make-store
     local arg
     for arg in -c --clip --qrcode -q; do
-        run "$FOLIO" secret ls "$arg" web/github
+        run "$FOLIO" ls secret "$arg" web/github
         [ "$status" -eq 1 ]
         [[ $output != *"s3cr3t"* ]] || false
-        run "$FOLIO" secret ls "$arg"
+        run "$FOLIO" ls secret "$arg"
         [ "$status" -eq 1 ]
         [[ $output == *"not a folder"* ]] || false
     done
 }
 
-@test "secret ls: an unknown folder fails" {
+@test "ls secret: an unknown folder fails" {
     make-store
-    run "$FOLIO" secret ls nope
+    run "$FOLIO" ls secret nope
     [ "$status" -eq 1 ]
     [[ $output == *"'nope' is not a folder"* ]] || false
 }
 
-@test "secret ls: no store fails and creates nothing" {
-    run "$FOLIO" secret ls
+@test "ls secret: no store fails and creates nothing" {
+    run "$FOLIO" ls secret
     [ "$status" -eq 1 ]
     [[ $output == *"No ready EnvFolio store"*"folio init"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 
-@test "secret ls --help: works without a store" {
-    run "$FOLIO" secret ls --help
+@test "ls secret --help: works without a store" {
+    run "$FOLIO" ls secret --help
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio secret ls"* ]] || false
+    [[ $output == *"Usage: folio ls secret"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
-    run "$FOLIO" help secret ls
+    run "$FOLIO" help ls secret
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio secret ls"* ]] || false
+    [[ $output == *"Usage: folio ls secret"* ]] || false
 }
