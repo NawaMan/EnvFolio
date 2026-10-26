@@ -37,7 +37,7 @@ teardown() {
 # in-pane <command>: run <command> (a line for bash) in a tmux pane — a terminal — kept open after.
 in-pane() {
     printf '%s\nsleep 60\n' "$1" > "$SANDBOX/pane.sh"
-    tmux -S "$TMUX_SOCKET" new-session -d -s confirm -x 120 -y 30 "bash '$SANDBOX/pane.sh'"
+    tmux -S "$TMUX_SOCKET" -u new-session -d -s confirm -x 120 -y 30 "bash '$SANDBOX/pane.sh'"
 }
 
 pane() { tmux -S "$TMUX_SOCKET" capture-pane -p -t confirm ; }
@@ -51,9 +51,10 @@ wait-until() {
 on-pane() { [[ $(pane) == *"$1"* ]] ; }
 
 @test "exec --confirm: shows the names, asks on the terminal; yes runs the command with the values" {
-    in-pane "'$FOLIO' exec --confirm --secrets gh -- sh -c 'echo \"\$GH_TOKEN|\$GH_USER\" > \"$SANDBOX/got\"'"
+    # A UTF-8 locale: tmux draws emoji, so the names are marked 🔑/📄 (folio asks the terminal).
+    in-pane "LC_ALL=C.UTF-8 TERM=xterm-256color NO_COLOR=1 '$FOLIO' exec --confirm --secrets gh -- sh -c 'echo \"\$GH_TOKEN|\$GH_USER\" > \"$SANDBOX/got\"'"
     wait-until on-pane "folio exec: run sh? [y/N]"
-    [[ $(pane) == *"GH_TOKEN <- gh/token(S)"*"GH_USER  <- gh/user(T)"* ]] || false
+    [[ $(pane) == *"GH_TOKEN <- 🔑gh/token"*"GH_USER  <- 📄gh/user"* ]] || false
     [ ! -e "$SANDBOX/got" ]
     tmux -S "$TMUX_SOCKET" send-keys -t confirm y Enter
     wait-until test -s "$SANDBOX/got"
