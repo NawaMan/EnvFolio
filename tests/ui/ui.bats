@@ -99,3 +99,45 @@ teardown() {
     [ "${lines[3]}" = "│ a longer line │" ]
     [ "${lines[4]}" = "╰───────────────╯" ]
 }
+
+# fake-tty [answer]: TTY_PATH becomes a named pipe in the sandbox, held open on fd 5 so opening it
+# does not wait. No program answers on it: what is there is [answer], then what folio writes.
+fake-tty() {
+    rm -f "$SANDBOX/tty" && mkfifo "$SANDBOX/tty"
+    exec 5<>"$SANDBOX/tty"
+    [[ -z ${1:-} ]] || printf '%s' "$1" >&5
+    TTY_PATH="$SANDBOX/tty"
+}
+
+@test "terminal-draws-emoji: yes only when the cursor went to column 3" {
+    fake-tty $'\e[12;3R'
+    run --separate-stderr terminal-draws-emoji
+    exec 5>&-
+    [ "$status" -eq 0 ]
+    fake-tty $'\e[12;2R'    # drawn one cell wide
+    run --separate-stderr terminal-draws-emoji
+    exec 5>&-
+    [ "$status" -eq 1 ]
+    fake-tty $'\e[12;5R'    # drawn as its bytes
+    run --separate-stderr terminal-draws-emoji
+    exec 5>&-
+    [ "$status" -eq 1 ]
+}
+
+@test "terminal-draws-emoji: a terminal that never answers is a no, after about a second, quietly" {
+    fake-tty
+    local start=$SECONDS
+    run --separate-stderr terminal-draws-emoji
+    exec 5>&-
+    [ "$status" -ne 0 ]
+    [ -z "$stderr" ]
+    (( SECONDS - start <= 3 )) || false
+}
+
+@test "terminal-draws-emoji: no terminal is a no, quietly" {
+    TTY_PATH="$SANDBOX/no-tty"
+    run --separate-stderr terminal-draws-emoji
+    [ "$status" -ne 0 ]
+    [ -z "$stderr" ]
+    [ ! -e "$SANDBOX/no-tty" ]
+}
