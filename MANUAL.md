@@ -1340,7 +1340,8 @@ decide what it gets, and each can be written by someone else:
    --use](#peel-a-namespace-with---use)): `--use @app2/@prod` puts every item under it where it
    would be without `@app2/@prod/`. Where two layers give the same item, **the last one wins**.
 3. **The variables.** Each layer's items, named by their path ([Variable
-   names](#folio-exec)); `VAR=<name>` picks a name, and wins.
+   names](#folio-exec)); then each `VAR=<name>` picks from what the layers made (or the store),
+   and wins. The item keeps its own variable too.
 4. **The vars files**, when given — **after** every layer. Each line is made in order: `${NAME}`
    sees the earlier lines, then the layers' variables, then your environment; `@{name}` reads the
    source through any `--use`. **The command gets only what the vars files set**: the layers only
@@ -1453,14 +1454,20 @@ would be `GH_@WORK_TOKEN`, which is not a valid variable name (see below).
 
 The variables are worked out in this order:
 
-1. **Explicit names first.** Each `VAR=<name>` takes its entry and claims it. `VAR` must be a
-   valid name (`^[A-Za-z_][A-Za-z0-9_]*$`), or the command is refused. If two of them give the
-   same `VAR`, the later one wins.
-2. **Then the rule.** The other selections — entries, `--all` and `--use` — are expanded in the
-   order typed, skipping claimed entries. A later selection overrides an earlier one; this is how
-   a namespace layers over shared entries.
-3. **Explicit names last**, so they win over any derived variable of the same name, wherever
-   they were typed.
+1. **The selections.** Entries, folders, `--all` and `--use` are expanded in the order typed. A
+   later selection overrides an earlier one; this is how a namespace layers over shared entries.
+2. **The rule.** Every item they selected is named by its path, as above. Where two selections
+   give the same variable, the later one wins. Two items of **one** selection giving the same
+   variable are refused, as which one won would be down to the order of their names:
+   `--use @app2` holding both `@prod/server/user` and `@staging/server/user` (both `SERVER_USER`)
+   says to pick one, e.g. `--use @app2/@prod`; `a/b` and `a_b` in one folder say to give one a
+   `VAR=<name>` or rename it.
+3. **Explicit names last.** Each `VAR=<name>`, wherever it is typed, takes `<name>` as it is
+   after the selections — with `--use`, `server/user` can be one it peeled — or, if they did not
+   select it, from the store. It wins over any variable of the same name. Its item keeps the
+   variable the rule gave it, if any: `PORT=server/port server` gives both `PORT` and
+   `SERVER_PORT`. `VAR` must be a valid name (`^[A-Za-z_][A-Za-z0-9_]*$`), or the command is
+   refused. If two of them give the same `VAR`, the later one wins.
 
 A derived name that is still not a valid variable name (e.g. `GH_API-KEY`, or one starting with a
 digit) is **left out with a warning** that names the entry and suggests `VAR=<name>`. A selection
@@ -1631,8 +1638,9 @@ folio exec: run gh? [y/N]
 folio exec --secrets GITHUB_TOKEN=gh/token gh -- ./deploy
 ```
 
-Sets `GITHUB_TOKEN` from `gh/token`, and loads the rest of `gh/` by the rule. `gh/token` is
-claimed, so it does not also give `GH_TOKEN`.
+Sets `GITHUB_TOKEN` from `gh/token`, and loads all of `gh/` by the rule — `gh/token` also as
+`GH_TOKEN`. Without `gh`, only `GITHUB_TOKEN` is set: a `VAR=<name>` on its own selects nothing
+else.
 
 ### From a vars file
 

@@ -2489,7 +2489,8 @@ the variable's name. Otherwise the name comes from the entry's path: a top folde
 is server/user, everywhere, also to a vars file. Only namespaces peel, from the front:
 --use @app2/@prod. The entries, --all and --use are taken in the order typed, and the last one
 wins: in `server --use @prod`, @prod's server/user wins; in `--use @prod server`, server's does.
-VAR=<name> overrides them all.
+Then each VAR=<name>, wherever it is typed, takes <name> as it is after them (else from the
+store) and overrides them all; its entry keeps its own variable too.
 
 A vars file (--vars) sets variables, one line each:
   VAR=<value>         Text, with ${NAME} (from the environment) and @{name} (a text or secret)
@@ -2768,12 +2769,13 @@ function load-entries() {
 
 # resolve-entries <exec|shell> <secrets:0|1> <entry>...
 # Work out which variable gets which entry, into EXEC_VARS[i] <- EXEC_FILES[i] (<name>.txt or
-# <name>.gpg), over what is there already. VAR=<name> entries first: they claim their entry, and
-# are applied last so they win. Every other entry is named by its path, a later one overriding an
-# earlier one. An empty entry is the store's root (--all): every entry outside the @namespaces.
-# --use=<@namespace>: every entry under it, named by its path with the namespace peeled off.
+# <name>.gpg), over what is there already. Every entry but VAR=<name> is named by its path, a
+# later one overriding an earlier one. An empty entry is the store's root (--all): every entry
+# outside the @namespaces. --use=<@namespace>: every entry under it, named by its path with the
+# namespace peeled off. Then each VAR=<name>, over them all: <name> as it is after every other
+# entry (with a --use, in the view), or else in the store. Its entry keeps its own name too.
 function resolve-entries() {
-    local how=$1 secrets=$2 entry var name claimed=" " exp_vars=() exp_files=() i
+    local how=$1 secrets=$2 entry var name exp_vars=() exp_files=() i
     shift 2
     for entry in "$@"; do
         [[ $entry == --use=* ]] && continue
@@ -2781,30 +2783,35 @@ function resolve-entries() {
         var=${entry%%=*} name=${entry#*=}
         [[ $var =~ $VAR_NAME_PATTERN ]] || die "$how: '$var' is not a valid variable name."
         entry-file "$how" "$secrets" "$name" || die "$how: '$name' is not a text or secret in $ENTRIES_IN."
-        exp_vars+=("$var") ; exp_files+=("$ENTRY_FILE") ; claimed+="$ENTRY_FILE "
+        exp_vars+=("$var") ; exp_files+=("$ENTRY_FILE")
     done
 
     # With a view (--use), an entry or folder takes the items it has in the source — not the ones
     # a --use laid there too — each read from the view, where the last layer laid it.
     local source=${VIEW_SOURCE:-$STORE_PATH}
     for entry in "$@"; do
-        if [[ $entry == --use=* ]]; then add-used "$how" "$secrets" "${entry#--use=}" "$claimed" ; continue ; fi
+        if [[ $entry == --use=* ]]; then
+            start-selection "--use ${entry#--use=}" "${entry#--use=}"
+            add-used "$how" "$secrets" "${entry#--use=}"
+            continue
+        fi
         is-explicit "$entry" && continue
+        if [[ -n $entry ]]; then start-selection "'$entry'" ; else start-selection "--all" ; fi
         if [[ -n $entry ]] && STORE_PATH=$source entry-file "$how" "$secrets" "$entry"; then
-            [[ $claimed == *" $ENTRY_FILE "* ]] || add-derived "$how" "$ENTRY_FILE"
+            add-derived "$how" "$ENTRY_FILE"
         else
-            STORE_PATH=$source add-folder "$how" "$secrets" "$entry" "$claimed"
+            STORE_PATH=$source add-folder "$how" "$secrets" "$entry"
         fi
     done
 
     for (( i = 0; i < ${#exp_vars[@]}; i++ )); do set-entry-var "${exp_vars[i]}" "${exp_files[i]}" ; done
 }
 
-# add-folder <how> <secrets> <folder> <claimed>: every entry under <folder>, named by its path,
-# leaving out the ones in <claimed> (" <file> <file> "). An empty <folder> is the store's root
-# (--all): every entry outside the @namespaces. Stop when there is none to load.
+# add-folder <how> <secrets> <folder>: every entry under <folder>, named by its path. An empty
+# <folder> is the store's root (--all): every entry outside the @namespaces. Stop when there is
+# none to load.
 function add-folder() {
-    local how=$1 secrets=$2 entry=$3 claimed=$4 file found=0
+    local how=$1 secrets=$2 entry=$3 file found=0
     if [[ -z $entry || -d $STORE_PATH/$entry ]]; then
         while IFS= read -r file; do
             file=${file#"$STORE_PATH"/}
@@ -2813,7 +2820,7 @@ function add-folder() {
                 die "$how: '${file%.gpg}' is both a text and a secret; give one VAR=<name> or rename one."
             fi
             found=1
-            [[ $claimed == *" $file "* ]] || add-derived "$how" "$file"
+            add-derived "$how" "$file"
         done < <(entries-under "$secrets" "$STORE_PATH${entry:+/${entry%/}}")
         (( secrets )) || note-skipped-secrets "$how" "$entry" "$found"
     fi
@@ -2823,17 +2830,16 @@ function add-folder() {
     fi
 }
 
-# add-used <how> <secrets> <@namespace> <claimed>: every entry used-items finds, named by its
-# path in the view (@prod/server/user -> server/user -> SERVER_USER), leaving out the ones in
-# <claimed>.
+# add-used <how> <secrets> <@namespace>: every entry used-items finds, named by its path in the
+# view (@prod/server/user -> server/user -> SERVER_USER).
 function add-used() {
-    local how=$1 secrets=$2 prefix=$3 claimed=$4 file
+    local how=$1 secrets=$2 prefix=$3 file
     used-items "$how" "$secrets" "$prefix"
     for file in "${USED_ITEMS[@]}"; do
         if [[ $file == *.gpg && -f $VIEW_SOURCE/$prefix/${file%.gpg}.txt ]]; then
             die "$how: '$prefix/${file%.gpg}' is both a text and a secret; give one VAR=<name> or rename one."
         fi
-        [[ $claimed == *" $file "* ]] || add-derived "$how" "$file"
+        add-derived "$how" "$file"
     done
 }
 
@@ -2859,7 +2865,8 @@ function used-items() {
 # source (the store, or an opened export), its .git left out, with each layer laid over it in the
 # order given, the last one winning:
 #   ""                 (--all) every item outside the @namespaces, where it is
-#   <name>, <folder>   the item, or every item under the folder, where it is (VAR=<name> too)
+#   <name>, <folder>   the item, or every item under the folder, where it is
+# A VAR=<name> is no layer: it picks from the view once it is made (resolve-entries).
 #   --use=<@ns>[/<@ns>]...  every item under it, with that much peeled off the front of its path
 # A folder's or a --use's secrets are laid only with <secrets>, as only then are they taken: so
 # one left out never covers a text of the same name.
@@ -2892,7 +2899,7 @@ function make-view() {
             done < <(entries-under "$secrets" "$VIEW_SOURCE/$prefix")
             continue
         fi
-        is-explicit "$entry" && entry=${entry#*=}
+        is-explicit "$entry" && continue
         name=${entry%/}
         if [[ -n $name && ( -f $VIEW_SOURCE/$name.txt || -f $VIEW_SOURCE/$name.gpg ) ]]; then
             lay-in-view "$view" "$name" "$name"
@@ -3041,11 +3048,55 @@ function add-derived() {
     [[ $var == @*/* ]] && var=${var#*/}
     var=$(printf '%s' "${var//\//_}" | LC_ALL=C tr '[:lower:]' '[:upper:]')
     if [[ $var =~ $VAR_NAME_PATTERN ]]; then
+        check-selection-var "$how" "$var" "$name"
         set-entry-var "$var" "$2"
+    elif [[ $name == @*/@?*/* ]]; then
+        note-nested-namespace "$how" "$name"
     else
         printf "folio %s: warning: '%s' would be %s, not a valid variable name; left out. Use VAR=%s.\n" \
             "$how" "$name" "$var" "$name" >&2
     fi
+}
+
+# One selection — an entry, a folder, --all, a --use, a vars file's @{…} line — at a time: what it
+# is called in messages, the namespace a --use peeled off (else ""), and the variables it set so far
+# (SELECTION_VARS[i] from the item SELECTION_NAMES[i]). A later selection may set a variable an
+# earlier one did — that is how they layer — but within one, two items for one variable is a
+# clash: which one won would be down to the order of their names, not to anything typed.
+SELECTION="" SELECTION_PREFIX="" SELECTION_VARS=() SELECTION_NAMES=()
+
+# start-selection <label> [<@namespace>]: the items from here on are this selection's.
+function start-selection() {
+    SELECTION=$1 SELECTION_PREFIX=${2:-} SELECTION_VARS=() SELECTION_NAMES=()
+}
+
+# check-selection-var <how> <var> <name>: die when an item before <name> in this selection set
+# <var> too; else note that <name> set it.
+function check-selection-var() {
+    local how=$1 var=$2 name=$3 i other hint="give one VAR=<name>, or rename one"
+    for (( i = 0; i < ${#SELECTION_VARS[@]}; i++ )); do
+        [[ ${SELECTION_VARS[i]} == "$var" ]] || continue
+        other=${SELECTION_NAMES[i]}
+        # Under a --use, two deeper namespaces (@prod/…, @staging/…): peel one of them too.
+        if [[ -n $SELECTION_PREFIX && $other == @*/* && $name == @*/* ]]; then
+            hint="pick one, e.g. --use $SELECTION_PREFIX/${other%%/*}"
+        fi
+        die "$how: $SELECTION: '${SELECTION_PREFIX:+$SELECTION_PREFIX/}$other' and '${SELECTION_PREFIX:+$SELECTION_PREFIX/}$name' would both be $var; $hint."
+    done
+    SELECTION_VARS+=("$var") SELECTION_NAMES+=("$name")
+}
+
+# note-nested-namespace <how> <name>: <name> is under a namespace inside a namespace
+# (@app2/@prod/server/user would be @PROD_SERVER_USER), so it is left out. Say so once for that
+# namespace — the @folders <name> starts with — and that --use loads what is under it.
+NOTED_NAMESPACES=" "
+function note-nested-namespace() {
+    local how=$1 rest=${2%/*}/ prefix=""
+    while [[ $rest == @?*/* ]]; do prefix+=${prefix:+/}${rest%%/*} rest=${rest#*/} ; done
+    [[ $NOTED_NAMESPACES != *" $prefix "* ]] || return 0
+    NOTED_NAMESPACES+="$prefix "
+    printf "folio %s: '%s' is a namespace inside a namespace: its entries are left out. To load them, add --use %s.\n" \
+        "$how" "$prefix" "$prefix" >&2
 }
 
 # set-entry-var <var> <file>: <var> gets <file>, replacing what it had.
@@ -3389,7 +3440,8 @@ function apply-vars() {
     for (( i = 0; i < ${#VARS_KIND[@]}; i++ )); do
         name=${VARS_NAME[i]}
         if [[ ${VARS_KIND[i]} == entries ]]; then
-            if [[ $name == */\* ]]; then add-folder "$how" "$secrets" "${name%/\*}" " "
+            start-selection "${VARS_AT[i]}"
+            if [[ $name == */\* ]]; then add-folder "$how" "$secrets" "${name%/\*}"
             else entry-file "$how" "$secrets" "$name" ; add-derived "$how" "$ENTRY_FILE"
             fi
             continue
