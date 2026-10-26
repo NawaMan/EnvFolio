@@ -32,17 +32,17 @@ teardown() {
 make-store() {
     gpg --batch --passphrase '' --quick-generate-key "Test User <test@example.com>" default default never 2>/dev/null
     "$FOLIO" init --key test@example.com < /dev/null >/dev/null 2>&1
-    "$FOLIO" text insert -t "Test User"        git/user_name   < /dev/null
-    "$FOLIO" text insert -t "test@example.com" git/email       < /dev/null
-    "$FOLIO" text insert -t "shared-user"      gh/user         < /dev/null
-    "$FOLIO" text insert -t "nawa-user"        "@nawa/gh/user" < /dev/null
-    "$FOLIO" text insert -t "ok value"         odd/ok          < /dev/null
-    "$FOLIO" text insert -t "dash value"       odd/api-key     < /dev/null
-    "$FOLIO" text insert -t "both text"        both/x          < /dev/null
-    "$FOLIO" text insert -m multi/cert < <(printf 'line one\nline two\n') >/dev/null
-    "$FOLIO" secret insert -m gh/token         < <(printf 'shared-token\n') >/dev/null
-    "$FOLIO" secret insert -m "@nawa/gh/token" < <(printf 'nawa-token\n')   >/dev/null
-    "$FOLIO" secret insert -m both/x           < <(printf 'both secret\n')  >/dev/null
+    "$FOLIO" insert text -t "Test User"        git/user_name   < /dev/null
+    "$FOLIO" insert text -t "test@example.com" git/email       < /dev/null
+    "$FOLIO" insert text -t "shared-user"      gh/user         < /dev/null
+    "$FOLIO" insert text -t "nawa-user"        "@nawa/gh/user" < /dev/null
+    "$FOLIO" insert text -t "ok value"         odd/ok          < /dev/null
+    "$FOLIO" insert text -t "dash value"       odd/api-key     < /dev/null
+    "$FOLIO" insert text -t "both text"        both/x          < /dev/null
+    "$FOLIO" insert text -m multi/cert < <(printf 'line one\nline two\n') >/dev/null
+    "$FOLIO" insert secret -m gh/token         < <(printf 'shared-token\n') >/dev/null
+    "$FOLIO" insert secret -m "@nawa/gh/token" < <(printf 'nawa-token\n')   >/dev/null
+    "$FOLIO" insert secret -m both/x           < <(printf 'both secret\n')  >/dev/null
 }
 
 @test "MANUAL: exec — run a command with texts" {
@@ -72,11 +72,11 @@ make-store() {
 
 @test "exec: only a top @folder is a namespace; deeper, @ is ordinary; [ ] is ordinary" {
     make-store
-    "$FOLIO" text insert -t "a-domain" @usera/domain/user < /dev/null
-    "$FOLIO" text insert -t "a-server" @usera/server/user < /dev/null
-    "$FOLIO" text insert -t "b-server" @userb/server/user < /dev/null
-    "$FOLIO" text insert -t "work"     sv/@work/user      < /dev/null
-    "$FOLIO" text insert -t "bracket"  "[x]y/z"           < /dev/null
+    "$FOLIO" insert text -t "a-domain" @usera/domain/user < /dev/null
+    "$FOLIO" insert text -t "a-server" @usera/server/user < /dev/null
+    "$FOLIO" insert text -t "b-server" @userb/server/user < /dev/null
+    "$FOLIO" insert text -t "work"     sv/@work/user      < /dev/null
+    "$FOLIO" insert text -t "bracket"  "[x]y/z"           < /dev/null
     run "$FOLIO" exec @usera -- sh -c 'echo "$DOMAIN_USER|$SERVER_USER"'
     [ "$status" -eq 0 ]
     [ "$output" = "a-domain|a-server" ]
@@ -112,7 +112,7 @@ make-store() {
     run "$FOLIO" exec --all --secrets -- touch "$SANDBOX/ran"
     [ "$status" -eq 1 ]
     [ ! -e "$SANDBOX/ran" ]
-    "$FOLIO" secret rm -f both/x < /dev/null >/dev/null
+    "$FOLIO" rm secret -f both/x < /dev/null >/dev/null
     run --separate-stderr "$FOLIO" exec --all --secrets -- printenv GH_TOKEN
     [ "$status" -eq 0 ]
     [ "$output" = "shared-token" ]
@@ -266,7 +266,7 @@ folio exec: left out 1 secret(s) under 'gh'; add --secrets to load them." ]
     [ "$output" = "unset|shared-user" ]
     [ "$stderr" = "folio exec: left out 1 secret(s) under 'gh'; add --secrets to load them." ]
     # A folder of secrets only: nothing to load without --secrets.
-    "$FOLIO" secret insert -m only/s < <(printf 'x\n') >/dev/null
+    "$FOLIO" insert secret -m only/s < <(printf 'x\n') >/dev/null
     run "$FOLIO" exec only -- touch "$SANDBOX/ran"
     [ "$status" -eq 1 ]
     [[ $output == *"only secrets under 'only' (1); add --secrets"* ]] || false
@@ -275,9 +275,9 @@ folio exec: left out 1 secret(s) under 'gh'; add --secrets to load them." ]
 
 @test "exec: a name bash keeps for itself is refused; EnvFolio's own names load like any other" {
     make-store
-    "$FOLIO" text insert -t "seed" random    < /dev/null
-    "$FOLIO" text insert -t "me"   uid       < /dev/null
-    "$FOLIO" text insert -t "ev"   exec/vars < /dev/null
+    "$FOLIO" insert text -t "seed" random    < /dev/null
+    "$FOLIO" insert text -t "me"   uid       < /dev/null
+    "$FOLIO" insert text -t "ev"   exec/vars < /dev/null
     run "$FOLIO" exec random -- touch "$SANDBOX/ran"
     [ "$status" -eq 1 ]
     [[ $output == *"could not set RANDOM"*"VAR=<name>"* ]] || false

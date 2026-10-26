@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 
-# folio secret show, through the real ./folio, against a throwaway GPG home and store.
+# folio show secret, through the real ./folio, against a throwaway GPG home and store.
 
 setup() {
     SANDBOX=$(mktemp -d)
@@ -33,8 +33,8 @@ teardown() {
 make-store() {
     gpg --batch --passphrase '' --quick-generate-key "Test User <test@example.com>" default default never 2>/dev/null
     "$FOLIO" init --key test@example.com < /dev/null >/dev/null 2>&1
-    "$FOLIO" secret insert -m web/github < <(printf 's3cr3t\n')            >/dev/null
-    "$FOLIO" secret insert -m note       < <(printf 'line one\nline two\n') >/dev/null
+    "$FOLIO" insert secret -m web/github < <(printf 's3cr3t\n')            >/dev/null
+    "$FOLIO" insert secret -m note       < <(printf 'line one\nline two\n') >/dev/null
 }
 
 # A stand-in xclip (Linux) and pbcopy/pbpaste (macOS) whose clipboard is a sandbox file, so -c
@@ -55,98 +55,98 @@ EOF
     export PASSWORD_STORE_CLIP_TIME=60
 }
 
-@test "MANUAL: secret show — print a secret" {
+@test "MANUAL: show secret — print a secret" {
     make-store
-    run "$FOLIO" secret show web/github
+    run "$FOLIO" show secret web/github
     [ "$status" -eq 0 ]
     [ "$output" = "s3cr3t" ]
 }
 
-@test "secret show: a multiline secret prints whole" {
+@test "show secret: a multiline secret prints whole" {
     make-store
-    run "$FOLIO" secret show note
+    run "$FOLIO" show secret note
     [ "$status" -eq 0 ]
     [ "$output" = $'line one\nline two' ]
 }
 
-@test "MANUAL: secret show — copy to the clipboard" {
+@test "MANUAL: show secret — copy to the clipboard" {
     make-store
     fake-clipboard
-    run "$FOLIO" secret show web/github -c
+    run "$FOLIO" show secret web/github -c
     [ "$status" -eq 0 ]
     [[ $output == *"Copied web/github to clipboard"*"clear in 60 seconds"* ]] || false
     [[ $output != *"s3cr3t"* ]] || false
     [ "$(cat "$CLIPBOARD")" = "s3cr3t" ]
 }
 
-@test "MANUAL: secret show — copy one line" {
+@test "MANUAL: show secret — copy one line" {
     make-store
     fake-clipboard
-    run "$FOLIO" secret show --clip=2 note
+    run "$FOLIO" show secret --clip=2 note
     [ "$status" -eq 0 ]
     [[ $output != *"line"* ]] || false
     [ "$(cat "$CLIPBOARD")" = "line two" ]
 }
 
-@test "secret show: a folder is refused, not listed" {
+@test "show secret: a folder is refused, not listed" {
     make-store
-    run "$FOLIO" secret show web
+    run "$FOLIO" show secret web
     [ "$status" -eq 1 ]
     [[ $output == *"'web' is not a secret"* ]] || false
     [[ $output != *"github"* ]] || false
 }
 
-@test "secret show: an unknown name fails" {
+@test "show secret: an unknown name fails" {
     make-store
-    run "$FOLIO" secret show nope
+    run "$FOLIO" show secret nope
     [ "$status" -eq 1 ]
     [[ $output == *"'nope' is not a secret"* ]] || false
 }
 
-@test "secret show: --qrcode and unknown options are refused" {
+@test "show secret: --qrcode and unknown options are refused" {
     make-store
     local arg
     for arg in -q --qrcode --qrcode=1; do
-        run "$FOLIO" secret show "$arg" web/github
+        run "$FOLIO" show secret "$arg" web/github
         [ "$status" -eq 1 ]
         [[ $output == *"--qrcode is not offered"* ]] || false
     done
-    run "$FOLIO" secret show --nope web/github
+    run "$FOLIO" show secret --nope web/github
     [ "$status" -eq 1 ]
     [[ $output == *"unknown option: --nope"* && $output != *"s3cr3t"* ]] || false
 }
 
-@test "secret show: exactly one name" {
+@test "show secret: exactly one name" {
     make-store
-    run "$FOLIO" secret show
+    run "$FOLIO" show secret
     [ "$status" -eq 1 ]
-    [[ $output == *"Usage: folio secret show"* ]] || false
-    run "$FOLIO" secret show web/github note
+    [[ $output == *"Usage: folio show secret"* ]] || false
+    run "$FOLIO" show secret web/github note
     [ "$status" -eq 1 ]
-    [[ $output == *"Usage: folio secret show"* && $output != *"s3cr3t"* ]] || false
+    [[ $output == *"Usage: folio show secret"* && $output != *"s3cr3t"* ]] || false
 }
 
-@test "secret show: a name after -- is not an option" {
+@test "show secret: a name after -- is not an option" {
     make-store
-    "$FOLIO" secret insert -m -- -c < <(printf 'dash\n') >/dev/null
-    run "$FOLIO" secret show -- -c
+    "$FOLIO" insert secret -m -- -c < <(printf 'dash\n') >/dev/null
+    run "$FOLIO" show secret -- -c
     [ "$status" -eq 0 ]
     [ "$output" = "dash" ]
 }
 
-@test "secret show: no store fails and creates nothing" {
-    run "$FOLIO" secret show web/github
+@test "show secret: no store fails and creates nothing" {
+    run "$FOLIO" show secret web/github
     [ "$status" -eq 1 ]
     [[ $output == *"No ready EnvFolio store"*"folio init"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 
-@test "secret show --help: works without a store" {
-    run "$FOLIO" secret show --help
+@test "show secret --help: works without a store" {
+    run "$FOLIO" show secret --help
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio secret show"* ]] || false
+    [[ $output == *"Usage: folio show secret"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
-    run "$FOLIO" help secret show
+    run "$FOLIO" help show secret
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio secret show"* ]] || false
+    [[ $output == *"Usage: folio show secret"* ]] || false
 }

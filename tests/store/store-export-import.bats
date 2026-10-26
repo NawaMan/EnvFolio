@@ -32,10 +32,10 @@ teardown() {
 make-store() {
     gpg --batch --passphrase '' --quick-generate-key "Test User <test@example.com>" default default never 2>/dev/null
     "$FOLIO" init --key test@example.com < /dev/null >/dev/null 2>&1
-    "$FOLIO" text insert -t "https://example.com" web/home < /dev/null >/dev/null
-    "$FOLIO" text insert -t "jane" web/user < /dev/null >/dev/null
-    "$FOLIO" secret insert web/github < <(printf 's3cr3t\ns3cr3t\n') >/dev/null
-    "$FOLIO" secret insert aws/key < <(printf 'AKIA\nAKIA\n') >/dev/null
+    "$FOLIO" insert text -t "https://example.com" web/home < /dev/null >/dev/null
+    "$FOLIO" insert text -t "jane" web/user < /dev/null >/dev/null
+    "$FOLIO" insert secret web/github < <(printf 's3cr3t\ns3cr3t\n') >/dev/null
+    "$FOLIO" insert secret aws/key < <(printf 'AKIA\nAKIA\n') >/dev/null
 }
 
 # Switch to "there": its own GPG home, with a key for the server, and its own store folder.
@@ -82,8 +82,8 @@ left-clean() {
     run "$FOLIO" import --all --key server@example.com --file-passphrase-stdin "$(export-file)" < <(printf 'export pass\n')
     [ "$status" -eq 0 ]
     [[ $output == *"Texts:   1"* && $output == *"Secrets: 1"* ]] || false
-    [ "$("$FOLIO" text show web/home)" = "https://example.com" ]
-    [ "$("$FOLIO" secret show web/github)" = "s3cr3t" ]
+    [ "$("$FOLIO" show text web/home)" = "https://example.com" ]
+    [ "$("$FOLIO" show secret web/github)" = "s3cr3t" ]
     [ ! -e "$FOLIO_STORE_DIR/web/user.txt" ]
     [ -z "$(git -C "$FOLIO_STORE_DIR" status --porcelain)" ]
     left-clean
@@ -108,8 +108,8 @@ left-clean() {
     export GNUPGHOME="$SANDBOX/there-gnupg" FOLIO_STORE_DIR="$SANDBOX/there" PASSWORD_STORE_DIR="$SANDBOX/there"
     run "$FOLIO" import --key server@example.com "$(export-file)" web/github web/user < /dev/null
     [ "$status" -eq 0 ]
-    [ "$("$FOLIO" secret show web/github)" = "s3cr3t" ]
-    [ "$("$FOLIO" text show web/user)" = "jane" ]
+    [ "$("$FOLIO" show secret web/github)" = "s3cr3t" ]
+    [ "$("$FOLIO" show text web/user)" = "jane" ]
     [ ! -e "$FOLIO_STORE_DIR/web/home.txt" ]
 }
 
@@ -118,12 +118,12 @@ left-clean() {
     "$FOLIO" export -o "$SANDBOX/out" --file-passphrase-stdin --secrets web aws < <(printf 'p\n') >/dev/null 2>&1
     go-there
     "$FOLIO" init --key server@example.com < /dev/null >/dev/null 2>&1
-    "$FOLIO" text insert -t "old" web/user < /dev/null >/dev/null
+    "$FOLIO" insert text -t "old" web/user < /dev/null >/dev/null
     run "$FOLIO" import --skip-existing --file-passphrase-stdin "$(export-file)" aws/key web/user < <(printf 'p\n')
     [ "$status" -eq 0 ]
     [[ $output == *"Skipped: 1"* ]] || false
-    [ "$("$FOLIO" secret show aws/key)" = "AKIA" ]
-    [ "$("$FOLIO" text show web/user)" = "old" ]
+    [ "$("$FOLIO" show secret aws/key)" = "AKIA" ]
+    [ "$("$FOLIO" show text web/user)" = "old" ]
 }
 
 @test "import: --overwrite replaces an item already in the store" {
@@ -131,10 +131,10 @@ left-clean() {
     "$FOLIO" export -o "$SANDBOX/out" --file-passphrase-stdin web/user web/home < <(printf 'p\n') >/dev/null 2>&1
     go-there
     "$FOLIO" init --key server@example.com < /dev/null >/dev/null 2>&1
-    "$FOLIO" text insert -t "old" web/user < /dev/null >/dev/null
+    "$FOLIO" insert text -t "old" web/user < /dev/null >/dev/null
     run "$FOLIO" import --overwrite --file-passphrase-stdin "$(export-file)" web/user < <(printf 'p\n')
     [ "$status" -eq 0 ]
-    [ "$("$FOLIO" text show web/user)" = "jane" ]
+    [ "$("$FOLIO" show text web/user)" = "jane" ]
 }
 
 @test "import: into an open store folder, asked; stdin with the passphrase cannot answer" {
@@ -150,7 +150,7 @@ left-clean() {
     run "$FOLIO" import --all --file-passphrase-stdin --allow-unsafe-folder "$(export-file)" < <(printf 'p\n')
     [ "$status" -eq 0 ]
     [ "$(grep -c 'warning:' <<< "$output")" -eq 1 ]
-    [ "$("$FOLIO" text show web/user 2>/dev/null)" = "jane" ]
+    [ "$("$FOLIO" show text web/user 2>/dev/null)" = "jane" ]
 }
 
 @test "import: making a store in an open empty folder is asked once, then made" {
@@ -164,7 +164,7 @@ left-clean() {
     run "$FOLIO" import --all --key server@example.com --file-passphrase-stdin --allow-unsafe-folder "$(export-file)" < <(printf 'p\n')
     [ "$status" -eq 0 ]
     [ "$(grep -c 'warning:' <<< "$output")" -eq 1 ]
-    [ "$("$FOLIO" text show web/user 2>/dev/null)" = "jane" ]
+    [ "$("$FOLIO" show text web/user 2>/dev/null)" = "jane" ]
 }
 
 @test "import: the picker and the clash question read their answers from stdin" {
@@ -177,16 +177,16 @@ left-clean() {
     gpgconf --kill all 2>/dev/null || true
     export GNUPGHOME="$SANDBOX/there-gnupg" FOLIO_STORE_DIR="$SANDBOX/there" PASSWORD_STORE_DIR="$SANDBOX/there"
     "$FOLIO" init --key server@example.com < /dev/null >/dev/null 2>&1
-    "$FOLIO" text insert -t "old" web/user < /dev/null >/dev/null
+    "$FOLIO" insert text -t "old" web/user < /dev/null >/dev/null
     # 1) aws/key 2) web/github 3) web/home 4) web/user — "9" is out of range, asked again; then
     # web/user clashes: "2" skips it.
     run --separate-stderr "$FOLIO" import "$(export-file)" < <(printf '9\n1 3-4\n2\n')
     [ "$status" -eq 0 ]
     [[ $stderr == *"   4) (T)web/user"* && $stderr == *"Not a choice: '9'"* ]] || false
     [[ $output == *"Texts:   1"* && $output == *"Secrets: 1"* && $output == *"Skipped: 1"* ]] || false
-    [ "$("$FOLIO" secret show aws/key)" = "AKIA" ]
-    [ "$("$FOLIO" text show web/home)" = "https://example.com" ]
-    [ "$("$FOLIO" text show web/user)" = "old" ]
+    [ "$("$FOLIO" show secret aws/key)" = "AKIA" ]
+    [ "$("$FOLIO" show text web/home)" = "https://example.com" ]
+    [ "$("$FOLIO" show text web/user)" = "old" ]
     [ ! -e "$FOLIO_STORE_DIR/web/github.gpg" ]
 }
 
@@ -336,8 +336,8 @@ V
     go-there
     run "$FOLIO" import --all --key server@example.com --file-passphrase-stdin "$SANDBOX/old.folio" < <(printf 'p\n')
     [ "$status" -eq 0 ]
-    [ "$("$FOLIO" text show web/home)" = "https://example.com" ]
-    [ "$("$FOLIO" text show web/user)" = "jane" ]
+    [ "$("$FOLIO" show text web/home)" = "https://example.com" ]
+    [ "$("$FOLIO" show text web/user)" = "jane" ]
 }
 
 @test "export --help, import --help: work without a store" {

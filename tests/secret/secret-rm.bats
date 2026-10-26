@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 
-# folio secret rm, through the real ./folio, against a throwaway GPG home and store.
+# folio rm secret, through the real ./folio, against a throwaway GPG home and store.
 
 setup() {
     SANDBOX=$(mktemp -d)
@@ -26,44 +26,44 @@ teardown() {
 make-store() {
     gpg --batch --passphrase '' --quick-generate-key "Test User <test@example.com>" default default never 2>/dev/null
     "$FOLIO" init --key test@example.com < /dev/null >/dev/null 2>&1
-    "$FOLIO" secret insert -m web/github < <(printf 's3cr3t\nuser: jane\n') >/dev/null
-    "$FOLIO" secret insert -m mail/work  < <(printf 'other\n')              >/dev/null
+    "$FOLIO" insert secret -m web/github < <(printf 's3cr3t\nuser: jane\n') >/dev/null
+    "$FOLIO" insert secret -m mail/work  < <(printf 'other\n')              >/dev/null
 }
 
-@test "MANUAL: secret rm — remove a secret" {
+@test "MANUAL: rm secret — remove a secret" {
     make-store
-    run "$FOLIO" secret rm -f mail/work
+    run "$FOLIO" rm secret -f mail/work
     [ "$status" -eq 0 ]
     [ ! -e "$FOLIO_STORE_DIR/mail/work.gpg" ]
     [[ $(git -C "$FOLIO_STORE_DIR" log -1 --format=%s) == "Remove mail/work"* ]] || false
 }
 
-@test "secret rm: --recursive removes a folder" {
+@test "rm secret: --recursive removes a folder" {
     make-store
-    run "$FOLIO" secret rm -rf web
+    run "$FOLIO" rm secret -rf web
     [ "$status" -eq 0 ]
     [ ! -e "$FOLIO_STORE_DIR/web" ]
 }
 
-@test "secret rm: an unknown name fails" {
+@test "rm secret: an unknown name fails" {
     make-store
-    run "$FOLIO" secret rm -f nope
+    run "$FOLIO" rm secret -f nope
     [ "$status" -ne 0 ]
     [[ $output == *"not in the password store"* ]] || false
 }
 
-@test "secret rm --help: works without a store" {
-    run "$FOLIO" secret rm --help
+@test "rm secret --help: works without a store" {
+    run "$FOLIO" rm secret --help
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio secret rm"* ]] || false
+    [[ $output == *"Usage: folio rm secret"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
-    run "$FOLIO" help secret rm
+    run "$FOLIO" help rm secret
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio secret rm"* ]] || false
+    [[ $output == *"Usage: folio rm secret"* ]] || false
 }
 
-@test "secret rm: no store fails and creates nothing" {
-    run "$FOLIO" secret rm web/github x < /dev/null
+@test "rm secret: no store fails and creates nothing" {
+    run "$FOLIO" rm secret web/github x < /dev/null
     [ "$status" -eq 1 ]
     [[ $output == *"No ready EnvFolio store"*"folio init"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]

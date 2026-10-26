@@ -81,17 +81,38 @@ bash-tab() {
 
 # --- Commands and options --------------------------------------------------------
 
-@test "completion: commands, and a group's own commands" {
-    [ "$(words "")" = "init,path,backup,restore,export,import,text,secret,vars,ls,exec,shell,completion,version,help" ]
+@test "completion: commands, the action first, then the kinds it is for" {
+    [ "$(words "")" = "init,path,backup,restore,export,import,ls,find,grep,show,insert,edit,generate,rm,mv,cp,check,exec,shell,completion,version,help" ]
     words "" >/dev/null ; [ "$how" = words ]
-    [ "$(words te)" = "text" ]
+    [ "$(words sh)" = "show,shell" ]
+    [ "$(words show "")" = "text,secret" ]
+    [ "$(words show s)" = "secret" ]
+    [ "$(words check "")" = "vars" ]
+}
+
+@test "completion: kind first (folio text show) still completes a group's own commands" {
+    [ "$(words te)" = "" ]
     [ "$(words secret "")" = "ls,find,grep,show,insert,edit,generate,rm,mv,cp" ]
     [ "$(words text g)" = "grep,generate" ]
 }
 
 @test "completion: commands come with their description from folio help" {
+    run "$FOLIO" __complete show se
+    [ "${lines[1]}" = $'secret\tShow a secret, or copy it to the clipboard' ]
     run "$FOLIO" __complete secret sh
     [ "${lines[1]}" = $'show\tShow a secret, or copy it to the clipboard' ]
+    run "$FOLIO" __complete sh
+    [ "${lines[1]}" = $'show\ttext|secret' ]
+}
+
+@test "completion: action first — options and names as kind first" {
+    make-names
+    [ "$(words show secret -c)" = "-c" ]
+    [ "$(words show text "")" = "note,web/" ]
+    [ "$(words show secret w)" = "web/deep/,web/github" ]
+    [ "$(words mv text web/home "")" = "note,web/" ]
+    words check vars "" >/dev/null ; [ "$how" = files ]
+    words show secret --store-passphrase-fd "" >/dev/null ; [ "$how" = none ]
 }
 
 @test "completion: options from the command's help, long ones for - and --, with a description" {
@@ -125,7 +146,8 @@ bash-tab() {
 }
 
 @test "completion: help topics, completion shells, nothing for an unknown command" {
-    [ "$(words help in)" = "init" ]
+    [ "$(words help in)" = "init,insert" ]
+    [ "$(words help show s)" = "secret" ]
     [ "$(words help secret sh)" = "show" ]
     [ "$(words completion "")" = "bash,zsh" ]
     words nosuch "" >/dev/null ; [ "$how" = none ]
@@ -169,10 +191,12 @@ bash-tab() {
     [ "$(words shell --use=@a)" = "" ]
 }
 
-@test "completion: ls takes only folders" {
+@test "completion: ls takes only folders — or first, a kind" {
     make-names
-    [ "$(words ls "")" = "web/" ]
+    [ "$(words ls "")" = "text,secret,web/" ]
+    [ "$(words ls w)" = "web/" ]
     [ "$(words ls web/)" = "web/deep/" ]
+    [ "$(words ls text "")" = "web/" ]
     [ "$(words text ls "")" = "web/" ]
 }
 
@@ -199,9 +223,9 @@ bash-tab() {
 
 @test "MANUAL: completion — bash" {
     make-names
-    [ "$(bash-tab "folio secret sh")" = "show" ]
-    [ "$(bash-tab "folio secret show w")" = "web/deep/,web/github" ]
-    [ "$(bash-tab "folio secret show web/d")" = "web/deep/down/key" ]
+    [ "$(bash-tab "folio show s")" = "secret" ]
+    [ "$(bash-tab "folio show secret w")" = "web/deep/,web/github" ]
+    [ "$(bash-tab "folio show secret web/d")" = "web/deep/down/key" ]
     [ "$(bash-tab "folio backup --enc")" = "--encrypt" ]
     # bash replaces only what follows the =, so that is what it gets.
     [ "$(bash-tab "folio exec GH=web/h")" = "web/home" ]

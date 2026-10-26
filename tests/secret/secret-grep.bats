@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 
-# folio secret grep, through the real ./folio, against a throwaway GPG home and store.
+# folio grep secret, through the real ./folio, against a throwaway GPG home and store.
 
 setup() {
     SANDBOX=$(mktemp -d)
@@ -26,43 +26,43 @@ teardown() {
 make-store() {
     gpg --batch --passphrase '' --quick-generate-key "Test User <test@example.com>" default default never 2>/dev/null
     "$FOLIO" init --key test@example.com < /dev/null >/dev/null 2>&1
-    "$FOLIO" secret insert -m web/github < <(printf 's3cr3t\nuser: jane\n') >/dev/null
-    "$FOLIO" secret insert -m mail/work  < <(printf 'other\n')              >/dev/null
+    "$FOLIO" insert secret -m web/github < <(printf 's3cr3t\nuser: jane\n') >/dev/null
+    "$FOLIO" insert secret -m mail/work  < <(printf 'other\n')              >/dev/null
 }
 
-@test "MANUAL: secret grep — find by value" {
+@test "MANUAL: grep secret — find by value" {
     make-store
-    run "$FOLIO" secret grep jane
+    run "$FOLIO" grep secret jane
     [ "$status" -eq 0 ]
     [[ $output == *"github"*"user: "*"jane"* ]] || false
     [[ $output != *"work"* && $output != *"s3cr3t"* ]] || false
 }
 
-@test "secret grep: grep's options go to grep" {
+@test "grep secret: grep's options go to grep" {
     make-store
-    run "$FOLIO" secret grep -i JANE
+    run "$FOLIO" grep secret -i JANE
     [ "$status" -eq 0 ]
     [[ $output == *"jane"* ]] || false
 }
 
-@test "secret grep: no match prints nothing" {
+@test "grep secret: no match prints nothing" {
     make-store
-    run "$FOLIO" secret grep nothing-like-this
+    run "$FOLIO" grep secret nothing-like-this
     [ -z "$output" ]
 }
 
-@test "secret grep --help: works without a store" {
-    run "$FOLIO" secret grep --help
+@test "grep secret --help: works without a store" {
+    run "$FOLIO" grep secret --help
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio secret grep"* ]] || false
+    [[ $output == *"Usage: folio grep secret"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
-    run "$FOLIO" help secret grep
+    run "$FOLIO" help grep secret
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio secret grep"* ]] || false
+    [[ $output == *"Usage: folio grep secret"* ]] || false
 }
 
-@test "secret grep: no store fails and creates nothing" {
-    run "$FOLIO" secret grep web/github x < /dev/null
+@test "grep secret: no store fails and creates nothing" {
+    run "$FOLIO" grep secret web/github x < /dev/null
     [ "$status" -eq 1 ]
     [[ $output == *"No ready EnvFolio store"*"folio init"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
