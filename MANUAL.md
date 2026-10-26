@@ -99,7 +99,8 @@ The window should open and ask for your key's passphrase. Then any EnvFolio comm
 - If the window opens on the wrong screen, or never opens and gpg waits, the agent was started
   from another session: run `gpg-connect-agent updatestartuptty /bye` in the current one.
 - How long the agent remembers a passphrase is `default-cache-ttl` and `max-cache-ttl` (seconds)
-  in the same file.
+  in the same file. To have it forget the store key's as soon as a command is done, see
+  [Leave no passphrase behind](#leave-no-passphrase-behind).
 
 ---
 
@@ -131,6 +132,43 @@ folio export --secrets --store-passphrase-fd 3 --file-passphrase-fd 4 web 3< ~/.
   `/dev/shm` and remove it once opened (as in [From an export file](#from-an-export-file)).
 - These were `--passphrase-stdin` and `--passphrase-fd` before 0.7.0. The old names stop and say
   the new one.
+
+---
+
+## Leave no passphrase behind
+
+gpg-agent remembers a passphrase for its cache time, so the next `folio`, `pass` or `gpg` needs
+none. On a machine you trust less — a shared server, a booth in the cloud — `--fresh-passphrase`
+has it forget the store key's passphrase when the command starts and again when it ends. It goes
+with every command, anywhere before a `--`:
+
+```bash
+folio show secret --fresh-passphrase web/github
+folio exec --fresh-passphrase --secrets gh/token -- gh release list
+```
+
+Or for every command, from your shell's profile:
+
+```bash
+export FOLIO_FRESH_PASSPHRASE=1     # 0, or unset, to turn it off
+```
+
+- **At the start**, so the store key's passphrase is asked (or taken from
+  `--store-passphrase-fd`), even when the agent had it.
+- **During the command**, the agent keeps it as usual, so it is asked once.
+- **At the end**, also when the command fails. `exec` and `shell` do it before the command or the
+  shell starts, every value read by then: they hold the values, not the passphrase. A key the
+  agent did not have at the start and has at the end is forgotten too — the key a `--from` file
+  is locked to.
+- The passphrase that locks an encrypted backup or an export is not kept at all
+  (gpg's `--no-symkey-cache`), whether typed or given with `--file-passphrase-…`.
+- **Other keys stay as they were**: your git signing key, or one gpg-agent holds for SSH. But
+  gpg-agent tries the passphrases it has on a key it has none for: **if another key it remembers
+  has the same passphrase as the store key, the store key still opens without asking.** Give the
+  store key a passphrase of its own, or run `gpgconf --reload gpg-agent` to have it forget them
+  all.
+- It needs `gpg-connect-agent`, which comes with gpg. A command killed outright (`kill -9`) cannot
+  make the agent forget.
 
 ---
 
