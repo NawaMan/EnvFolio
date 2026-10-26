@@ -90,6 +90,8 @@ jobs:
 
   # Homebrew's own gpg (2.5.24 at the time of writing), the one a Mac gets: every test, and a real
   # post-quantum key (tests/gpg/gpg-pqc-real.bats, skipped on a gpg that cannot make one).
+  # `brew update` first: the runner image can come with an older gnupg it thinks is current
+  # (2.5.24 without the T8469 fix, where Homebrew has 2.5.24_1), which then fails every import.
   test-macos-homebrew-gpg:
     runs-on: macos-latest
     timeout-minutes: 20
@@ -97,7 +99,9 @@ jobs:
       - uses: actions/checkout@v5
       - name: Install dependencies
         run: |
+          brew update
           brew install bats-core pass coreutils gnupg
+          brew list --versions gnupg
           mkdir -p "$RUNNER_TEMP/bin"
           ln -s "$(brew --prefix)/bin/gtimeout" "$RUNNER_TEMP/bin/timeout"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
