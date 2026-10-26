@@ -33,6 +33,17 @@ teardown() {
     [ "$output" = "a" ]
 }
 
+@test "ask-choice: Enter asks again; with --default, Enter picks that option" {
+    run --separate-stderr ask-choice "Pick one" "a" "b" <<< $'\n2'
+    [ "$output" = "b" ]
+    run --separate-stderr ask-choice --default 1 "Pick one" "a" "b" <<< ""
+    [ "$status" -eq 0 ]
+    [ "$output" = "a" ]
+    [[ $stderr == *"Pick a number (Enter for 1, Ctrl-D cancels):"* ]] || false
+    run --separate-stderr ask-choice --default 1 "Pick one" "a" "b" <<< "2"
+    [ "$output" = "b" ]
+}
+
 @test "ask-choice: end of input cancels" {
     run --separate-stderr ask-choice "Pick one" "a" "b" < /dev/null
     [ "$status" -eq 1 ]
