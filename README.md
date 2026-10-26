@@ -123,6 +123,9 @@ For Tab completion, add `eval "$(folio completion bash)"` to `~/.bashrc`, or
 
 - `FOLIO_STORE_DIR` - the path to the EnvFolio store. Defaults to `$HOME/.folio`. The store has the same
   layout as a `pass` store, but is kept apart from your own `~/.password-store`.
+- `FOLIO_FRESH_PASSPHRASE` - set to `1` to have gpg-agent forget the store key's passphrase when
+  each command starts and ends, as `--fresh-passphrase` does. See
+  [Leave no passphrase behind](MANUAL.md#leave-no-passphrase-behind).
 
 # Updating gpg for post-quantum keys
 

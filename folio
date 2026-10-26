@@ -44,11 +44,15 @@ export PASSWORD_STORE_DIR="$STORE_PATH"
 Main() {
     # Asked at every Tab press, by the scripts of `folio completion`: quick, and quiet.
     if [[ ${1:-} == __complete ]]; then shift ; complete-words "$@" ; return 0 ; fi
+    # --fresh-passphrase (or FOLIO_FRESH_PASSPHRASE=1) goes with every command, so it is taken here.
+    take-fresh-passphrase "$@"
+    set -- "${ARGS[@]}"
     # `folio show text …` is run as `folio text show …`, the order the code below takes.
     if is-action-first "${1:-}" "${2:-}"; then set -- "$2" "$1" "${@:3}" ; fi
     # Quiet when all is there; otherwise show the table and stop.
     if ! ensure-requirements "$@" >/dev/null; then ensure-requirements "$@" ; return 1 ; fi
     set-gpg-tty
+    start-fresh-passphrase
 
     local category="${1:-}" ; (( $# > 0 )) && shift
     case "$category" in
@@ -169,6 +173,10 @@ Commands:
   completion        Print the Tab completion script for bash or zsh
   version           Print EnvFolio's version
   help [command]    Show help, e.g. `folio help init`
+
+Options for every command:
+  --fresh-passphrase  Have gpg-agent forget the store key's passphrase at the start and the end
+                      (also FOLIO_FRESH_PASSPHRASE=1)
 
 The kind can also come first: `folio text show` is `folio show text`.
 The store is $FOLIO_STORE_DIR, default ~/.folio. EnvFolio warns when that folder is someone
@@ -739,6 +747,7 @@ Backup() {
     if (( encrypt )); then
         seal=(gpg --symmetric --compress-algo none --output -)
         [[ -n $passphrase ]] && seal=(gpg --batch --pinentry-mode loopback --passphrase-fd 3 "${seal[@]:1}")
+        (( ! FRESH_PASSPHRASE )) || seal=(gpg --no-symkey-cache "${seal[@]:1}")
     fi
     # The passphrase reaches gpg on fd 3 (printf is a builtin: never in argv). COPYFILE_DISABLE
     # keeps macOS tar from adding ._ files.
@@ -826,7 +835,8 @@ Restore() {
         *"$ENCRYPTED_BACKUP_SUFFIX")
             open=(gpg --decrypt --output -)
             (( passphrase_stdin )) || [[ -n $passphrase_fd ]] \
-                && open=(gpg --batch --pinentry-mode loopback --passphrase-fd 3 "${open[@]:1}") ;;
+                && open=(gpg --batch --pinentry-mode loopback --passphrase-fd 3 "${open[@]:1}")
+            (( ! FRESH_PASSPHRASE )) || open=(gpg --no-symkey-cache "${open[@]:1}") ;;
         *"$BACKUP_SUFFIX")
             [[ $passphrase_stdin == 0 && -z $passphrase_fd ]] \
                 || die "--file-passphrase-stdin and --file-passphrase-fd are only for an encrypted backup ($ENCRYPTED_BACKUP_SUFFIX)." ;;
@@ -1199,6 +1209,7 @@ EOF
     fi
     local seal=(gpg --symmetric --compress-algo none --output -)
     [[ -n $passphrase ]] && seal=(gpg --batch --pinentry-mode loopback --passphrase-fd 3 "${seal[@]:1}")
+    (( ! FRESH_PASSPHRASE )) || seal=(gpg --no-symkey-cache "${seal[@]:1}")
     [[ -n $recipient ]] && seal=(env GNUPGHOME="$home" gpg --batch --trust-model always --compress-algo none
                                  --encrypt --recipient "$recipient" --output -)
     # As in backup: the passphrase reaches gpg on fd 3, never in argv.
@@ -1508,6 +1519,7 @@ function open-export() {
     local open=(gpg --decrypt --output -)
     [[ -n $quiet ]] && open=(gpg --quiet "${open[@]:1}")
     [[ -n $passphrase ]] && open=(gpg --batch --pinentry-mode loopback --passphrase-fd 3 "${open[@]:1}")
+    (( ! FRESH_PASSPHRASE )) || open=(gpg --no-symkey-cache "${open[@]:1}")
     # The passphrase reaches gpg on fd 3 (printf is a builtin: never in argv).
     "${open[@]}" < "$file" 3< <(printf '%s\n' "$passphrase") | tar -xzf - -C "$stage/unpack"
     [[ ${PIPESTATUS[*]} == "0 0" ]] || die "Opening $file failed."
@@ -3633,6 +3645,10 @@ function complete-words() {
     local words=("$@") cur key at=1 options value="" dashes=-1 count=0 last="" i word kind
     local -a kinds
     (( ${#words[@]} > 0 )) || words=("")
+    # --fresh-passphrase goes with every command, anywhere: the words before the last are taken without it.
+    for (( i = ${#words[@]} - 2; i >= 0; i-- )); do
+        [[ ${words[i]} == --fresh-passphrase ]] && words=("${words[@]:0:i}" "${words[@]:i+1}")
+    done
     cur=${words[${#words[@]}-1]}
     if (( ${#words[@]} == 1 )); then complete-commands "" "$cur" ; return 0 ; fi
     key=${words[0]}
@@ -3806,6 +3822,7 @@ function complete-commands() {
 
 # help-options <command>: its options, from the Options: of its help, one line each:
 # <option><tab><what its value is: files, dirs, none, or - when it takes none><tab><description>.
+# Then --fresh-passphrase, which every command takes.
 function help-options() {
     local line row="" in=0
     while IFS= read -r line; do
@@ -3821,6 +3838,7 @@ function help-options() {
         fi
     done < <(Help "$@" 2>/dev/null)
     [[ -z $row ]] || help-option-lines "$row" ""
+    printf '%s\t-\t%s\n' --fresh-passphrase "Have gpg-agent forget the store key's passphrase at the start and the end"
 }
 
 # help-option-lines <row> <next line>: help-options' lines for one row of Options:, e.g.
@@ -3981,6 +3999,101 @@ function unlock-store-key() {
         die "The passphrase on file descriptor $STORE_PASSPHRASE_FD does not unlock the store's key $key."
     fi
     STORE_UNLOCKED=1
+}
+
+# --- Fresh passphrase ---------------------------------------------------------
+
+# With --fresh-passphrase (or FOLIO_FRESH_PASSPHRASE=1), gpg-agent forgets the store key's
+# passphrase when the command starts — so it is asked, or taken from --store-passphrase-fd, even
+# when the agent had it — and again when it ends: in the EXIT trap, and for exec and shell just
+# before the command starts, every value read by then (remove-now). At the end, it also forgets a
+# key that it did not have before the command and has after (the key a --from file is locked to).
+# During the command the agent keeps them as usual, so one is asked once. gpg-agent keeps a
+# passphrase per keygrip: of each key, and of each of its subkeys. The passphrases that lock a
+# backup or an export are not kept at all (--no-symkey-cache). Other keys are left as they were —
+# though gpg-agent tries the passphrases it has on a key it has none for, so one with the same
+# passphrase still unlocks the store key (MANUAL: Leave no passphrase behind).
+FRESH_PASSPHRASE=0 FRESH_STORE_PATH="" FRESH_CACHED=""
+
+# take-fresh-passphrase [args...]: take --fresh-passphrase out of the args (up to a --) into
+# FRESH_PASSPHRASE, also set by FOLIO_FRESH_PASSPHRASE=1; the rest go into ARGS.
+function take-fresh-passphrase() {
+    local arg
+    case ${FOLIO_FRESH_PASSPHRASE:-} in
+        ""|0) ;;
+        1)    FRESH_PASSPHRASE=1 ;;
+        *)    die "FOLIO_FRESH_PASSPHRASE is 1 (on) or 0 (off), not '$FOLIO_FRESH_PASSPHRASE'." ;;
+    esac
+    ARGS=()
+    while (( $# > 0 )); do
+        arg=$1 ; shift
+        case $arg in
+            --)                 ARGS+=("$arg" "$@") ; break ;;
+            --fresh-passphrase) FRESH_PASSPHRASE=1 ;;
+            *)                  ARGS+=("$arg") ;;
+        esac
+    done
+}
+
+# start-fresh-passphrase: with --fresh-passphrase, have gpg-agent forget the store key's passphrase
+# now, and once more when EnvFolio exits. The store is kept by its path now: STORE_PATH points at an
+# export or a view for a while.
+function start-fresh-passphrase() {
+    (( FRESH_PASSPHRASE )) || return 0
+    command -v gpg-connect-agent >/dev/null 2>&1 \
+        || die "--fresh-passphrase needs gpg-connect-agent (it comes with gpg), to have gpg-agent forget a passphrase."
+    FRESH_STORE_PATH=$STORE_PATH
+    local grips
+    grips=$(store-keygrips)
+    # shellcheck disable=SC2086  # keygrips are hex, one word each
+    forget-keygrips $grips || die "gpg-agent did not forget the store key's passphrase; nothing was done."
+    FRESH_CACHED=" $(cached-keygrips | tr '\n' ' ')"
+    trap remove-now EXIT
+}
+
+# forget-passphrases: have gpg-agent forget the store key's passphrase, and those of the keys it did
+# not have at the start; warn when it does not.
+function forget-passphrases() {
+    local grip grips
+    grips=$(store-keygrips)
+    for grip in $(cached-keygrips); do
+        [[ $FRESH_CACHED == *" $grip "* ]] || grips+=" $grip"
+    done
+    # shellcheck disable=SC2086  # keygrips are hex, one word each
+    forget-keygrips $grips || printf 'folio: gpg-agent may still have a passphrase: it did not forget it.\n' >&2
+}
+
+# store-keygrips: the keygrips of the store's keys (each one in its .gpg-id) and of their subkeys —
+# two for a post-quantum subkey (ML-KEM and ECC), which gpg lists as one, joined by a comma.
+function store-keygrips() {
+    local id ids=()
+    [[ -f $FRESH_STORE_PATH/.gpg-id ]] || return 0
+    while IFS= read -r id; do [[ -n $id ]] && ids+=("$id") ; done < "$FRESH_STORE_PATH/.gpg-id"
+    (( ${#ids[@]} > 0 )) || return 0
+    gpg --list-keys --with-keygrip --with-colons -- "${ids[@]}" 2>/dev/null | awk -F: '$1 == "grp" { gsub(",", "\n", $10) ; print $10 }'
+}
+
+# agent-is-running: whether gpg-agent runs (none started: one that is not running keeps nothing).
+function agent-is-running() {
+    gpg-connect-agent --no-autostart 'getinfo version' /bye 2>/dev/null | grep -q '^OK'
+}
+
+# cached-keygrips: the keygrips gpg-agent has a passphrase for (KEYINFO's 7th field is 1).
+function cached-keygrips() {
+    agent-is-running || return 0
+    gpg-connect-agent --no-autostart 'keyinfo --list' /bye 2>/dev/null \
+        | awk '$1 == "S" && $2 == "KEYINFO" && $7 == "1" { print $3 }'
+}
+
+# forget-keygrips <keygrip>...: have gpg-agent forget the passphrase of each; fail when it does not.
+function forget-keygrips() {
+    local grip failed=0
+    agent-is-running || return 0
+    for grip in "$@"; do
+        gpg-connect-agent --no-autostart "clear_passphrase --mode=normal $grip" /bye 2>/dev/null \
+            | grep -q '^OK' || failed=1
+    done
+    return "$failed"
 }
 
 # --- Pass ---------------------------------------------------------------------
@@ -4183,12 +4296,14 @@ function remove-on-exit() {
     REMOVE_ON_EXIT+=("$@")
     trap remove-now EXIT
 }
-# remove-now: remove them already — before an `exec`, after which no EXIT trap runs.
+# remove-now: remove them already — before an `exec`, after which no EXIT trap runs. With
+# --fresh-passphrase, gpg-agent forgets the passphrases then too.
 function remove-now() {
     local h
     for h in "${GPG_HOMES[@]}"; do GNUPGHOME=$h gpgconf --kill gpg-agent; done 2>/dev/null
     (( ${#REMOVE_ON_EXIT[@]} == 0 )) || rm -rf -- "${REMOVE_ON_EXIT[@]}"
     REMOVE_ON_EXIT=() GPG_HOMES=()
+    (( ! FRESH_PASSPHRASE )) || forget-passphrases
 }
 # new-gpg-home <folder>: a GnuPG home of its own, for an export's key; gone when EnvFolio exits.
 function new-gpg-home() {
