@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 
-# folio secret mv, through the real ./folio, against a throwaway GPG home and store.
+# folio mv secret, through the real ./folio, against a throwaway GPG home and store.
 
 setup() {
     SANDBOX=$(mktemp -d)
@@ -26,44 +26,44 @@ teardown() {
 make-store() {
     gpg --batch --passphrase '' --quick-generate-key "Test User <test@example.com>" default default never 2>/dev/null
     "$FOLIO" init --key test@example.com < /dev/null >/dev/null 2>&1
-    "$FOLIO" secret insert -m web/github < <(printf 's3cr3t\nuser: jane\n') >/dev/null
-    "$FOLIO" secret insert -m mail/work  < <(printf 'other\n')              >/dev/null
+    "$FOLIO" insert secret -m web/github < <(printf 's3cr3t\nuser: jane\n') >/dev/null
+    "$FOLIO" insert secret -m mail/work  < <(printf 'other\n')              >/dev/null
 }
 
-@test "MANUAL: secret mv — rename a secret" {
+@test "MANUAL: mv secret — rename a secret" {
     make-store
-    run "$FOLIO" secret mv web/github web/gh
+    run "$FOLIO" mv secret web/github web/gh
     [ "$status" -eq 0 ]
     [ ! -e "$FOLIO_STORE_DIR/web/github.gpg" ]
     [ "$(pass show web/gh | head -1)" = "s3cr3t" ]
     [[ $(git -C "$FOLIO_STORE_DIR" log -1 --format=%s) == "Rename web/github to web/gh"* ]] || false
 }
 
-@test "secret mv: into a folder" {
+@test "mv secret: into a folder" {
     make-store
-    run "$FOLIO" secret mv mail/work archive/
+    run "$FOLIO" mv secret mail/work archive/
     [ "$status" -eq 0 ]
     [ "$(pass show archive/work)" = "other" ]
 }
 
-@test "secret mv: an unknown name fails" {
+@test "mv secret: an unknown name fails" {
     make-store
-    run "$FOLIO" secret mv nope other
+    run "$FOLIO" mv secret nope other
     [ "$status" -ne 0 ]
 }
 
-@test "secret mv --help: works without a store" {
-    run "$FOLIO" secret mv --help
+@test "mv secret --help: works without a store" {
+    run "$FOLIO" mv secret --help
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio secret mv"* ]] || false
+    [[ $output == *"Usage: folio mv secret"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
-    run "$FOLIO" help secret mv
+    run "$FOLIO" help mv secret
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio secret mv"* ]] || false
+    [[ $output == *"Usage: folio mv secret"* ]] || false
 }
 
-@test "secret mv: no store fails and creates nothing" {
-    run "$FOLIO" secret mv web/github x < /dev/null
+@test "mv secret: no store fails and creates nothing" {
+    run "$FOLIO" mv secret web/github x < /dev/null
     [ "$status" -eq 1 ]
     [[ $output == *"No ready EnvFolio store"*"folio init"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]

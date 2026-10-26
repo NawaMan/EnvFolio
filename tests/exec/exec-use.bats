@@ -41,15 +41,15 @@ teardown() {
 make-store() {
     gpg --batch --passphrase '' --quick-generate-key "Test User <test@example.com>" default default never 2>/dev/null
     "$FOLIO" init --key test@example.com < /dev/null >/dev/null 2>&1
-    "$FOLIO" text insert -t 22       server/port                  < /dev/null
-    "$FOLIO" text insert -t deploy   @app2/@prod/server/user      < /dev/null
-    "$FOLIO" text insert -t db.prod  @app2/@prod/server/db        < /dev/null
-    "$FOLIO" text insert -t stg      @app2/@staging/server/user   < /dev/null
-    "$FOLIO" text insert -t db.stg   @app2/@staging/server/db     < /dev/null
-    "$FOLIO" text insert -t 2222     @app2/@staging/server/port   < /dev/null
-    "$FOLIO" text insert -t other    gh/user                      < /dev/null
-    "$FOLIO" secret insert -m @app2/@prod/server/password    < <(printf 'p-secret\n') >/dev/null
-    "$FOLIO" secret insert -m @app2/@staging/server/password < <(printf 's-secret\n') >/dev/null
+    "$FOLIO" insert text -t 22       server/port                  < /dev/null
+    "$FOLIO" insert text -t deploy   @app2/@prod/server/user      < /dev/null
+    "$FOLIO" insert text -t db.prod  @app2/@prod/server/db        < /dev/null
+    "$FOLIO" insert text -t stg      @app2/@staging/server/user   < /dev/null
+    "$FOLIO" insert text -t db.stg   @app2/@staging/server/db     < /dev/null
+    "$FOLIO" insert text -t 2222     @app2/@staging/server/port   < /dev/null
+    "$FOLIO" insert text -t other    gh/user                      < /dev/null
+    "$FOLIO" insert secret -m @app2/@prod/server/password    < <(printf 'p-secret\n') >/dev/null
+    "$FOLIO" insert secret -m @app2/@staging/server/password < <(printf 's-secret\n') >/dev/null
 }
 
 # A server.vars contract: what the app needs, by its own names.
@@ -292,7 +292,7 @@ PORT=[22]" ]
 
 @test "exec --use: a secret laid over a text of the same name — only with --secrets; else the text stays" {
     make-store
-    "$FOLIO" secret insert -m @app2/@prod/gh/user < <(printf 'p-gh\n') >/dev/null
+    "$FOLIO" insert secret -m @app2/@prod/gh/user < <(printf 'p-gh\n') >/dev/null
     run --separate-stderr "$FOLIO" exec -s gh --use @app2/@prod -- printenv GH_USER
     [ "$status" -eq 0 ]
     [ "$output" = "p-gh" ]
@@ -307,7 +307,7 @@ PORT=[22]" ]
 
 @test "exec --use: an item both a text and a secret under it is refused with --secrets, as in a folder" {
     make-store
-    "$FOLIO" secret insert -m @app2/@prod/server/user < <(printf 'x\n') >/dev/null
+    "$FOLIO" insert secret -m @app2/@prod/server/user < <(printf 'x\n') >/dev/null
     run --separate-stderr "$FOLIO" exec -s --use @app2/@prod -- touch "$SANDBOX/ran"
     [ "$status" -eq 1 ]
     [[ $stderr == *"'@app2/@prod/server/user' is both a text and a secret"* ]] || false
@@ -413,8 +413,8 @@ folio exec: left out 2 secret(s) under '@app2'; add --secrets to load them." ]
 
 @test "exec: two items in one folder, or under --all, for one variable are refused; from two selections, the later wins" {
     make-store
-    "$FOLIO" text insert -t one clash/a/b < /dev/null
-    "$FOLIO" text insert -t two clash/a_b < /dev/null
+    "$FOLIO" insert text -t one clash/a/b < /dev/null
+    "$FOLIO" insert text -t two clash/a_b < /dev/null
     run --separate-stderr "$FOLIO" exec clash -- touch "$SANDBOX/ran"
     [ "$status" -eq 1 ]
     [[ $stderr == *"folio: exec: 'clash': 'clash/a/b' and 'clash/a_b' would both be CLASH_A_B; give one VAR=<name>, or rename one."* ]] || false

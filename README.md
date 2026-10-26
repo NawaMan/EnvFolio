@@ -22,11 +22,12 @@ A command-line tool for password management. It is built heavily on top of [`pas
 # High-Level CLI Design
 
 - `folio init`, `backup`, `restore`, `export`, `import`, `path` to deal with the store itself.
-- `folio text ...`   to deal with text-related actions like: show, insert, generate, edit, find, ...
-- `folio secret ...` to deal with secret-related actions like: show, insert, generate, edit, find, ...
+- `folio <action> text ...`   to deal with texts — actions like: show, insert, generate, edit, find, ...
+- `folio <action> secret ...` the same for secrets: `folio show secret web/github`.
+  (The kind can also come first: `folio secret show` works the same.)
 - `folio ls`         to list both types of items (texts/secrets) together, as a tree or flat.
 - `folio exec ...`   to run a command with items as environment variables (secrets only with `--secrets`),
-  named on the command line or in a vars file (`--vars prod-deploy.vars`; `folio vars check` checks one),
+  named on the command line or in a vars file (`--vars prod-deploy.vars`; `folio check vars` checks one),
   with `--use @prod` to peel a namespace off.
 - `folio shell ...`  to start a shell with items as environment variables.
 - `folio completion bash|zsh` for Tab completion of commands, options and item names.

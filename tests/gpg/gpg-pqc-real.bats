@@ -41,8 +41,8 @@ make-pqc-key() {
 make-store() {
     make-pqc-key "Test User <test@example.com>"
     "$FOLIO" init --key test@example.com < /dev/null >/dev/null 2>&1
-    "$FOLIO" text insert -t "https://example.com" web/home < /dev/null >/dev/null
-    "$FOLIO" secret insert web/github < <(printf 's3cr3t\ns3cr3t\n') >/dev/null
+    "$FOLIO" insert text -t "https://example.com" web/home < /dev/null >/dev/null
+    "$FOLIO" insert secret web/github < <(printf 's3cr3t\ns3cr3t\n') >/dev/null
 }
 
 @test "real gpg: the store's key is post-quantum" {
@@ -62,8 +62,8 @@ make-store() {
     run "$FOLIO" restore "${file[0]}" < /dev/null
     echo "$output"
     [ "$status" -eq 0 ]
-    [ "$("$FOLIO" text show web/home)" = "https://example.com" ]
-    [ "$("$FOLIO" secret show web/github)" = "s3cr3t" ]
+    [ "$("$FOLIO" show text web/home)" = "https://example.com" ]
+    [ "$("$FOLIO" show secret web/github)" = "s3cr3t" ]
 }
 
 @test "real gpg: export --to a post-quantum key, imported there" {
@@ -81,6 +81,6 @@ make-store() {
     run "$FOLIO" import --key server@example.com "$SANDBOX/out/to-server.folio" web/github web/home < /dev/null
     echo "$output"
     [ "$status" -eq 0 ]
-    [ "$("$FOLIO" text show web/home)" = "https://example.com" ]
-    [ "$("$FOLIO" secret show web/github)" = "s3cr3t" ]
+    [ "$("$FOLIO" show text web/home)" = "https://example.com" ]
+    [ "$("$FOLIO" show secret web/github)" = "s3cr3t" ]
 }

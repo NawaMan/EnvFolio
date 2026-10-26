@@ -22,8 +22,8 @@ setup() {
 
     gpg --batch --passphrase '' --quick-generate-key "Test User <test@example.com>" default default never 2>/dev/null
     "$FOLIO" init --key test@example.com < /dev/null >/dev/null 2>&1
-    "$FOLIO" text insert -t "VISIBLE-TEXT" web/home < /dev/null >/dev/null
-    "$FOLIO" secret insert web/github < <(printf 'TOPSECRET\nTOPSECRET\n') >/dev/null
+    "$FOLIO" insert text -t "VISIBLE-TEXT" web/home < /dev/null >/dev/null
+    "$FOLIO" insert secret web/github < <(printf 'TOPSECRET\nTOPSECRET\n') >/dev/null
 }
 
 teardown() {

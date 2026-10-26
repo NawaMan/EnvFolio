@@ -34,11 +34,11 @@ teardown() {
 make-export() {
     gpg --batch --passphrase '' --quick-generate-key "Test User <test@example.com>" default default never 2>/dev/null
     "$FOLIO" init --key test@example.com < /dev/null >/dev/null 2>&1
-    "$FOLIO" text insert -t "shared-user"      gh/user         < /dev/null
-    "$FOLIO" text insert -t "test@example.com" git/email       < /dev/null
-    "$FOLIO" text insert -t "nawa-user"        "@nawa/gh/user" < /dev/null
-    "$FOLIO" secret insert -m gh/token         < <(printf 'shared-token\n') >/dev/null
-    "$FOLIO" secret insert -m "@nawa/gh/token" < <(printf 'nawa-token\n')   >/dev/null
+    "$FOLIO" insert text -t "shared-user"      gh/user         < /dev/null
+    "$FOLIO" insert text -t "test@example.com" git/email       < /dev/null
+    "$FOLIO" insert text -t "nawa-user"        "@nawa/gh/user" < /dev/null
+    "$FOLIO" insert secret -m gh/token         < <(printf 'shared-token\n') >/dev/null
+    "$FOLIO" insert secret -m "@nawa/gh/token" < <(printf 'nawa-token\n')   >/dev/null
     "$FOLIO" export -o "$FILE" --secrets --file-passphrase-stdin gh git @nawa \
         < <(printf 'export pass\n') >/dev/null 2>&1
     [ -f "$FILE" ]

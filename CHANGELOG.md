@@ -30,11 +30,16 @@ now stable. A change that breaks any of them will come with a new major version.
   📄 instead of (S)/(T): `🔑gh/token`. folio asks the terminal — it writes 🔑, asks where the
   cursor went (two cells: yes), and wipes the line — so one that cannot draw them keeps (S)/(T), as
   do the Linux console and a locale that is not UTF-8. In a pipe or a file it stays (S)/(T).
-- `--plain` for `ls`, `text ls`, `secret ls`, `text find`, `secret find`, `exec` and `shell`: no
+- `--plain` for `ls`, `ls text`, `ls secret`, `find text`, `find secret`, `exec` and `shell`: no
   colour, even on a screen; for `ls`, `exec` and `shell`, (S)/(T) rather than emoji.
 
 ### Changed
 
+- **The action comes first, then the kind: `folio show secret web/github`, `folio insert text …`,
+  `folio check vars …`** (was `folio secret show`, `folio text insert`, `folio vars check`). Help,
+  error messages, Tab completion and the MANUAL use this order. The kind first still works the
+  same. An action with no kind (`folio show web/github`) says to name one. `folio ls text` and
+  `folio ls secret` list one kind; a top folder named `text` or `secret` is `folio ls text/`.
 - **`exec`/`shell`: the entries, `--all` and `--use` are taken in the order typed, and the last one
   wins.** `--all` used to load first wherever it was typed: `@nawa --all` now lets the shared
   entries win; write `--all @nawa` for the old way.
@@ -54,7 +59,7 @@ now stable. A change that breaks any of them will come with a new major version.
   file's `@{folder/*}`) that would give the same variable are refused before anything runs —
   e.g. `--use @app2` holding both `@prod/…` and `@staging/…` — instead of the later name, in
   sorted order, winning. From two selections, the later still wins.
-- `folio ls`, `text ls`, `secret ls` and `text find`/`secret find` show secrets in yellow and texts
+- `folio ls`, `ls text`, `ls secret` and `find text`/`find secret` show secrets in yellow and texts
   in green, on a screen that shows colour; `exec`/`shell --names` too. Sent to a pipe or a file, or
   with `NO_COLOR` set or `TERM=dumb`, they now print no colour codes at all (folders used to keep
   theirs).
@@ -70,7 +75,7 @@ now stable. A change that breaks any of them will come with a new major version.
 
 ### Fixed
 
-- With stdin a pipe or a file (`echo x | folio text insert x`, `export -s
+- With stdin a pipe or a file (`echo x | folio insert text x`, `export -s
   --file-passphrase-stdin`), gpg could not ask for the store key's passphrase on a terminal and
   stopped with "Inappropriate ioctl for device". EnvFolio now sets `GPG_TTY` to its terminal when
   it is not set; the command `exec` and `shell` run does not get it.

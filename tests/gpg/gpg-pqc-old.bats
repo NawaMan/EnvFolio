@@ -62,8 +62,8 @@ make-files() {
     export GNUPGHOME="$SANDBOX/new-gnupg" FOLIO_STORE_DIR="$SANDBOX/store"
     gpg-in "$NEW_GPG" gpg --batch --passphrase '' --quick-generate-key "Test User <test@example.com>" pqc default never 2>/dev/null
     gpg-in "$NEW_GPG" "$FOLIO" init --key test@example.com < /dev/null >/dev/null 2>&1
-    gpg-in "$NEW_GPG" "$FOLIO" text insert -t "https://example.com" web/home < /dev/null >/dev/null
-    gpg-in "$NEW_GPG" "$FOLIO" secret insert web/github < <(printf 's3cr3t\ns3cr3t\n') >/dev/null
+    gpg-in "$NEW_GPG" "$FOLIO" insert text -t "https://example.com" web/home < /dev/null >/dev/null
+    gpg-in "$NEW_GPG" "$FOLIO" insert secret web/github < <(printf 's3cr3t\ns3cr3t\n') >/dev/null
     gpg-in "$NEW_GPG" "$FOLIO" backup "$SANDBOX/out" < /dev/null >/dev/null 2>&1
     gpg-in "$NEW_GPG" "$FOLIO" export -o "$SANDBOX/out/items" --secrets --to test@example.com web < /dev/null >/dev/null 2>&1
     gpg-in "$NEW_GPG" gpg --armor --export test@example.com > "$SANDBOX/test.asc"

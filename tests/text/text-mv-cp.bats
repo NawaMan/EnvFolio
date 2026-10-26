@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 
-# folio text mv and folio text cp, through the real ./folio, against a throwaway GPG home and store.
+# folio mv text and folio cp text, through the real ./folio, against a throwaway GPG home and store.
 
 setup() {
     SANDBOX=$(mktemp -d)
@@ -28,114 +28,114 @@ make-store() {
     "$FOLIO" init --key test@example.com < /dev/null >/dev/null 2>&1
     local name
     for name in web/user web/home web/deep/x mail/work; do
-        "$FOLIO" text insert -t "$name value" "$name" < /dev/null
+        "$FOLIO" insert text -t "$name value" "$name" < /dev/null
     done
-    "$FOLIO" secret insert -m web/github < <(printf 's3cr3t\n') >/dev/null
+    "$FOLIO" insert secret -m web/github < <(printf 's3cr3t\n') >/dev/null
 }
 
 clean() { [ -z "$(git -C "$FOLIO_STORE_DIR" status --porcelain)" ] ; }
 
-@test "MANUAL: text mv — rename a text" {
+@test "MANUAL: mv text — rename a text" {
     make-store
-    run "$FOLIO" text mv web/user web/login < /dev/null
+    run "$FOLIO" mv text web/user web/login < /dev/null
     [ "$status" -eq 0 ]
     [ ! -e "$FOLIO_STORE_DIR/web/user.txt" ]
-    [ "$("$FOLIO" text show web/login)" = "web/user value" ]
+    [ "$("$FOLIO" show text web/login)" = "web/user value" ]
     [ "$(git -C "$FOLIO_STORE_DIR" log -1 --format=%s)" = "Rename web/user to web/login." ]
     clean
 }
 
-@test "text mv: into a folder, the text keeps its name; an emptied folder goes" {
+@test "mv text: into a folder, the text keeps its name; an emptied folder goes" {
     make-store
-    run "$FOLIO" text mv mail/work archive/ < /dev/null
+    run "$FOLIO" mv text mail/work archive/ < /dev/null
     [ "$status" -eq 0 ]
-    [ "$("$FOLIO" text show archive/work)" = "mail/work value" ]
+    [ "$("$FOLIO" show text archive/work)" = "mail/work value" ]
     [ ! -e "$FOLIO_STORE_DIR/mail" ]
     clean
 }
 
-@test "text mv: a folder moves its texts only; its secrets stay" {
+@test "mv text: a folder moves its texts only; its secrets stay" {
     make-store
-    run "$FOLIO" text mv web site < /dev/null
+    run "$FOLIO" mv text web site < /dev/null
     [ "$status" -eq 0 ]
-    [ "$("$FOLIO" text show site/user)" = "web/user value" ]
-    [ "$("$FOLIO" text show site/deep/x)" = "web/deep/x value" ]
+    [ "$("$FOLIO" show text site/user)" = "web/user value" ]
+    [ "$("$FOLIO" show text site/deep/x)" = "web/deep/x value" ]
     [ -z "$(find "$FOLIO_STORE_DIR/web" -name '*.txt*')" ]
     [ "$(pass show web/github)" = "s3cr3t" ]
     [ ! -e "$FOLIO_STORE_DIR/site/github.gpg" ]
     clean
 }
 
-@test "text mv: piped in, an existing text is overwritten" {
+@test "mv text: piped in, an existing text is overwritten" {
     make-store
-    run "$FOLIO" text mv web/user web/home < /dev/null
+    run "$FOLIO" mv text web/user web/home < /dev/null
     [ "$status" -eq 0 ]
-    [ "$("$FOLIO" text show web/home)" = "web/user value" ]
+    [ "$("$FOLIO" show text web/home)" = "web/user value" ]
     clean
 }
 
-@test "MANUAL: text cp — copy a text" {
+@test "MANUAL: cp text — copy a text" {
     make-store
-    run "$FOLIO" text cp web/user web/user-copy < /dev/null
+    run "$FOLIO" cp text web/user web/user-copy < /dev/null
     [ "$status" -eq 0 ]
-    [ "$("$FOLIO" text show web/user)" = "web/user value" ]
-    [ "$("$FOLIO" text show web/user-copy)" = "web/user value" ]
+    [ "$("$FOLIO" show text web/user)" = "web/user value" ]
+    [ "$("$FOLIO" show text web/user-copy)" = "web/user value" ]
     [ "$(git -C "$FOLIO_STORE_DIR" log -1 --format=%s)" = "Copy web/user to web/user-copy." ]
     clean
 }
 
-@test "text cp: a folder copies its texts only" {
+@test "cp text: a folder copies its texts only" {
     make-store
-    run "$FOLIO" text cp web backup < /dev/null
+    run "$FOLIO" cp text web backup < /dev/null
     [ "$status" -eq 0 ]
-    [ "$("$FOLIO" text show backup/deep/x)" = "web/deep/x value" ]
-    [ "$("$FOLIO" text show web/deep/x)" = "web/deep/x value" ]
+    [ "$("$FOLIO" show text backup/deep/x)" = "web/deep/x value" ]
+    [ "$("$FOLIO" show text web/deep/x)" = "web/deep/x value" ]
     [ ! -e "$FOLIO_STORE_DIR/backup/github.gpg" ]
     clean
 }
 
-@test "text mv/cp: a secret, an unknown name or a folder without texts is refused" {
+@test "mv text/cp: a secret, an unknown name or a folder without texts is refused" {
     make-store
-    "$FOLIO" secret insert -m only/secret < <(printf 'k\n') >/dev/null
+    "$FOLIO" insert secret -m only/secret < <(printf 'k\n') >/dev/null
     local how
     for how in mv cp; do
-        run "$FOLIO" text "$how" web/github x < /dev/null
+        run "$FOLIO" "$how" text web/github x < /dev/null
         [ "$status" -eq 1 ]
         [[ $output == *"'web/github' is not in the store"* ]] || false
-        run "$FOLIO" text "$how" only x < /dev/null
+        run "$FOLIO" "$how" text only x < /dev/null
         [ "$status" -eq 1 ]
         [[ $output == *"'only' holds no texts"* ]] || false
     done
     [ "$(pass show web/github)" = "s3cr3t" ]
 }
 
-@test "text mv/cp: names leaving the store, or bad arguments, are refused" {
+@test "mv text/cp: names leaving the store, or bad arguments, are refused" {
     make-store
     local how
     for how in mv cp; do
-        run "$FOLIO" text "$how" web/user ../out < /dev/null
+        run "$FOLIO" "$how" text web/user ../out < /dev/null
         [ "$status" -eq 1 ]
         [[ $output == *"'../out' is not a valid name"* ]] || false
-        run "$FOLIO" text "$how" ../web/user x < /dev/null
+        run "$FOLIO" "$how" text ../web/user x < /dev/null
         [ "$status" -eq 1 ]
         [[ $output == *"is not a valid name"* ]] || false
-        run "$FOLIO" text "$how" web/user < /dev/null
+        run "$FOLIO" "$how" text web/user < /dev/null
         [ "$status" -eq 1 ]
-        [[ $output == *"Usage: folio text $how"* ]] || false
+        [[ $output == *"Usage: folio $how text"* ]] || false
     done
     [ ! -e "$SANDBOX/out.txt" ]
 }
 
-@test "text mv/cp: no store fails; --help works without one" {
+@test "mv text/cp: no store fails; --help works without one" {
     local how
     for how in mv cp; do
-        run "$FOLIO" text "$how" a b < /dev/null
+        run "$FOLIO" "$how" text a b < /dev/null
         [ "$status" -eq 1 ]
         [[ $output == *"No ready EnvFolio store"* ]] || false
-        run "$FOLIO" text "$how" --help
+        run "$FOLIO" "$how" text --help
         [ "$status" -eq 0 ]
-        [[ $output == *"Usage: folio text $how"* ]] || false
-        run "$FOLIO" help text "$how"
+        [[ $output == *"Usage: folio $how text"* ]] || false
+        run "$FOLIO" help "$how" text
         [ "$status" -eq 0 ]
     done
     [ ! -e "$FOLIO_STORE_DIR" ]

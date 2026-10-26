@@ -29,8 +29,8 @@ setup() {
         --quick-generate-key "Test User <test@example.com>" default default never 2>/dev/null
     use-pinentry pw
     "$FOLIO" init --key test@example.com < /dev/null >/dev/null 2>&1
-    "$FOLIO" text insert -t "https://example.com" web/home < /dev/null >/dev/null
-    "$FOLIO" secret insert web/github < <(printf 's3cr3t\ns3cr3t\n') >/dev/null
+    "$FOLIO" insert text -t "https://example.com" web/home < /dev/null >/dev/null
+    "$FOLIO" insert secret web/github < <(printf 's3cr3t\ns3cr3t\n') >/dev/null
     use-pinentry --cancel
 }
 
@@ -46,69 +46,69 @@ forget() { gpgconf --kill gpg-agent ; }
 
 @test "store passphrase: without it, gpg's prompt is all there is (here it cancels)" {
     forget
-    run "$FOLIO" secret show web/github
+    run "$FOLIO" show secret web/github
     [ "$status" -ne 0 ]
 }
 
-@test "MANUAL: passphrases without a prompt — secret show with --store-passphrase-fd" {
+@test "MANUAL: passphrases without a prompt — show secret with --store-passphrase-fd" {
     forget
-    run --separate-stderr "$FOLIO" secret show --store-passphrase-fd 3 web/github 3< <(printf 'pw\n')
+    run --separate-stderr "$FOLIO" show secret --store-passphrase-fd 3 web/github 3< <(printf 'pw\n')
     [ "$status" -eq 0 ]
     [ "$output" = "s3cr3t" ]
 }
 
 @test "store passphrase: --store-passphrase-fd=<n> works too" {
     forget
-    run --separate-stderr "$FOLIO" secret show --store-passphrase-fd=3 web/github 3< <(printf 'pw\n')
+    run --separate-stderr "$FOLIO" show secret --store-passphrase-fd=3 web/github 3< <(printf 'pw\n')
     [ "$status" -eq 0 ]
     [ "$output" = "s3cr3t" ]
 }
 
-@test "store passphrase: secret grep, over several secrets (one fd, read once)" {
-    "$FOLIO" secret insert aws/key < <(printf 'AKIA\nAKIA\n') >/dev/null
+@test "store passphrase: grep secret, over several secrets (one fd, read once)" {
+    "$FOLIO" insert secret aws/key < <(printf 'AKIA\nAKIA\n') >/dev/null
     forget
-    run "$FOLIO" secret grep --store-passphrase-fd 3 -e s3cr3t -e AKIA 3< <(printf 'pw\n')
+    run "$FOLIO" grep secret --store-passphrase-fd 3 -e s3cr3t -e AKIA 3< <(printf 'pw\n')
     [ "$status" -eq 0 ]
     [[ $output == *s3cr3t* && $output == *AKIA* ]] || false
 }
 
-@test "store passphrase: secret edit" {
+@test "store passphrase: edit secret" {
     printf '#!/bin/sh\nprintf "n3w\\n" > "$1"\n' > "$SANDBOX/editor" && chmod +x "$SANDBOX/editor"
     forget
-    EDITOR="$SANDBOX/editor" run "$FOLIO" secret edit --store-passphrase-fd 3 web/github 3< <(printf 'pw\n')
+    EDITOR="$SANDBOX/editor" run "$FOLIO" edit secret --store-passphrase-fd 3 web/github 3< <(printf 'pw\n')
     [ "$status" -eq 0 ]
     forget
-    [ "$("$FOLIO" secret show --store-passphrase-fd 3 web/github 3< <(printf 'pw\n'))" = "n3w" ]
+    [ "$("$FOLIO" show secret --store-passphrase-fd 3 web/github 3< <(printf 'pw\n'))" = "n3w" ]
 }
 
-@test "store passphrase: secret generate --in-place keeps the rest" {
-    "$FOLIO" secret insert -m -f web/github < <(printf 'old\nuser: jane\n') >/dev/null
+@test "store passphrase: generate secret --in-place keeps the rest" {
+    "$FOLIO" insert secret -m -f web/github < <(printf 'old\nuser: jane\n') >/dev/null
     forget
-    run --separate-stderr "$FOLIO" secret generate --in-place --store-passphrase-fd 3 web/github 12 3< <(printf 'pw\n')
+    run --separate-stderr "$FOLIO" generate secret --in-place --store-passphrase-fd 3 web/github 12 3< <(printf 'pw\n')
     [ "$status" -eq 0 ]
     forget
-    run --separate-stderr "$FOLIO" secret show --store-passphrase-fd 3 web/github 3< <(printf 'pw\n')
+    run --separate-stderr "$FOLIO" show secret --store-passphrase-fd 3 web/github 3< <(printf 'pw\n')
     [ "${#lines[0]}" -eq 12 ] && [ "${lines[1]}" = "user: jane" ] || false
 }
 
-@test "store passphrase: text insert, edit and generate sign with it" {
+@test "store passphrase: insert text, edit and generate sign with it" {
     forget
-    run "$FOLIO" text insert --store-passphrase-fd 3 -t "jane" web/user 3< <(printf 'pw\n')
+    run "$FOLIO" insert text --store-passphrase-fd 3 -t "jane" web/user 3< <(printf 'pw\n')
     [ "$status" -eq 0 ]
     printf '#!/bin/sh\nprintf "joe\\n" > "$1"\n' > "$SANDBOX/editor" && chmod +x "$SANDBOX/editor"
     forget
-    EDITOR="$SANDBOX/editor" run "$FOLIO" text edit --store-passphrase-fd 3 web/user 3< <(printf 'pw\n')
+    EDITOR="$SANDBOX/editor" run "$FOLIO" edit text --store-passphrase-fd 3 web/user 3< <(printf 'pw\n')
     [ "$status" -eq 0 ]
     forget
-    run "$FOLIO" text generate --store-passphrase-fd 3 web/id 8 3< <(printf 'pw\n')
+    run "$FOLIO" generate text --store-passphrase-fd 3 web/id 8 3< <(printf 'pw\n')
     [ "$status" -eq 0 ]
-    [ "$("$FOLIO" text show web/user)" = "joe" ]
-    "$FOLIO" text show web/id >/dev/null
+    [ "$("$FOLIO" show text web/user)" = "joe" ]
+    "$FOLIO" show text web/id >/dev/null
 }
 
-@test "store passphrase: text insert without it — not saved" {
+@test "store passphrase: insert text without it — not saved" {
     forget
-    run "$FOLIO" text insert -t "jane" web/user < /dev/null
+    run "$FOLIO" insert text -t "jane" web/user < /dev/null
     [ "$status" -ne 0 ]
     [ ! -e "$FOLIO_STORE_DIR/web/user.txt" ]
 }
@@ -162,18 +162,18 @@ forget() { gpgconf --kill gpg-agent ; }
 
 @test "store passphrase: a wrong one stops before anything changes" {
     forget
-    run "$FOLIO" text insert --store-passphrase-fd 3 -t "jane" web/user 3< <(printf 'wrong\n')
+    run "$FOLIO" insert text --store-passphrase-fd 3 -t "jane" web/user 3< <(printf 'wrong\n')
     [ "$status" -eq 1 ]
     [[ $output == *"The passphrase on file descriptor 3 does not unlock the store's key"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR/web/user.txt" ]
 }
 
 @test "store passphrase: an empty one, a closed fd, or not a number — refused" {
-    run "$FOLIO" secret show --store-passphrase-fd 3 web/github 3< /dev/null
+    run "$FOLIO" show secret --store-passphrase-fd 3 web/github 3< /dev/null
     [ "$status" -eq 1 ] && [[ $output == *"No passphrase on file descriptor 3."* ]] || false
-    run "$FOLIO" secret show --store-passphrase-fd 7 web/github
+    run "$FOLIO" show secret --store-passphrase-fd 7 web/github
     [ "$status" -eq 1 ] && [[ $output == *"--store-passphrase-fd 7: no such file descriptor is open."* ]] || false
-    run "$FOLIO" secret show --store-passphrase-fd x web/github
+    run "$FOLIO" show secret --store-passphrase-fd x web/github
     [ "$status" -eq 1 ] && [[ $output == *"--store-passphrase-fd needs a file descriptor number, not 'x'."* ]] || false
 }
 
@@ -197,12 +197,12 @@ forget() { gpgconf --kill gpg-agent ; }
 @test "import into a store: the texts are signed with the store's passphrase" {
     "$FOLIO" export -o "$SANDBOX/out/items" --file-passphrase-fd 3 --store-passphrase-fd 4 web/home \
         3< <(printf 'file-pw\n') 4< <(printf 'pw\n') >/dev/null 2>&1
-    "$FOLIO" text rm -f web/home >/dev/null
+    "$FOLIO" rm text -f web/home >/dev/null
     forget
     run "$FOLIO" import --all --file-passphrase-fd 3 --store-passphrase-fd 4 "$SANDBOX/out/items.folio" \
         3< <(printf 'file-pw\n') 4< <(printf 'pw\n') < /dev/null
     [ "$status" -eq 0 ]
-    [ "$("$FOLIO" text show web/home)" = "https://example.com" ]
+    [ "$("$FOLIO" show text web/home)" = "https://example.com" ]
 }
 
 @test "import with no store, a new key: --store-passphrase-fd is that key's passphrase" {
@@ -214,9 +214,9 @@ forget() { gpgconf --kill gpg-agent ; }
         3< <(printf 'file-pw\n') 4< <(printf 'new-pw\n') < <(printf '2\nJane Doe\njane@example.com\n')
     [ "$status" -eq 0 ]
     [[ $output == *"its passphrase from --store-passphrase-fd"* ]] || false
-    [ "$("$FOLIO" text show web/home)" = "https://example.com" ]
+    [ "$("$FOLIO" show text web/home)" = "https://example.com" ]
     forget
-    "$FOLIO" text insert --store-passphrase-fd 3 -t x web/x 3< <(printf 'new-pw\n') >/dev/null
+    "$FOLIO" insert text --store-passphrase-fd 3 -t x web/x 3< <(printf 'new-pw\n') >/dev/null
 }
 
 @test "backup --encrypt: the store's passphrase and the file's; restore with --file-passphrase-fd" {
@@ -230,7 +230,7 @@ forget() { gpgconf --kill gpg-agent ; }
     use-pinentry --cancel
     run "$FOLIO" restore --file-passphrase-fd 3 "${file[0]}" 3< <(printf 'file-pw\n') < /dev/null
     [ "$status" -eq 0 ]
-    [ "$("$FOLIO" secret show --store-passphrase-fd 3 web/github 3< <(printf 'pw\n'))" = "s3cr3t" ]
+    [ "$("$FOLIO" show secret --store-passphrase-fd 3 web/github 3< <(printf 'pw\n'))" = "s3cr3t" ]
 }
 
 @test "backup without the store's passphrase: the key cannot be exported (the prompt cancels)" {

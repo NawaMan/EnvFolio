@@ -42,10 +42,10 @@ teardown() {
 make-export() {
     gpg --batch --passphrase '' --quick-generate-key "Test User <test@example.com>" default default never 2>/dev/null
     "$FOLIO" init --key test@example.com < /dev/null >/dev/null 2>&1
-    "$FOLIO" text insert -t "https://example.com" web/home < /dev/null >/dev/null
-    "$FOLIO" text insert -t "jane" web/user < /dev/null >/dev/null
-    "$FOLIO" secret insert web/github < <(printf 's3cr3t\ns3cr3t\n') >/dev/null
-    "$FOLIO" secret insert aws/key < <(printf 'AKIA\nAKIA\n') >/dev/null
+    "$FOLIO" insert text -t "https://example.com" web/home < /dev/null >/dev/null
+    "$FOLIO" insert text -t "jane" web/user < /dev/null >/dev/null
+    "$FOLIO" insert secret web/github < <(printf 's3cr3t\ns3cr3t\n') >/dev/null
+    "$FOLIO" insert secret aws/key < <(printf 'AKIA\nAKIA\n') >/dev/null
     "$FOLIO" export -o "$EXPORT" --file-passphrase-stdin --secrets web aws < <(printf 'pw\n') >/dev/null 2>&1
     [ -f "$EXPORT" ]
 }
@@ -62,7 +62,7 @@ go-there() {
 # There: a store, with the server's key, holding web/user = "old".
 make-there-store() {
     "$FOLIO" init --key server@example.com < /dev/null >/dev/null 2>&1
-    "$FOLIO" text insert -t "old" web/user < /dev/null >/dev/null
+    "$FOLIO" insert text -t "old" web/user < /dev/null >/dev/null
 }
 
 # import-answering [<answer>...] -- [<option>...]: run `folio import <option>...` with the
@@ -96,9 +96,9 @@ assert-imported() {
     local item
     for item in "$@"; do
         case $item in
-            web/home.txt)   [ "$("$FOLIO" text show web/home)" = "https://example.com" ] ;;
-            web/github.gpg) [ "$("$FOLIO" secret show web/github)" = "s3cr3t" ] ;;
-            aws/key.gpg)    [ "$("$FOLIO" secret show aws/key)" = "AKIA" ] ;;
+            web/home.txt)   [ "$("$FOLIO" show text web/home)" = "https://example.com" ] ;;
+            web/github.gpg) [ "$("$FOLIO" show secret web/github)" = "s3cr3t" ] ;;
+            aws/key.gpg)    [ "$("$FOLIO" show secret aws/key)" = "AKIA" ] ;;
         esac
     done
     [ -z "$(git -C "$FOLIO_STORE_DIR" status --porcelain)" ]
@@ -115,7 +115,7 @@ ALL=(aws/key.gpg web/github.gpg web/home.txt web/user.txt)
     import-answering "$EXPORT" "" all 2 --
     [[ $output == *"Export file"* && $output == *"Which items?"* && $output == *"What to do with these 1?"* ]] || false
     assert-imported "${ALL[@]}"
-    [ "$("$FOLIO" text show web/user)" = "old" ]
+    [ "$("$FOLIO" show text web/user)" = "old" ]
 }
 
 @test "import flow 2: <file> — asks the items only" {
@@ -147,7 +147,7 @@ ALL=(aws/key.gpg web/github.gpg web/home.txt web/user.txt)
     import-answering 2 -- --file-passphrase-fd 5 --all "$EXPORT" 5< <(printf 'pw\n')
     [[ $output == *"Already in the store:"*"(T)web/user"* && $output == *"What to do with these 1?"* ]] || false
     assert-imported "${ALL[@]}"
-    [ "$("$FOLIO" text show web/user)" = "old" ]
+    [ "$("$FOLIO" show text web/user)" = "old" ]
 }
 
 @test "import flow 6: + --overwrite — not asked, replaced" {
@@ -155,7 +155,7 @@ ALL=(aws/key.gpg web/github.gpg web/home.txt web/user.txt)
     import-answering -- --file-passphrase-fd 5 --all --overwrite "$EXPORT" 5< <(printf 'pw\n')
     [[ $output != *"What to do with these"* && $output == *"Already in the store: 1: overwritten"* ]] || false
     assert-imported "${ALL[@]}"
-    [ "$("$FOLIO" text show web/user)" = "jane" ]
+    [ "$("$FOLIO" show text web/user)" = "jane" ]
 }
 
 @test "import flow 6b: --skip-existing instead — not asked, kept" {
@@ -163,7 +163,7 @@ ALL=(aws/key.gpg web/github.gpg web/home.txt web/user.txt)
     import-answering -- --file-passphrase-fd 5 --all --skip-existing "$EXPORT" 5< <(printf 'pw\n')
     [[ $output != *"What to do with these"* && $output == *"Already in the store: 1: skipped"* ]] || false
     assert-imported "${ALL[@]}"
-    [ "$("$FOLIO" text show web/user)" = "old" ]
+    [ "$("$FOLIO" show text web/user)" = "old" ]
 }
 
 @test "import flow 7: --file-passphrase-stdin instead of the fd — asks nothing" {

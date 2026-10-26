@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 
-# folio text edit, through the real ./folio, against a throwaway GPG home and store.
+# folio edit text, through the real ./folio, against a throwaway GPG home and store.
 
 setup() {
     SANDBOX=$(mktemp -d)
@@ -26,7 +26,7 @@ teardown() {
 make-store() {
     gpg --batch --passphrase '' --quick-generate-key "Test User <test@example.com>" default default never 2>/dev/null
     "$FOLIO" init --key test@example.com < /dev/null >/dev/null 2>&1
-    "$FOLIO" text insert -t jane web/user < /dev/null
+    "$FOLIO" insert text -t jane web/user < /dev/null
 }
 
 # An $EDITOR that writes <text> into the file it is given, and notes that it ran.
@@ -37,100 +37,100 @@ fake-editor() {
     export EDITOR="$SANDBOX/editor"
 }
 
-@test "MANUAL: text edit — edit a text" {
+@test "MANUAL: edit text — edit a text" {
     make-store
     fake-editor "jane doe"
-    run "$FOLIO" text edit web/user
+    run "$FOLIO" edit text web/user
     [ "$status" -eq 0 ]
-    [ "$("$FOLIO" text show web/user)" = "jane doe" ]
+    [ "$("$FOLIO" show text web/user)" = "jane doe" ]
     [ "$(git -C "$FOLIO_STORE_DIR" log -1 --format=%s)" = "Edit text for web/user using $EDITOR." ]
     [ -z "$(git -C "$FOLIO_STORE_DIR" status --porcelain)" ]
 }
 
-@test "text edit: the editor gets the current text" {
+@test "edit text: the editor gets the current text" {
     make-store
     # shellcheck disable=SC2016  # $1 is the editor script's own argument
     printf '#!/bin/sh\ncp "$1" "%s/seen"\n' "$SANDBOX" > "$SANDBOX/editor"
     chmod +x "$SANDBOX/editor"
-    EDITOR="$SANDBOX/editor" run "$FOLIO" text edit web/user
+    EDITOR="$SANDBOX/editor" run "$FOLIO" edit text web/user
     [ "$(cat "$SANDBOX/seen")" = "jane" ]
 }
 
-@test "text edit: a new name adds the text" {
+@test "edit text: a new name adds the text" {
     make-store
     fake-editor "fresh"
-    run "$FOLIO" text edit new/one
+    run "$FOLIO" edit text new/one
     [ "$status" -eq 0 ]
-    [ "$("$FOLIO" text show new/one)" = "fresh" ]
+    [ "$("$FOLIO" show text new/one)" = "fresh" ]
     [ "$(git -C "$FOLIO_STORE_DIR" log -1 --format=%s)" = "Add text for new/one using $EDITOR." ]
 }
 
-@test "text edit: an unchanged text is not saved again" {
+@test "edit text: an unchanged text is not saved again" {
     make-store
     local before ; before=$(git -C "$FOLIO_STORE_DIR" rev-parse HEAD)
-    EDITOR=true run "$FOLIO" text edit web/user
+    EDITOR=true run "$FOLIO" edit text web/user
     [ "$status" -eq 1 ]
     [[ $output == *"Text unchanged."* ]] || false
     [ "$(git -C "$FOLIO_STORE_DIR" rev-parse HEAD)" = "$before" ]
 }
 
-@test "text edit: a new name not saved in the editor adds nothing" {
+@test "edit text: a new name not saved in the editor adds nothing" {
     make-store
-    EDITOR=true run "$FOLIO" text edit new/one
+    EDITOR=true run "$FOLIO" edit text new/one
     [ "$status" -eq 1 ]
     [[ $output == *"Text not saved."* ]] || false
     [ ! -e "$FOLIO_STORE_DIR/new/one.txt" ]
 }
 
-@test "text edit: a text changed outside EnvFolio is not opened or re-signed" {
+@test "edit text: a text changed outside EnvFolio is not opened or re-signed" {
     make-store
     fake-editor "whatever"
     printf 'mallory\n' > "$FOLIO_STORE_DIR/web/user.txt"
-    run "$FOLIO" text edit web/user
+    run "$FOLIO" edit text web/user
     [ "$status" -eq 1 ]
     [[ $output == *"does not verify with the store's key"* ]] || false
     [ ! -e "$SANDBOX/editor-ran" ]
     [ "$(cat "$FOLIO_STORE_DIR/web/user.txt")" = "mallory" ]
 }
 
-@test "text edit: the temporary copy is removed" {
+@test "edit text: the temporary copy is removed" {
     make-store
     export TMPDIR="$SANDBOX/tmp" ; mkdir "$TMPDIR"
     fake-editor "jane doe"
-    run "$FOLIO" text edit web/user
+    run "$FOLIO" edit text web/user
     [ "$status" -eq 0 ]
     [ -z "$(ls -A "$TMPDIR")" ]
 }
 
-@test "text edit: a name leaving the store, or bad arguments, are refused" {
+@test "edit text: a name leaving the store, or bad arguments, are refused" {
     make-store
     fake-editor "x"
     local name
     for name in ../out a/../../out -c; do
-        run "$FOLIO" text edit "$name"
+        run "$FOLIO" edit text "$name"
         [ "$status" -eq 1 ]
         [[ $output == *"is not a valid name"* ]] || false
     done
     [ ! -e "$SANDBOX/editor-ran" ]
-    run "$FOLIO" text edit a b
+    run "$FOLIO" edit text a b
     [ "$status" -eq 1 ]
-    [[ $output == *"Usage: folio text edit"* ]] || false
+    [[ $output == *"Usage: folio edit text"* ]] || false
 }
 
-@test "text edit: no store fails and creates nothing" {
+@test "edit text: no store fails and creates nothing" {
     fake-editor "x"
-    run "$FOLIO" text edit web/user
+    run "$FOLIO" edit text web/user
     [ "$status" -eq 1 ]
     [[ $output == *"No ready EnvFolio store"*"folio init"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 
-@test "text edit --help: works without a store" {
-    run "$FOLIO" text edit --help
+@test "edit text --help: works without a store" {
+    run "$FOLIO" edit text --help
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio text edit"* ]] || false
-    run "$FOLIO" help text edit
+    [[ $output == *"Usage: folio edit text"* ]] || false
+    run "$FOLIO" help edit text
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio text edit"* ]] || false
+    [[ $output == *"Usage: folio edit text"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }

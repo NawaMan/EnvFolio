@@ -55,19 +55,19 @@ wait-until() {
 
 @test "GPG_TTY: a text piped in is signed — gpg asks for the passphrase on the terminal" {
     # stdin is the pipe; stdout and stderr are the terminal, as at a prompt.
-    in-pane "printf 'piped value\n' | '$FOLIO' text insert -m t/x; echo \"DONE=\$?\""
+    in-pane "printf 'piped value\n' | '$FOLIO' insert text -m t/x; echo \"DONE=\$?\""
     wait-until on-pane "assphrase" || { pane ; false ; }
     tmux -S "$TMUX_SOCKET" send-keys -t tty pw Enter
     wait-until on-pane "DONE="
     pane
     [[ $(pane) == *"DONE=0"* ]] || false
-    run "$FOLIO" text show t/x
+    run "$FOLIO" show text t/x
     [ "$status" -eq 0 ]
     [ "$output" = "piped value" ]
 }
 
 @test "GPG_TTY: exec's command does not get the one EnvFolio set; one already set is kept" {
-    "$FOLIO" text insert -t v t/x --store-passphrase-fd 3 3< <(printf 'pw\n') < /dev/null
+    "$FOLIO" insert text -t v t/x --store-passphrase-fd 3 3< <(printf 'pw\n') < /dev/null
     in-pane "'$FOLIO' exec t/x -- sh -c 'echo \"GOT=\${GPG_TTY-unset}\"' < /dev/null"
     wait-until on-pane "GOT="
     [[ $(pane) == *"GOT=unset"* ]] || false

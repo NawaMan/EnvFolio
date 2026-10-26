@@ -58,7 +58,7 @@ teardown() {
 @test "an unknown option is refused by every command that takes options" {
     local cmd
     # (secret …: a store comes first; secret-show.bats checks its unknown option with one.)
-    for cmd in restore import "text show" "text generate" "text rm" "text insert" backup export init; do
+    for cmd in restore import "show text" "generate text" "rm text" "insert text" backup export init; do
         # shellcheck disable=SC2086  # the words of the command
         run "$FOLIO" $cmd --nope x < /dev/null
         [ "$status" -eq 1 ]
@@ -94,10 +94,46 @@ teardown() {
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 
-@test "folio help secret insert: shows help without a store" {
-    run "$FOLIO" help secret insert < /dev/null
+@test "folio help insert secret: shows help without a store" {
+    run "$FOLIO" help insert secret < /dev/null
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio secret insert"* ]] || false
+    [[ $output == *"Usage: folio insert secret"* ]] || false
+    [ ! -e "$FOLIO_STORE_DIR" ]
+}
+
+@test "MANUAL: help — the action first, then the kind: the same as kind first, for every action" {
+    local kind action
+    for kind in text secret; do
+        for action in ls find grep show insert edit generate rm mv cp; do
+            run "$FOLIO" help "$kind" "$action" < /dev/null
+            local long=$output
+            [[ $long == *"Usage: folio $action $kind"* ]] || false
+            run "$FOLIO" help "$action" "$kind" < /dev/null
+            [ "$status" -eq 0 ] ; [ "$output" = "$long" ]
+            run "$FOLIO" "$action" "$kind" --help < /dev/null
+            [ "$status" -eq 0 ] ; [ "$output" = "$long" ]
+        done
+    done
+    run "$FOLIO" help vars check ; local long=$output
+    run "$FOLIO" check vars --help
+    [ "$status" -eq 0 ] ; [ "$output" = "$long" ]
+    [ ! -e "$FOLIO_STORE_DIR" ]
+}
+
+@test "action first: an action with no kind says to name one" {
+    run "$FOLIO" show web/github < /dev/null
+    [ "$status" -eq 1 ]
+    [[ $output == *'show: a text or a secret? `folio show text …` or `folio show secret …`.'* ]] || false
+    run "$FOLIO" check prod.vars
+    [ "$status" -eq 1 ]
+    [[ $output == *'`folio check vars <file>…`'* ]] || false
+    [ ! -e "$FOLIO_STORE_DIR" ]
+}
+
+@test "action first: --store-passphrase-fd is taken, as kind first" {
+    run "$FOLIO" show secret --store-passphrase-fd 99 web/github < /dev/null
+    [ "$status" -eq 1 ]
+    [[ $output == *"--store-passphrase-fd 99: no such file descriptor is open."* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 

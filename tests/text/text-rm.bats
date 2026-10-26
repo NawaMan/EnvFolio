@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 
-# folio text rm, through the real ./folio, against a throwaway GPG home and store.
+# folio rm text, through the real ./folio, against a throwaway GPG home and store.
 
 setup() {
     SANDBOX=$(mktemp -d)
@@ -28,14 +28,14 @@ make-store() {
     "$FOLIO" init --key test@example.com < /dev/null >/dev/null 2>&1
     local name
     for name in web/user web/home web/deep/x mail/work; do
-        "$FOLIO" text insert -t "$name value" "$name" < /dev/null
+        "$FOLIO" insert text -t "$name value" "$name" < /dev/null
     done
-    "$FOLIO" secret insert -m web/github < <(printf 's3cr3t\n') >/dev/null
+    "$FOLIO" insert secret -m web/github < <(printf 's3cr3t\n') >/dev/null
 }
 
-@test "MANUAL: text rm — remove a text" {
+@test "MANUAL: rm text — remove a text" {
     make-store
-    run "$FOLIO" text rm -f mail/work < /dev/null
+    run "$FOLIO" rm text -f mail/work < /dev/null
     [ "$status" -eq 0 ]
     [ ! -e "$FOLIO_STORE_DIR/mail" ]
     [ "$(git -C "$FOLIO_STORE_DIR" log -1 --format=%s)" = "Remove mail/work from store." ]
@@ -43,18 +43,18 @@ make-store() {
     [ "$(git -C "$FOLIO_STORE_DIR" show HEAD~1:mail/work.txt)" = "mail/work value" ]
 }
 
-@test "text rm: piped in, it does not ask" {
+@test "rm text: piped in, it does not ask" {
     make-store
-    run "$FOLIO" text rm web/user < /dev/null
+    run "$FOLIO" rm text web/user < /dev/null
     [ "$status" -eq 0 ]
     [ ! -e "$FOLIO_STORE_DIR/web/user.txt" ]
     [ ! -e "$FOLIO_STORE_DIR/web/user.txt.sig" ]
     [ -e "$FOLIO_STORE_DIR/web/home.txt" ]
 }
 
-@test "text rm: -r removes the texts in a folder, and keeps its secrets" {
+@test "rm text: -r removes the texts in a folder, and keeps its secrets" {
     make-store
-    run "$FOLIO" text rm -r web < /dev/null
+    run "$FOLIO" rm text -r web < /dev/null
     [ "$status" -eq 0 ]
     [ -z "$(find "$FOLIO_STORE_DIR/web" -name '*.txt*')" ]
     [ ! -e "$FOLIO_STORE_DIR/web/deep" ]
@@ -63,50 +63,50 @@ make-store() {
     [ -z "$(git -C "$FOLIO_STORE_DIR" status --porcelain)" ]
 }
 
-@test "text rm: a folder needs -r" {
+@test "rm text: a folder needs -r" {
     make-store
-    run "$FOLIO" text rm web < /dev/null
+    run "$FOLIO" rm text web < /dev/null
     [ "$status" -eq 1 ]
     [[ $output == *"'web' is a folder; use -r"* ]] || false
     [ -e "$FOLIO_STORE_DIR/web/user.txt" ]
 }
 
-@test "text rm: a secret or an unknown name is not in the store" {
+@test "rm text: a secret or an unknown name is not in the store" {
     make-store
     local name
     for name in web/github nope; do
-        run "$FOLIO" text rm "$name" < /dev/null
+        run "$FOLIO" rm text "$name" < /dev/null
         [ "$status" -eq 1 ]
         [[ $output == *"'$name' is not in the store"* ]] || false
     done
     [ "$(pass show web/github)" = "s3cr3t" ]
 }
 
-@test "text rm: a name leaving the store, or bad arguments, are refused" {
+@test "rm text: a name leaving the store, or bad arguments, are refused" {
     make-store
     local name
     for name in .. ../out a/../.. /; do
-        run "$FOLIO" text rm -r "$name" < /dev/null
+        run "$FOLIO" rm text -r "$name" < /dev/null
         [ "$status" -eq 1 ]
         [[ $output == *"is not a valid name"* ]] || false
     done
-    run "$FOLIO" text rm a b < /dev/null
+    run "$FOLIO" rm text a b < /dev/null
     [ "$status" -eq 1 ]
-    [[ $output == *"Usage: folio text rm"* ]] || false
+    [[ $output == *"Usage: folio rm text"* ]] || false
 }
 
-@test "text rm: no store fails and creates nothing" {
-    run "$FOLIO" text rm x < /dev/null
+@test "rm text: no store fails and creates nothing" {
+    run "$FOLIO" rm text x < /dev/null
     [ "$status" -eq 1 ]
     [[ $output == *"No ready EnvFolio store"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 
-@test "text rm --help: works without a store" {
-    run "$FOLIO" text rm --help
+@test "rm text --help: works without a store" {
+    run "$FOLIO" rm text --help
     [ "$status" -eq 0 ]
-    [[ $output == *"Usage: folio text rm"* ]] || false
-    run "$FOLIO" help text rm
+    [[ $output == *"Usage: folio rm text"* ]] || false
+    run "$FOLIO" help rm text
     [ "$status" -eq 0 ]
     [ ! -e "$FOLIO_STORE_DIR" ]
 }

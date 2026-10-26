@@ -30,13 +30,13 @@ teardown() {
 make-store() {
     gpg --batch --passphrase '' --quick-generate-key "Test User <test@example.com>" default default never 2>/dev/null
     "$FOLIO" init --key test@example.com < /dev/null >/dev/null 2>&1
-    "$FOLIO" text insert -t "dbuser"       prod/db/user < /dev/null
-    "$FOLIO" text insert -t "Jane"         atl/name     < /dev/null
-    "$FOLIO" text insert -t "jira.example" atl/host     < /dev/null
-    "$FOLIO" text insert -t "both text"    both/x       < /dev/null
-    "$FOLIO" secret insert -m prod/db/pass < <(printf 'p@ss\n')        >/dev/null
-    "$FOLIO" secret insert -m gh/token     < <(printf 'shared-token\n') >/dev/null
-    "$FOLIO" secret insert -m both/x       < <(printf 'both secret\n')  >/dev/null
+    "$FOLIO" insert text -t "dbuser"       prod/db/user < /dev/null
+    "$FOLIO" insert text -t "Jane"         atl/name     < /dev/null
+    "$FOLIO" insert text -t "jira.example" atl/host     < /dev/null
+    "$FOLIO" insert text -t "both text"    both/x       < /dev/null
+    "$FOLIO" insert secret -m prod/db/pass < <(printf 'p@ss\n')        >/dev/null
+    "$FOLIO" insert secret -m gh/token     < <(printf 'shared-token\n') >/dev/null
+    "$FOLIO" insert secret -m both/x       < <(printf 'both secret\n')  >/dev/null
 }
 
 # vars <line>...: write $SANDBOX/a.vars.

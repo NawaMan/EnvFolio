@@ -26,10 +26,10 @@ teardown() {
 make-store() {
     gpg --batch --passphrase '' --quick-generate-key "Test User <test@example.com>" default default never 2>/dev/null
     "$FOLIO" init --key test@example.com < /dev/null >/dev/null 2>&1
-    "$FOLIO" text insert -t hello                 note       < /dev/null
-    "$FOLIO" secret insert -m web/github < <(printf 's3cr3t\n') >/dev/null
-    "$FOLIO" text insert -t jane                  web/github < /dev/null
-    "$FOLIO" text insert -t "https://example.com" web/home   < /dev/null
+    "$FOLIO" insert text -t hello                 note       < /dev/null
+    "$FOLIO" insert secret -m web/github < <(printf 's3cr3t\n') >/dev/null
+    "$FOLIO" insert text -t jane                  web/github < /dev/null
+    "$FOLIO" insert text -t "https://example.com" web/home   < /dev/null
 }
 
 # The output with tree's colours taken out.
@@ -68,13 +68,13 @@ web
 (T)web/home" ]
 }
 
-@test "ls --flat: one folder, full names, either place; text ls and secret ls too" {
+@test "ls --flat: one folder, full names, either place; ls text and ls secret too" {
     make-store
     run "$FOLIO" ls web/ --flat
     [ "$output" = $'(S)web/github\n(T)web/github\n(T)web/home' ]
-    run "$FOLIO" text ls --flat
+    run "$FOLIO" ls text --flat
     [ "$output" = $'note\nweb/github\nweb/home' ]
-    run "$FOLIO" secret ls --flat web
+    run "$FOLIO" ls secret --flat web
     [ "$output" = "web/github" ]
     # No values, signatures, or the store's own files.
     run "$FOLIO" ls --flat
@@ -82,6 +82,17 @@ web
     run "$FOLIO" ls --flat web extra
     [ "$status" -eq 1 ]
     [[ $output == *"Usage: folio ls [--flat] [--plain] [<subfolder>]"* ]] || false
+}
+
+@test "ls: a top folder named text is ls text/; ls text lists the texts" {
+    make-store
+    "$FOLIO" insert secret -m text/key < <(printf 'k3y\n') >/dev/null
+    "$FOLIO" insert text -t x text/note < /dev/null
+    run "$FOLIO" ls text/ --flat
+    [ "$status" -eq 0 ]
+    [ "$output" = $'(S)text/key\n(T)text/note' ]
+    run "$FOLIO" ls text --flat
+    [ "$output" = $'note\ntext/note\nweb/github\nweb/home' ]
 }
 
 @test "ls: never shows values, signatures or extensions" {
@@ -132,7 +143,7 @@ web
 @test "ls: not to a screen (a pipe, a file), no colour at all — tree, flat, text, secret, find" {
     make-store
     local esc=$'\e' cmd
-    for cmd in "ls" "ls --flat" "text ls" "secret ls --flat" "text find git" "secret find git"; do
+    for cmd in "ls" "ls --flat" "ls text" "ls secret --flat" "find text git" "find secret git"; do
         # shellcheck disable=SC2086  # the words of the command
         run "$FOLIO" $cmd
         [ "$status" -eq 0 ]
@@ -160,9 +171,9 @@ on-screen() {
 $y(S)web/github$off
 $g(T)web/github$off
 $g(T)web/home$off" ]
-    TERM=xterm LC_ALL=C run on-screen secret ls
+    TERM=xterm LC_ALL=C run on-screen ls secret
     [[ $output == *"-- $y""github$off"* ]] || false
-    TERM=xterm LC_ALL=C run on-screen text find home
+    TERM=xterm LC_ALL=C run on-screen find text home
     [[ $output == *"-- $g""home$off"* ]] || false
     # No extension left behind, colour or not.
     [[ $(plain) != *".txt"* && $(plain) != *".gpg"* ]] || false
@@ -198,7 +209,7 @@ ${g}(T)web/home$off" ]
 @test "ls: --plain, TERM=dumb or the Linux console: (S)/(T), and colour only on the console" {
     make-store
     local esc=$'\e' cmd
-    for cmd in "ls --plain" "ls --flat --plain" "text ls --plain" "secret find --plain git" "text find git --plain"; do
+    for cmd in "ls --plain" "ls --flat --plain" "ls text --plain" "find secret --plain git" "find text git --plain"; do
         # shellcheck disable=SC2086  # the words of the command
         TERM=xterm LC_ALL=C.UTF-8 run on-screen $cmd
         [ "$status" -eq 0 ]
