@@ -135,6 +135,37 @@ folio export --secrets --store-passphrase-fd 3 --file-passphrase-fd 4 web 3< ~/.
 
 ---
 
+## Never asked, on a machine you trust
+
+On your own machine, you may not want to type the store key's passphrase at all. Put it in a file
+only you can read, and name the file in your shell's profile:
+
+```bash
+mkdir -p ~/.config/folio
+(umask 077; printf '%s\n' 'the store key passphrase' > ~/.config/folio/store-pass)
+export FOLIO_STORE_PASSPHRASE_FILE=~/.config/folio/store-pass
+```
+
+Then every command that takes `--store-passphrase-fd` reads the passphrase from the file's first
+line instead, and nothing is asked: `show secret`, `insert text`, `exec --secrets`, `backup`, …
+`init` makes a new key with it.
+
+- `--store-passphrase-fd` given on a command wins over the file.
+- The file must be yours, and no one else may read or write it (`chmod 600`): otherwise EnvFolio
+  stops and says so, as ssh does with a key. An empty first line is refused too.
+- A wrong passphrase stops the command before anything changes, as with `--store-passphrase-fd`.
+- The command `exec` and `shell` run does not get `FOLIO_STORE_PASSPHRASE_FILE`.
+- The key itself keeps its passphrase: a backup of the store, which copies the key, is still
+  locked by it. Keep the file out of your backups.
+- **Anyone who can read that file — or run commands as you — can open the store.** Use it only
+  where you would leave the store unlocked. On a desktop, a pinentry that keeps the passphrase in
+  the login keychain (see [Passphrase prompts in a window](#passphrase-prompts-in-a-window-gui))
+  or a long `default-cache-ttl` asks less often while keeping it out of a file.
+- With [`--fresh-passphrase`](#leave-no-passphrase-behind) too, the passphrase still comes from
+  the file, and gpg-agent forgets it when the command is done.
+
+---
+
 ## Leave no passphrase behind
 
 gpg-agent remembers a passphrase for its cache time, so the next `folio`, `pass` or `gpg` needs

@@ -32,6 +32,10 @@ now stable. A change that breaks any of them will come with a new major version.
   do the Linux console and a locale that is not UTF-8. In a pipe or a file it stays (S)/(T).
 - `--plain` for `ls`, `ls text`, `ls secret`, `find text`, `find secret`, `exec` and `shell`: no
   colour, even on a screen; for `ls`, `exec` and `shell`, (S)/(T) rather than emoji.
+- `FOLIO_STORE_PASSPHRASE_FILE=<file>`, for a machine you trust: the store key's passphrase is the
+  file's first line, for every command that takes `--store-passphrase-fd` (which wins over it), and
+  for the new key `init` makes — so it is never asked. The file must be yours and closed to others
+  (`chmod 600`), and is refused otherwise. The command `exec` and `shell` run does not get it.
 - `--fresh-passphrase`, for every command, or `FOLIO_FRESH_PASSPHRASE=1`: gpg-agent forgets the
   store key's passphrase when the command starts and when it ends — for `exec` and `shell`, before
   the command or shell starts — also a key first used during it (a `--from` file's). The
