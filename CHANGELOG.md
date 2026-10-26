@@ -42,6 +42,18 @@ now stable. A change that breaks any of them will come with a new major version.
   only feed them.** `${NAME}` sees them, but the command gets only what the vars files set. The
   entries typed used to be set after the file, over it, and went to the command too; to pass one
   on, set it in the file (`GH_TOKEN=${GH_TOKEN}`, or `@{gh/token}`).
+- **`exec`/`shell`: `VAR=<name>` no longer takes its entry away from the rule.** It picks `<name>`
+  as the entries, `--all` and `--use` left it (else from the store), wherever it is typed, and
+  still wins over a variable of the same name; the entry keeps its own variable too:
+  `GITHUB_TOKEN=gh/token gh` now also sets `GH_TOKEN`. With `--use`, it can rename a peeled one
+  (`--use @app2/@prod U=server/user`).
+- `exec`/`shell`: entries under a namespace inside a namespace (`exec @app2/@prod`) are left out
+  with one line for that namespace, saying to add `--use @app2/@prod` — not a warning for each
+  entry suggesting `VAR=<name>`.
+- `exec`/`shell`: two items of one selection (an entry, a folder, `--all`, a `--use`, a vars
+  file's `@{folder/*}`) that would give the same variable are refused before anything runs —
+  e.g. `--use @app2` holding both `@prod/…` and `@staging/…` — instead of the later name, in
+  sorted order, winning. From two selections, the later still wins.
 - `folio ls`, `text ls`, `secret ls` and `text find`/`secret find` show secrets in yellow and texts
   in green, on a screen that shows colour; `exec`/`shell --names` too. Sent to a pipe or a file, or
   with `NO_COLOR` set or `TERM=dumb`, they now print no colour codes at all (folders used to keep
