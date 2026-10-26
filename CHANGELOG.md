@@ -70,6 +70,10 @@ now stable. A change that breaks any of them will come with a new major version.
 
 ### Fixed
 
+- With stdin a pipe or a file (`echo x | folio text insert x`, `export -s
+  --file-passphrase-stdin`), gpg could not ask for the store key's passphrase on a terminal and
+  stopped with "Inappropriate ioctl for device". EnvFolio now sets `GPG_TTY` to its terminal when
+  it is not set; the command `exec` and `shell` run does not get it.
 - A prompt (`[y/N]`, a name, a number, Enter to continue — `pass`'s too) is no longer answered by
   keys typed before it showed: an extra Enter, or the newline at the end of a paste. At a terminal,
   what is waiting is dropped first; answers piped in are read as before.
