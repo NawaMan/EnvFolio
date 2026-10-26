@@ -46,6 +46,7 @@ Main() {
     if [[ ${1:-} == __complete ]]; then shift ; complete-words "$@" ; return 0 ; fi
     # Quiet when all is there; otherwise show the table and stop.
     if ! ensure-requirements "$@" >/dev/null; then ensure-requirements "$@" ; return 1 ; fi
+    set-gpg-tty
 
     local category="${1:-}" ; (( $# > 0 )) && shift
     case "$category" in
@@ -2737,6 +2738,8 @@ function open-export-for() {
 # so no loaded name can clobber what this needs; the check catches the names bash keeps for
 # itself (RANDOM, UID, ...).
 function export-and-exec() {
+    # The command gets the environment EnvFolio was started with, not a GPG_TTY set-gpg-tty added.
+    (( ! GPG_TTY_SET )) || unset GPG_TTY
     while [[ $1 != -- ]]; do
         set -- "${1%%=*}" "$@"
         # shellcheck disable=SC2163  # $2 is <var>=<value>, exported as written
@@ -4098,6 +4101,25 @@ function ensure-requirements() {
 
 function info() { printf '%s\n' "$*"; }
 function die()  { printf 'folio: %s\n' "$*" >&2; exit 1; }
+# set-gpg-tty: gpg's pinentry asks for a passphrase on the terminal GPG_TTY names, else on the one
+# gpg's stdin is — none when stdin is a pipe or a file (`echo x | folio text insert x`, a
+# --file-passphrase-stdin), and then gpg stops with "Inappropriate ioctl for device". So, unless it
+# is set already, point it at the terminal stderr (else stdout) is. Its own name (/dev/pts/3), not
+# /dev/tty: gpg-agent, which opens it, has no terminal of its own. Only the terminal's path: no
+# passphrase goes through it.
+GPG_TTY_SET=0
+function set-gpg-tty() {
+    [[ -z ${GPG_TTY:-} ]] || return 0
+    local fd terminal=""
+    for fd in 2 1; do
+        [[ -t $fd ]] || continue
+        terminal=$(tty <&"$fd" 2>/dev/null) && break
+        terminal=""
+    done
+    [[ -n $terminal && $terminal != /dev/tty ]] || return 0
+    GPG_TTY=$terminal GPG_TTY_SET=1
+    export GPG_TTY
+}
 # remove-on-exit <path>...: remove these when EnvFolio exits, however it exits. The gpg-agent of a
 # new-gpg-home is stopped first.
 REMOVE_ON_EXIT=() GPG_HOMES=()

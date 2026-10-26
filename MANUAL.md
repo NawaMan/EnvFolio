@@ -86,6 +86,10 @@ The window should open and ask for your key's passphrase. Then any EnvFolio comm
 - With no display — over SSH, in a container or a booth — keep a terminal pinentry
   (`pinentry-curses` or `pinentry-tty`). The GUI ones usually fall back to the terminal when
   there is no display.
+- A terminal pinentry asks on the terminal in `GPG_TTY`. When it is not set, EnvFolio sets it to
+  the terminal it runs in, so gpg can still ask when stdin is a pipe or a file
+  (`echo x | folio text insert x`, `--file-passphrase-stdin`). A `GPG_TTY` you set is kept, and
+  the command `exec` and `shell` run gets the one you had, if any.
 - If the window opens on the wrong screen, or never opens and gpg waits, the agent was started
   from another session: run `gpg-connect-agent updatestartuptty /bye` in the current one.
 - How long the agent remembers a passphrase is `default-cache-ttl` and `max-cache-ttl` (seconds)
