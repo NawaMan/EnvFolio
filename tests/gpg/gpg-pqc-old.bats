@@ -43,7 +43,8 @@ teardown() {
 }
 
 # gpg-in <dir> <command>...: run <command> with the gpg tools of <dir> first on PATH — only those
-# (a bin of their own), so bash, pass and the rest stay the ones this run uses.
+# (a bin of their own), so bash, pass and the rest stay the ones this run uses. gpg2 is <dir>'s gpg
+# too: pass prefers gpg2 when there is one, and another gpg's gpg2 later on PATH would win.
 gpg-in() {
     local dir=$1 bin tool ; shift
     bin="$SANDBOX/gpg-of-$(printf '%s' "$dir" | tr -c 'A-Za-z0-9' _)"
@@ -52,6 +53,7 @@ gpg-in() {
         for tool in gpg gpg-agent gpgconf gpg-connect-agent gpgsm dirmngr keyboxd scdaemon; do
             [[ ! -x $dir/$tool ]] || ln -s "$dir/$tool" "$bin/$tool"
         done
+        ln -s "$dir/gpg" "$bin/gpg2"
     fi
     PATH="$bin:$PATH" "$@"
 }
