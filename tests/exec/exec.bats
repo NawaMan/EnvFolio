@@ -196,16 +196,22 @@ folio exec: left out 1 secret(s) under 'gh'; add --secrets to load them." ]
     make-store
     run "$FOLIO" exec --secrets GITHUB_TOKEN=gh/token gh -- sh -c 'echo "$GITHUB_TOKEN|${GH_TOKEN-unset}|$GH_USER"'
     [ "$status" -eq 0 ]
-    [ "$output" = "shared-token|unset|shared-user" ]
+    [ "$output" = "shared-token|shared-token|shared-user" ]
+    # On its own, VAR=<name> selects nothing else.
+    run "$FOLIO" exec --secrets GITHUB_TOKEN=gh/token -- sh -c 'echo "$GITHUB_TOKEN|${GH_TOKEN-unset}|${GH_USER-unset}"'
+    [ "$status" -eq 0 ]
+    [ "$output" = "shared-token|unset|unset" ]
 }
 
-@test "exec: an explicit name wins wherever it is typed; the claim is only its own entry" {
+@test "exec: an explicit name wins wherever it is typed; its entry keeps its own name too" {
     make-store
     run "$FOLIO" exec --secrets @nawa GH_TOKEN=gh/token -- printenv GH_TOKEN
     [ "$output" = "shared-token" ]
     run "$FOLIO" exec --secrets GH_TOKEN=gh/token @nawa -- printenv GH_TOKEN
     [ "$output" = "shared-token" ]
-    # gh/token is claimed; @nawa/gh/token is another entry and still gives GH_TOKEN.
+    # gh/token still gives GH_TOKEN by the rule; @nawa/gh/token, later, gives it over that.
+    run "$FOLIO" exec --secrets MY=gh/token gh -- sh -c 'echo "$MY|$GH_TOKEN"'
+    [ "$output" = "shared-token|shared-token" ]
     run "$FOLIO" exec --secrets MY=gh/token gh @nawa -- sh -c 'echo "$MY|$GH_TOKEN"'
     [ "$output" = "shared-token|nawa-token" ]
     # Two explicit ones for the same name: the later wins.

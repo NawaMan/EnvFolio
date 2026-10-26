@@ -357,3 +357,77 @@ PORT=[22]" ]
     wait-until tmp-empty
     [ ! -e "$SANDBOX/ran" ]
 }
+
+@test "exec: VAR=<name> picks from what the entries, --all and --use made, wherever it is typed; no claim" {
+    make-store
+    run --separate-stderr "$FOLIO" exec PORT=server/port -- sh -c "$(show PORT SERVER_PORT)"
+    [ "$output" = "PORT=[22]
+SERVER_PORT=[]" ]
+    run --separate-stderr "$FOLIO" exec server PORT=server/port -- sh -c "$(show PORT SERVER_PORT)"
+    [ "$output" = "PORT=[22]
+SERVER_PORT=[22]" ]
+    run --separate-stderr "$FOLIO" exec PORT=server/port --use @app2/@staging -- sh -c "$(show PORT SERVER_PORT SERVER_USER)"
+    [ "$output" = "PORT=[2222]
+SERVER_PORT=[2222]
+SERVER_USER=[stg]" ]
+    run --separate-stderr "$FOLIO" exec --use @app2/@staging PORT=server/port -- sh -c "$(show PORT SERVER_PORT SERVER_USER)"
+    [ "$output" = "PORT=[2222]
+SERVER_PORT=[2222]
+SERVER_USER=[stg]" ]
+    # A peeled one can be renamed; it keeps its own name too.
+    run --separate-stderr "$FOLIO" exec --use @app2/@staging U=server/user -- sh -c "$(show U SERVER_USER SERVER_PORT)"
+    [ "$output" = "U=[stg]
+SERVER_USER=[stg]
+SERVER_PORT=[2222]" ]
+    # One no entry selected is taken from the store, and gets only its VAR.
+    run --separate-stderr "$FOLIO" exec --use @app2/@staging G=gh/user -- sh -c "$(show G GH_USER)"
+    [ "$output" = "G=[other]
+GH_USER=[]" ]
+}
+
+@test "exec: a namespace inside a namespace, not peeled — one line for each, pointing at --use" {
+    make-store
+    run --separate-stderr "$FOLIO" exec -s @app2/@prod -- true
+    [ "$status" -eq 1 ]
+    [ "$stderr" = "folio exec: '@app2/@prod' is a namespace inside a namespace: its entries are left out. To load them, add --use @app2/@prod.
+folio: exec: nothing to load." ]
+    run --separate-stderr "$FOLIO" exec @app2 server -- printenv SERVER_PORT
+    [ "$status" -eq 0 ]
+    [ "$output" = "22" ]
+    [ "$stderr" = "folio exec: '@app2/@prod' is a namespace inside a namespace: its entries are left out. To load them, add --use @app2/@prod.
+folio exec: '@app2/@staging' is a namespace inside a namespace: its entries are left out. To load them, add --use @app2/@staging.
+folio exec: left out 2 secret(s) under '@app2'; add --secrets to load them." ]
+}
+
+@test "exec --use: two items under it for one variable are refused, nothing runs; peel one of them" {
+    make-store
+    run --separate-stderr "$FOLIO" exec --use @app2 -- touch "$SANDBOX/ran"
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"folio: exec: --use @app2: '@app2/@prod/server/db' and '@app2/@staging/server/db' would both be SERVER_DB; pick one, e.g. --use @app2/@prod."* ]] || false
+    [ ! -e "$SANDBOX/ran" ]
+    tmp-empty
+    run --separate-stderr "$FOLIO" exec --use @app2/@prod -- printenv SERVER_DB
+    [ "$status" -eq 0 ]
+    [ "$output" = "db.prod" ]
+}
+
+@test "exec: two items in one folder, or under --all, for one variable are refused; from two selections, the later wins" {
+    make-store
+    "$FOLIO" text insert -t one clash/a/b < /dev/null
+    "$FOLIO" text insert -t two clash/a_b < /dev/null
+    run --separate-stderr "$FOLIO" exec clash -- touch "$SANDBOX/ran"
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"folio: exec: 'clash': 'clash/a/b' and 'clash/a_b' would both be CLASH_A_B; give one VAR=<name>, or rename one."* ]] || false
+    run --separate-stderr "$FOLIO" exec --all -- touch "$SANDBOX/ran"
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"folio: exec: --all: 'clash/a/b' and 'clash/a_b' would both be CLASH_A_B;"* ]] || false
+    [ ! -e "$SANDBOX/ran" ]
+    run --separate-stderr "$FOLIO" exec clash/a/b clash/a_b -- printenv CLASH_A_B
+    [ "$status" -eq 0 ]
+    [ "$output" = "two" ]
+    # In a vars file, an @{folder/*} line is one selection too.
+    printf '%s\n' '@{clash/*}' > "$SANDBOX/clash.vars"
+    run --separate-stderr "$FOLIO" exec --vars "$SANDBOX/clash.vars" -- true
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"clash.vars:1: 'clash/a/b' and 'clash/a_b' would both be CLASH_A_B;"* ]] || false
+}
