@@ -16,9 +16,9 @@ now stable. A change that breaks any of them will come with a new major version.
   namespaces, from the front. `export --use` writes the items so, e.g. one file per environment.
   `--names` says where a peeled one came from.
 - `folio init` makes a post-quantum key (ML-KEM + ECC) with gpg 2.5.21 or later — asked, when
-  anything else is asked, with classical as the other choice. `--key-type pqc|classical` picks it
-  without asking. With an older gpg, nothing changes (`--key-type pqc` is refused). The summary
-  shows the key's `Type:`.
+  anything else is asked, with classical as the other choice (Enter picks post-quantum).
+  `--key-type pqc|classical` picks it without asking. With an older gpg, nothing changes
+  (`--key-type pqc` is refused). The summary shows the key's `Type:`.
 - A backup of a post-quantum key, or an export locked to one, says it needs gpg 2.5.21 or later to
   open. On an older gpg, `restore`, `import` and `--from` refuse such a file, change nothing, and
   link to how to update gpg (a new README section).

@@ -113,6 +113,9 @@ init-new-key() {
     init-new-key 1 --name "New User"
     [[ $output == *"Which kind of key?"* ]] || false
     [ "$(cat "$SANDBOX/algo")" = pqc ]
+    init-new-key "" --name "New User"
+    [[ $output == *"Pick a number (Enter for 1, Ctrl-D cancels)"* ]] || false
+    [ "$(cat "$SANDBOX/algo")" = pqc ]
 }
 
 @test "init --key-type: picks the kind, never asked; implies --new-key" {
