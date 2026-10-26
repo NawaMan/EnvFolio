@@ -181,6 +181,8 @@ Options for every command:
 The kind can also come first: `folio text show` is `folio show text`.
 The store is $FOLIO_STORE_DIR, default ~/.folio. EnvFolio warns when that folder is someone
 else's or open to other users.
+On a machine you trust: FOLIO_STORE_PASSPHRASE_FILE=<file> (yours only, chmod 600) gives the store
+key's passphrase from its first line, so it is never asked.
 Details and examples: MANUAL.md
 EOF
 }
@@ -344,7 +346,8 @@ function init-help() {
     cat <<'EOF'
 
 Create the EnvFolio store ($FOLIO_STORE_DIR, default ~/.folio): pick or create the GPG key
-that encrypts it, run `pass init`, and start the store's git history. A folder made here is private
+that encrypts it, run `pass init`, and start the store's git history. A new key's passphrase is
+the first line of the file FOLIO_STORE_PASSPHRASE_FILE names, if set and no option gives one. A folder made here is private
 (700); an existing empty folder is used as it is. When that folder is someone else's or other users
 can get in, EnvFolio warns and asks before using it. Anything not given is asked for.
 
@@ -482,7 +485,9 @@ EOF
         [[ -n $email ]] || die "An email is needed to create a key."
         show-answer "Email" "$email"
         # Input: the new key's passphrase — the first line of stdin with --store-passphrase-stdin, or
-        # of fd <n> with --store-passphrase-fd <n>; otherwise gpg asks for it when it makes the key.
+        # of fd <n> with --store-passphrase-fd <n>, or of the file FOLIO_STORE_PASSPHRASE_FILE names;
+        # otherwise gpg asks for it when it makes the key.
+        local from=""
         if (( passphrase_stdin )); then
             IFS= read -rs passphrase || true
             [[ -n $passphrase ]] || die "No passphrase on stdin."
@@ -490,9 +495,15 @@ EOF
             read-passphrase-fd "$passphrase_fd"
             passphrase=$PASSPHRASE
             unset PASSPHRASE
+        elif [[ -n ${FOLIO_STORE_PASSPHRASE_FILE:-} ]]; then
+            check-passphrase-file "$FOLIO_STORE_PASSPHRASE_FILE"
+            read-passphrase-file "$FOLIO_STORE_PASSPHRASE_FILE"
+            passphrase=$PASSPHRASE
+            unset PASSPHRASE
+            from=" (from $(tilde-path "$FOLIO_STORE_PASSPHRASE_FILE"))"
         fi
         if [[ -n $passphrase ]]; then
-            show-answer "Passphrase" "************"
+            show-answer "Passphrase" "************$from"
         else
             show-answer "Passphrase" "gpg asks for it when it makes the key"
             asked=1
@@ -1428,8 +1439,8 @@ EOF
             email=$(ask-text "Your email" "e.g. jane@example.com" "$(guess-email)") || exit 1
             [[ -n $email ]] || die "An email is needed to create a key."
             init_args=(--name "$name" --email "$email")
-            if [[ -n $STORE_PASSPHRASE_FD ]]; then
-                show-answer "Store key" "a new one for $name <$email>, its passphrase from --store-passphrase-fd"
+            if has-store-passphrase; then
+                show-answer "Store key" "a new one for $name <$email>, its passphrase from $STORE_PASSPHRASE_FROM"
                 init_args+=(--store-passphrase-fd 4)
             else
                 show-answer "Store key" "a new one for $name <$email> — gpg asks for its passphrase"
@@ -2665,6 +2676,8 @@ function exec-with-entries() {
     fi
     if [[ -n $from_file ]]; then
         [[ -z $STORE_PASSPHRASE_FD ]] || die "$how: --store-passphrase-fd is for the store; --from does not use it."
+        # Nor FOLIO_STORE_PASSPHRASE_FILE: the store is not opened.
+        STORE_PASSPHRASE_FILE=""
         open-export-for "$how" "$from_file" "$passphrase_fd"
         FROM_EXPORT=1
     else
@@ -2743,6 +2756,8 @@ function exec-with-entries() {
     # Arrays would swallow a loaded name of theirs (export makes it element 0, never exported).
     set -- "${pairs[@]}" -- "$@"
     unset pairs entries EXEC_VARS EXEC_FILES INPUT_VARS INPUT_FILES STORE_PASSPHRASE
+    # Nor where the store key's passphrase is.
+    unset FOLIO_STORE_PASSPHRASE_FILE
     export-and-exec "$@"
 }
 
@@ -3951,8 +3966,11 @@ function read-passphrase-fd() {
 }
 
 # take-store-passphrase-fd [args...]: take --store-passphrase-fd <n> (or =<n>) out of the args
-# (up to a --), checked, into STORE_PASSPHRASE_FD; the rest go into ARGS.
-STORE_PASSPHRASE_FD="" STORE_PASSPHRASE=""
+# (up to a --), checked, into STORE_PASSPHRASE_FD; the rest go into ARGS. Without it, the file
+# FOLIO_STORE_PASSPHRASE_FILE names, if any, checked, is STORE_PASSPHRASE_FILE: its first line is
+# the passphrase, for every command that takes --store-passphrase-fd. STORE_PASSPHRASE_FROM names
+# which, for the messages: --store-passphrase-fd, or the file.
+STORE_PASSPHRASE_FD="" STORE_PASSPHRASE_FILE="" STORE_PASSPHRASE_FROM="" STORE_PASSPHRASE=""
 function take-store-passphrase-fd() {
     local arg
     ARGS=()
@@ -3968,26 +3986,61 @@ function take-store-passphrase-fd() {
             *)   ARGS+=("$arg") ;;
         esac
     done
-    [[ -z $STORE_PASSPHRASE_FD ]] || check-passphrase-fd --store-passphrase-fd "$STORE_PASSPHRASE_FD"
+    if [[ -n $STORE_PASSPHRASE_FD ]]; then
+        check-passphrase-fd --store-passphrase-fd "$STORE_PASSPHRASE_FD"
+        STORE_PASSPHRASE_FROM=--store-passphrase-fd
+    elif [[ -n ${FOLIO_STORE_PASSPHRASE_FILE:-} ]]; then
+        check-passphrase-file "$FOLIO_STORE_PASSPHRASE_FILE"
+        STORE_PASSPHRASE_FILE=$FOLIO_STORE_PASSPHRASE_FILE
+        STORE_PASSPHRASE_FROM=$(tilde-path "$STORE_PASSPHRASE_FILE")
+    fi
 }
 
-# load-store-passphrase: with --store-passphrase-fd, read the store key's passphrase into
-# STORE_PASSPHRASE — once: the fd is closed after.
+# has-store-passphrase: whether the store key's passphrase is given: --store-passphrase-fd, or the
+# file FOLIO_STORE_PASSPHRASE_FILE names.
+function has-store-passphrase() { [[ -n $STORE_PASSPHRASE_FD || -n $STORE_PASSPHRASE_FILE ]] ; }
+
+# check-passphrase-file <file>: die unless <file> — FOLIO_STORE_PASSPHRASE_FILE — is a file of
+# yours that no one else can get to (as ssh wants of a key).
+function check-passphrase-file() {
+    local file=$1
+    [[ -f $file ]] || die "FOLIO_STORE_PASSPHRASE_FILE: there is no file $file."
+    [[ -O $file ]] || die "FOLIO_STORE_PASSPHRASE_FILE: $file is not yours, so it is not used."
+    # is-private-dir reads the mode the same way for a file.
+    is-private-dir "$file" \
+        || die "FOLIO_STORE_PASSPHRASE_FILE: other users can get to $file, so it is not used." \
+               "Make it yours only:  chmod 600 $file"
+    [[ -r $file ]] || die "FOLIO_STORE_PASSPHRASE_FILE: $file cannot be read."
+}
+
+# read-passphrase-file <file>: set PASSPHRASE to the first line of <file>. Dies when it is empty.
+function read-passphrase-file() {
+    PASSPHRASE=""
+    IFS= read -r PASSPHRASE < "$1" || true
+    [[ -n $PASSPHRASE ]] || die "No passphrase in $1: its first line is empty."
+}
+
+# load-store-passphrase: with --store-passphrase-fd, or FOLIO_STORE_PASSPHRASE_FILE, read the store
+# key's passphrase into STORE_PASSPHRASE — once: the fd is closed after.
 function load-store-passphrase() {
-    [[ -n $STORE_PASSPHRASE_FD && -z $STORE_PASSPHRASE ]] || return 0
-    read-passphrase-fd "$STORE_PASSPHRASE_FD"
+    has-store-passphrase && [[ -z $STORE_PASSPHRASE ]] || return 0
+    if [[ -n $STORE_PASSPHRASE_FD ]]; then
+        read-passphrase-fd "$STORE_PASSPHRASE_FD"
+    else
+        read-passphrase-file "$STORE_PASSPHRASE_FILE"
+    fi
     STORE_PASSPHRASE=$PASSPHRASE
     unset PASSPHRASE
 }
 
-# unlock-store-key: with --store-passphrase-fd, hand the store key's passphrase to gpg-agent once,
+# unlock-store-key: with --store-passphrase-fd (or FOLIO_STORE_PASSPHRASE_FILE), hand the store key's passphrase to gpg-agent once,
 # by signing and decrypting a word with it (gpg's loopback mode). The agent keeps it for its cache
 # time, as when it is typed, so the gpg calls after — pass's too — ask nothing. Signing and
 # decrypting use different subkeys: each is unlocked. A wrong passphrase stops here, before
 # anything changes.
 STORE_UNLOCKED=0
 function unlock-store-key() {
-    [[ -n $STORE_PASSPHRASE_FD ]] && (( ! STORE_UNLOCKED )) || return 0
+    has-store-passphrase && (( ! STORE_UNLOCKED )) || return 0
     local key unlock=(gpg --batch --quiet --pinentry-mode loopback --passphrase-fd 3)
     load-store-passphrase
     key=$(head -n 1 "$STORE_PATH/.gpg-id")
@@ -3996,7 +4049,9 @@ function unlock-store-key() {
              3< <(printf '%s\n' "$STORE_PASSPHRASE") \
        || ! printf 'folio\n' | gpg --batch --quiet --trust-model always --encrypt --recipient "$key" \
              | "${unlock[@]}" --decrypt > /dev/null 3< <(printf '%s\n' "$STORE_PASSPHRASE"); then
-        die "The passphrase on file descriptor $STORE_PASSPHRASE_FD does not unlock the store's key $key."
+        local from="on file descriptor $STORE_PASSPHRASE_FD"
+        [[ -n $STORE_PASSPHRASE_FD ]] || from="in $STORE_PASSPHRASE_FROM"
+        die "The passphrase $from does not unlock the store's key $key."
     fi
     STORE_UNLOCKED=1
 }
