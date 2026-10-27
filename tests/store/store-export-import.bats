@@ -222,7 +222,7 @@ V
         < <(printf 'p\n')
     [ "$status" -eq 0 ]
     [[ $output == *"Items:  2 (texts: 2, secrets: 0)"* ]] || false
-    [[ $output == *"folio exec --from "* ]] || false
+    [[ $output == *"folio exec --from $SANDBOX/out/"*".folio --all --vars $SANDBOX/a.vars -- <command>"* ]] || false
     left-clean
 }
 

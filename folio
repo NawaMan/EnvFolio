@@ -1247,10 +1247,13 @@ EOF
                "To bring them into a store (a new one, or one that is there):"
                "  folio import $file")
     # With --vars: how to run the command there, with the same vars files, straight from the file.
+    # With a <name> or --use too, the file holds more than the vars files name, and their ${NAME}
+    # may want it (--use @app/@prod's db/host for ${DB_HOST}): --all loads it, as --use did here.
     if (( ${#vars_files[@]} > 0 )); then
         local exec_line="  folio exec" vars_file
         (( texts == ${#SELECTED[@]} )) || exec_line+=" -s"
         exec_line+=" --from $file"
+        (( ${#names[@]} + ${#uses[@]} == 0 )) || exec_line+=" --all"
         for vars_file in "${vars_files[@]}"; do exec_line+=" --vars $vars_file" ; done
         box+=("" "Or to run a command with them, with the same vars file(s), no store needed:")
         box+=("$exec_line -- <command>")
