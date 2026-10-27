@@ -35,174 +35,6 @@ A command on items names the action, then the kind: `folio show text web/user`,
 
 ---
 
-## Passphrase prompts in a window (GUI)
-
-EnvFolio never asks for a passphrase itself: gpg does, through its agent's *pinentry* program. By
-default that is often a prompt in the terminal. To get a window instead, install a GUI pinentry,
-name it in `~/.gnupg/gpg-agent.conf`, and restart the agent. This is gpg's own setting, so it
-applies to `pass` and every other gpg tool on the machine too.
-
-### Linux
-
-Pick the one that matches your desktop:
-
-| Desktop | Program | Debian / Ubuntu | Fedora | Arch |
-| --- | --- | --- | --- | --- |
-| GNOME and other GTK desktops | `pinentry-gnome3` | `sudo apt install pinentry-gnome3` | `sudo dnf install pinentry-gnome3` | `sudo pacman -S pinentry gcr` |
-| KDE Plasma | `pinentry-qt` | `sudo apt install pinentry-qt` | `sudo dnf install pinentry-qt` | `sudo pacman -S pinentry` |
-
-Then add the line to `~/.gnupg/gpg-agent.conf` (create the file if it is not there) and restart
-the agent:
-
-```bash
-echo "pinentry-program $(command -v pinentry-gnome3)" >> ~/.gnupg/gpg-agent.conf
-gpgconf --kill gpg-agent
-```
-
-The path must be absolute — the file does not expand `~` or `$HOME`. On Debian and Ubuntu,
-`sudo update-alternatives --config pinentry` picks the default program for every user instead.
-
-### macOS
-
-```bash
-brew install pinentry-mac
-echo "pinentry-program $(brew --prefix)/bin/pinentry-mac" >> ~/.gnupg/gpg-agent.conf
-gpgconf --kill gpg-agent
-```
-
-With [GPG Suite](https://gpgtools.org) installed instead of Homebrew's gpg, the window is already
-set up. `pinentry-mac` offers *Save in Keychain*: ticked, the passphrase is kept in the macOS
-Keychain and gpg does not ask again; leave it unticked to be asked each time.
-
-### Check it
-
-```bash
-gpgconf --kill gpg-agent
-echo test | gpg --clearsign > /dev/null
-```
-
-The window should open and ask for your key's passphrase. Then any EnvFolio command that needs it
-(`folio show secret`, `folio insert text`, `folio export`, …) asks the same way.
-
-### Good to know
-
-- The `--store-passphrase-…` and `--file-passphrase-…` options never open a window: the
-  passphrase comes from stdin or the file descriptor instead (see
-  [Passphrases without a prompt](#passphrases-without-a-prompt)).
-- With no display — over SSH, in a container or a booth — keep a terminal pinentry
-  (`pinentry-curses` or `pinentry-tty`). The GUI ones usually fall back to the terminal when
-  there is no display.
-- A terminal pinentry asks on the terminal in `GPG_TTY`. When it is not set, EnvFolio sets it to
-  the terminal it runs in, so gpg can still ask when stdin is a pipe or a file
-  (`echo x | folio insert text x`, `--file-passphrase-stdin`). A `GPG_TTY` you set is kept, and
-  the command `exec` and `shell` run gets the one you had, if any.
-- If the window opens on the wrong screen, or never opens and gpg waits, the agent was started
-  from another session: run `gpg-connect-agent updatestartuptty /bye` in the current one.
-- How long the agent remembers a passphrase is `default-cache-ttl` and `max-cache-ttl` (seconds)
-  in the same file. To have it forget the store key's as soon as a command is done, see
-  [Leave no passphrase behind](#leave-no-passphrase-behind).
-
----
-
-## Passphrases without a prompt
-
-EnvFolio deals with two kinds of passphrase, and each has its own options:
-
-| Option | Gives | Taken by |
-| --- | --- | --- |
-| `--store-passphrase-fd <n>` | The store key's passphrase: to read secrets, sign texts, and copy the key into a backup. | `init` (a new key), `backup`, `export`, `import`, `exec`, `shell`, `insert text`, `edit text`, `generate text`, `show secret`, `grep secret`, `edit secret`, `generate secret` |
-| `--store-passphrase-stdin` | The same, from stdin. | `init` only |
-| `--file-passphrase-fd <n>` | A file's own passphrase: an encrypted backup, or an export. | `backup --encrypt`, `restore`, `export`, `import`, `exec --from`, `shell --from` |
-| `--file-passphrase-stdin` | The same, from stdin. | `backup --encrypt`, `restore`, `export`, `import` |
-
-Each reads the **first line** of file descriptor `<n>` (or stdin) and refuses an empty one. The
-shell opens the file on `<n>`; the option takes the number, not a path:
-
-```bash
-folio show secret --store-passphrase-fd 3 web/github 3< ~/.store-pass
-folio export --secrets --store-passphrase-fd 3 --file-passphrase-fd 4 web 3< ~/.store-pass 4< ~/.export-pass
-```
-
-- EnvFolio closes the fd once it is read, so a command that `folio exec` runs never gets it.
-- With `--store-passphrase-fd`, EnvFolio first hands the passphrase to gpg-agent (gpg's loopback
-  mode), then works as usual. A wrong passphrase stops it there, before anything changes. The agent
-  then remembers the passphrase for its cache time, as when you type it — so a `folio` command
-  just after may not need it at all.
-- A passphrase in a file is only as safe as the file: make it under `umask 077`, or keep it in
-  `/dev/shm` and remove it once opened (as in [From an export file](#from-an-export-file)).
-- These were `--passphrase-stdin` and `--passphrase-fd` before 0.7.0. The old names stop and say
-  the new one.
-
----
-
-## Never asked, on a machine you trust
-
-On your own machine, you may not want to type the store key's passphrase at all. Put it in a file
-only you can read, and name the file in your shell's profile:
-
-```bash
-mkdir -p ~/.config/folio
-(umask 077; printf '%s\n' 'the store key passphrase' > ~/.config/folio/store-pass)
-export FOLIO_STORE_PASSPHRASE_FILE=~/.config/folio/store-pass
-```
-
-Then every command that takes `--store-passphrase-fd` reads the passphrase from the file's first
-line instead, and nothing is asked: `show secret`, `insert text`, `exec --secrets`, `backup`, …
-`init` makes a new key with it.
-
-- `--store-passphrase-fd` given on a command wins over the file.
-- The file must be yours, and no one else may read or write it (`chmod 600`): otherwise EnvFolio
-  stops and says so, as ssh does with a key. An empty first line is refused too.
-- A wrong passphrase stops the command before anything changes, as with `--store-passphrase-fd`.
-- The command `exec` and `shell` run does not get `FOLIO_STORE_PASSPHRASE_FILE`.
-- The key itself keeps its passphrase: a backup of the store, which copies the key, is still
-  locked by it. Keep the file out of your backups.
-- **Anyone who can read that file — or run commands as you — can open the store.** Use it only
-  where you would leave the store unlocked. On a desktop, a pinentry that keeps the passphrase in
-  the login keychain (see [Passphrase prompts in a window](#passphrase-prompts-in-a-window-gui))
-  or a long `default-cache-ttl` asks less often while keeping it out of a file.
-- With [`--fresh-passphrase`](#leave-no-passphrase-behind) too, the passphrase still comes from
-  the file, and gpg-agent forgets it when the command is done.
-
----
-
-## Leave no passphrase behind
-
-gpg-agent remembers a passphrase for its cache time, so the next `folio`, `pass` or `gpg` needs
-none. On a machine you trust less — a shared server, a booth in the cloud — `--fresh-passphrase`
-has it forget the store key's passphrase when the command starts and again when it ends. It goes
-with every command, anywhere before a `--`:
-
-```bash
-folio show secret --fresh-passphrase web/github
-folio exec --fresh-passphrase --secrets gh/token -- gh release list
-```
-
-Or for every command, from your shell's profile:
-
-```bash
-export FOLIO_FRESH_PASSPHRASE=1     # 0, or unset, to turn it off
-```
-
-- **At the start**, so the store key's passphrase is asked (or taken from
-  `--store-passphrase-fd`), even when the agent had it.
-- **During the command**, the agent keeps it as usual, so it is asked once.
-- **At the end**, also when the command fails. `exec` and `shell` do it before the command or the
-  shell starts, every value read by then: they hold the values, not the passphrase. A key the
-  agent did not have at the start and has at the end is forgotten too — the key a `--from` file
-  is locked to.
-- The passphrase that locks an encrypted backup or an export is not kept at all
-  (gpg's `--no-symkey-cache`), whether typed or given with `--file-passphrase-…`.
-- **Other keys stay as they were**: your git signing key, or one gpg-agent holds for SSH. But
-  gpg-agent tries the passphrases it has on a key it has none for: **if another key it remembers
-  has the same passphrase as the store key, the store key still opens without asking.** Give the
-  store key a passphrase of its own, or run `gpgconf --reload gpg-agent` to have it forget them
-  all.
-- It needs `gpg-connect-agent`, which comes with gpg. A command killed outright (`kill -9`) cannot
-  make the agent forget.
-
----
-
 ## `folio init`
 
 Creates the EnvFolio store (`$FOLIO_STORE_DIR`, default `~/.folio`): picks or creates the GPG key that
@@ -2028,3 +1860,172 @@ folio completion
 
 Says which line to add to `~/.bashrc` or `~/.zshrc`, and fails, so `eval "$(folio completion)"`
 loads nothing by mistake.
+
+---
+
+## Passphrase prompts in a window (GUI)
+
+EnvFolio never asks for a passphrase itself: gpg does, through its agent's *pinentry* program. By
+default that is often a prompt in the terminal. To get a window instead, install a GUI pinentry,
+name it in `~/.gnupg/gpg-agent.conf`, and restart the agent. This is gpg's own setting, so it
+applies to `pass` and every other gpg tool on the machine too.
+
+### Linux
+
+Pick the one that matches your desktop:
+
+| Desktop | Program | Debian / Ubuntu | Fedora | Arch |
+| --- | --- | --- | --- | --- |
+| GNOME and other GTK desktops | `pinentry-gnome3` | `sudo apt install pinentry-gnome3` | `sudo dnf install pinentry-gnome3` | `sudo pacman -S pinentry gcr` |
+| KDE Plasma | `pinentry-qt` | `sudo apt install pinentry-qt` | `sudo dnf install pinentry-qt` | `sudo pacman -S pinentry` |
+
+Then add the line to `~/.gnupg/gpg-agent.conf` (create the file if it is not there) and restart
+the agent:
+
+```bash
+echo "pinentry-program $(command -v pinentry-gnome3)" >> ~/.gnupg/gpg-agent.conf
+gpgconf --kill gpg-agent
+```
+
+The path must be absolute — the file does not expand `~` or `$HOME`. On Debian and Ubuntu,
+`sudo update-alternatives --config pinentry` picks the default program for every user instead.
+
+### macOS
+
+```bash
+brew install pinentry-mac
+echo "pinentry-program $(brew --prefix)/bin/pinentry-mac" >> ~/.gnupg/gpg-agent.conf
+gpgconf --kill gpg-agent
+```
+
+With [GPG Suite](https://gpgtools.org) installed instead of Homebrew's gpg, the window is already
+set up. `pinentry-mac` offers *Save in Keychain*: ticked, the passphrase is kept in the macOS
+Keychain and gpg does not ask again; leave it unticked to be asked each time.
+
+### Check it
+
+```bash
+gpgconf --kill gpg-agent
+echo test | gpg --clearsign > /dev/null
+```
+
+The window should open and ask for your key's passphrase. Then any EnvFolio command that needs it
+(`folio show secret`, `folio insert text`, `folio export`, …) asks the same way.
+
+### Good to know
+
+- The `--store-passphrase-…` and `--file-passphrase-…` options never open a window: the
+  passphrase comes from stdin or the file descriptor instead (see
+  [Passphrases without a prompt](#passphrases-without-a-prompt)).
+- With no display — over SSH, in a container or a booth — keep a terminal pinentry
+  (`pinentry-curses` or `pinentry-tty`). The GUI ones usually fall back to the terminal when
+  there is no display.
+- A terminal pinentry asks on the terminal in `GPG_TTY`. When it is not set, EnvFolio sets it to
+  the terminal it runs in, so gpg can still ask when stdin is a pipe or a file
+  (`echo x | folio insert text x`, `--file-passphrase-stdin`). A `GPG_TTY` you set is kept, and
+  the command `exec` and `shell` run gets the one you had, if any.
+- If the window opens on the wrong screen, or never opens and gpg waits, the agent was started
+  from another session: run `gpg-connect-agent updatestartuptty /bye` in the current one.
+- How long the agent remembers a passphrase is `default-cache-ttl` and `max-cache-ttl` (seconds)
+  in the same file. To have it forget the store key's as soon as a command is done, see
+  [Leave no passphrase behind](#leave-no-passphrase-behind).
+
+---
+
+## Passphrases without a prompt
+
+EnvFolio deals with two kinds of passphrase, and each has its own options:
+
+| Option | Gives | Taken by |
+| --- | --- | --- |
+| `--store-passphrase-fd <n>` | The store key's passphrase: to read secrets, sign texts, and copy the key into a backup. | `init` (a new key), `backup`, `export`, `import`, `exec`, `shell`, `insert text`, `edit text`, `generate text`, `show secret`, `grep secret`, `edit secret`, `generate secret` |
+| `--store-passphrase-stdin` | The same, from stdin. | `init` only |
+| `--file-passphrase-fd <n>` | A file's own passphrase: an encrypted backup, or an export. | `backup --encrypt`, `restore`, `export`, `import`, `exec --from`, `shell --from` |
+| `--file-passphrase-stdin` | The same, from stdin. | `backup --encrypt`, `restore`, `export`, `import` |
+
+Each reads the **first line** of file descriptor `<n>` (or stdin) and refuses an empty one. The
+shell opens the file on `<n>`; the option takes the number, not a path:
+
+```bash
+folio show secret --store-passphrase-fd 3 web/github 3< ~/.store-pass
+folio export --secrets --store-passphrase-fd 3 --file-passphrase-fd 4 web 3< ~/.store-pass 4< ~/.export-pass
+```
+
+- EnvFolio closes the fd once it is read, so a command that `folio exec` runs never gets it.
+- With `--store-passphrase-fd`, EnvFolio first hands the passphrase to gpg-agent (gpg's loopback
+  mode), then works as usual. A wrong passphrase stops it there, before anything changes. The agent
+  then remembers the passphrase for its cache time, as when you type it — so a `folio` command
+  just after may not need it at all.
+- A passphrase in a file is only as safe as the file: make it under `umask 077`, or keep it in
+  `/dev/shm` and remove it once opened (as in [From an export file](#from-an-export-file)).
+- These were `--passphrase-stdin` and `--passphrase-fd` before 0.7.0. The old names stop and say
+  the new one.
+
+---
+
+## Never asked, on a machine you trust
+
+On your own machine, you may not want to type the store key's passphrase at all. Put it in a file
+only you can read, and name the file in your shell's profile:
+
+```bash
+mkdir -p ~/.config/folio
+(umask 077; printf '%s\n' 'the store key passphrase' > ~/.config/folio/store-pass)
+export FOLIO_STORE_PASSPHRASE_FILE=~/.config/folio/store-pass
+```
+
+Then every command that takes `--store-passphrase-fd` reads the passphrase from the file's first
+line instead, and nothing is asked: `show secret`, `insert text`, `exec --secrets`, `backup`, …
+`init` makes a new key with it.
+
+- `--store-passphrase-fd` given on a command wins over the file.
+- The file must be yours, and no one else may read or write it (`chmod 600`): otherwise EnvFolio
+  stops and says so, as ssh does with a key. An empty first line is refused too.
+- A wrong passphrase stops the command before anything changes, as with `--store-passphrase-fd`.
+- The command `exec` and `shell` run does not get `FOLIO_STORE_PASSPHRASE_FILE`.
+- The key itself keeps its passphrase: a backup of the store, which copies the key, is still
+  locked by it. Keep the file out of your backups.
+- **Anyone who can read that file — or run commands as you — can open the store.** Use it only
+  where you would leave the store unlocked. On a desktop, a pinentry that keeps the passphrase in
+  the login keychain (see [Passphrase prompts in a window](#passphrase-prompts-in-a-window-gui))
+  or a long `default-cache-ttl` asks less often while keeping it out of a file.
+- With [`--fresh-passphrase`](#leave-no-passphrase-behind) too, the passphrase still comes from
+  the file, and gpg-agent forgets it when the command is done.
+
+---
+
+## Leave no passphrase behind
+
+gpg-agent remembers a passphrase for its cache time, so the next `folio`, `pass` or `gpg` needs
+none. On a machine you trust less — a shared server, a booth in the cloud — `--fresh-passphrase`
+has it forget the store key's passphrase when the command starts and again when it ends. It goes
+with every command, anywhere before a `--`:
+
+```bash
+folio show secret --fresh-passphrase web/github
+folio exec --fresh-passphrase --secrets gh/token -- gh release list
+```
+
+Or for every command, from your shell's profile:
+
+```bash
+export FOLIO_FRESH_PASSPHRASE=1     # 0, or unset, to turn it off
+```
+
+- **At the start**, so the store key's passphrase is asked (or taken from
+  `--store-passphrase-fd`), even when the agent had it.
+- **During the command**, the agent keeps it as usual, so it is asked once.
+- **At the end**, also when the command fails. `exec` and `shell` do it before the command or the
+  shell starts, every value read by then: they hold the values, not the passphrase. A key the
+  agent did not have at the start and has at the end is forgotten too — the key a `--from` file
+  is locked to.
+- The passphrase that locks an encrypted backup or an export is not kept at all
+  (gpg's `--no-symkey-cache`), whether typed or given with `--file-passphrase-…`.
+- **Other keys stay as they were**: your git signing key, or one gpg-agent holds for SSH. But
+  gpg-agent tries the passphrases it has on a key it has none for: **if another key it remembers
+  has the same passphrase as the store key, the store key still opens without asking.** Give the
+  store key a passphrase of its own, or run `gpgconf --reload gpg-agent` to have it forget them
+  all.
+- It needs `gpg-connect-agent`, which comes with gpg. A command killed outright (`kill -9`) cannot
+  make the agent forget.
+
