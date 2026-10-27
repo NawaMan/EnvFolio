@@ -84,6 +84,9 @@ now stable. A change that breaks any of them will come with a new major version.
 
 ### Fixed
 
+- `export --vars` with `<name>`s or `--use` too: the closing box's `folio exec --from` line now
+  has `--all`. Without it, what they brought — e.g. a `--use`'s `db/host` — was not loaded there,
+  so a `${DB_HOST}` it should feed came out empty.
 - With stdin a pipe or a file (`echo x | folio insert text x`, `export -s
   --file-passphrase-stdin`), gpg could not ask for the store key's passphrase on a terminal and
   stopped with "Inappropriate ioctl for device". EnvFolio now sets `GPG_TTY` to its terminal when
