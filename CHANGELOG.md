@@ -2,7 +2,7 @@
 
 User-visible changes to EnvFolio. Newest first.
 
-## Unreleased
+## 1.0.0 — 2026-10-27
 
 1.0.0: commands, options and file formats (the store, vars files, `.folio` exports, backups) are
 now stable. A change that breaks any of them will come with a new major version. Changes since
