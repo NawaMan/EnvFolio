@@ -283,6 +283,8 @@ PORT=[22]" ]
         -o "$SANDBOX/app2-prod.folio" --file-passphrase-stdin < <(printf 'export pass\n')
     [ "$status" -eq 0 ]
     [[ $stderr == *"Items: 4 (texts: 3, secrets: 1)"* ]] || false
+    # The closing box's exec line has --all, so the <name>s and --use feed ${NAME} there too.
+    [[ $output == *"folio exec -s --from $SANDBOX/app2-prod.folio --all --vars $SANDBOX/server.vars -- <command>"* ]] || false
     go-there
     run --separate-stderr "$FOLIO" exec -s --from "$SANDBOX/app2-prod.folio" --file-passphrase-fd 3 \
         --vars "$SANDBOX/server.vars" --all -- printenv DB_URL 3< <(printf 'export pass\n')

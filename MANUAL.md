@@ -596,7 +596,8 @@ gives each only its own.
 
 One with no fallback that is not there stops the export, as it would stop `folio exec`. Any secret
 in the file needs `--secrets`, as in `folio exec`. `<name>`s can be given too; each item goes
-once. The closing box shows the `folio exec --from` line.
+once. The closing box shows the `folio exec --from` line — with `--all` when `<name>`s or `--use` were
+given, so what they brought feeds the `${NAME}`s there too.
 
 ---
 
