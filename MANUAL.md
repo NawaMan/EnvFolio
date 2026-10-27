@@ -200,293 +200,6 @@ folio path
 
 ---
 
-## `folio backup`
-
-Saves the whole EnvFolio store and its GPG key into one file, to get it all back with
-`folio restore` — on this machine or a new one.
-
-```
-folio backup [--history] [--encrypt [--file-passphrase-stdin|--file-passphrase-fd <n>]] [--store-passphrase-fd <n>] [<file>|<folder>]
-```
-
-| Option | Meaning |
-| --- | --- |
-| `--history` | Keep the store's git history too. Without it, a restore starts a new one. |
-| `--encrypt` | Encrypt the backup with a passphrase of its own (`gpg --symmetric`); the file ends in `--folio.gpg` instead of `--folio.tar.gz`. |
-| `--file-passphrase-stdin` | Read that passphrase from the first line of stdin instead of gpg's prompt. Needs `--encrypt`. An empty passphrase is refused. |
-| `--file-passphrase-fd <n>` | The same, from the first line of file descriptor `<n>`. Needs `--encrypt`. |
-| `--store-passphrase-fd <n>` | The store key's passphrase (to copy the key into the backup), from the first line of file descriptor `<n>`, instead of gpg's prompt. See [Passphrases without a prompt](#passphrases-without-a-prompt). |
-| `-h`, `--help` | Show the options and stop. |
-
-The file is `<file>` (the suffix added when missing), or `backup-<date>-<time>--folio.tar.gz` in
-`<folder>` — default the current folder. An existing file is never replaced. The file is readable
-by you only.
-
-What is in it:
-
-- `folio-backup.txt` — when it was made, the store's folder name, and the key's fingerprint.
-- `key.asc` — the store's secret key, exported with `gpg --export-secret-keys`. gpg asks for the
-  key's passphrase to export it, and the key stays protected by that passphrase in the file.
-- The store's folder: the secrets (encrypted), the texts and their signatures (plain) — and with
-  `--history`, its `.git`.
-
-Without `--encrypt`, anyone with the file can read the texts and the names of the secrets; the
-secrets themselves need the key and its passphrase. Keep the file somewhere safe and offline.
-
-### Back up into the current folder
-
-```bash
-folio backup
-```
-
-Writes `backup-20261006-120000--folio.tar.gz` (the date and time now) here.
-
-### Restore on a new machine
-
-```bash
-folio backup /media/usb
-# ... on the new machine:
-folio restore /media/usb/backup-20261006-120000--folio.tar.gz
-```
-
-The store comes back with a new git history, its texts still verify and its secrets decrypt.
-
-### With the git history
-
-```bash
-folio backup --history
-```
-
-The restored store has the same history as this one.
-
-### Encrypted
-
-```bash
-folio backup --encrypt
-```
-
-gpg asks for a passphrase for the backup (twice), and writes `backup-…--folio.gpg`. A restore asks
-for it again. With `--file-passphrase-stdin`, the first line of stdin is the passphrase — feed it from
-a file or another secret tool, not with `echo`.
-
----
-
-## `folio restore`
-
-Brings back an EnvFolio store from a file made by `folio backup`.
-
-```
-folio restore [--file-passphrase-stdin|--file-passphrase-fd <n>] [--allow-unsafe-folder] <file>
-```
-
-| Option | Meaning |
-| --- | --- |
-| `--file-passphrase-stdin` | Read the passphrase of an encrypted backup (`--folio.gpg`) from the first line of stdin instead of gpg's prompt. |
-| `--file-passphrase-fd <n>` | The same, from the first line of file descriptor `<n>`. |
-| `--allow-unsafe-folder` | Use an existing empty folder that is someone else's or open to other users without asking. The warning still shows. |
-| `-h`, `--help` | Show the options and stop. |
-
-It imports the backup's key into your keyring and trusts it as your own (so `pass` can encrypt to
-it), then puts the store at `$FOLIO_STORE_DIR` (default `~/.folio`). A key already in your keyring
-is fine. A backup without its git history gets a new one: one commit of everything restored.
-
-An empty folder at `$FOLIO_STORE_DIR` is fine: the store is moved inside it (it may be a mount
-point, such as an encrypted volume or a bind mount), its mode and owner left as they are. A folder
-made by the restore is private (`700`) — see *The store folder is private* under
-`folio init`.
-
-It refuses when the folder has anything in it, and changes nothing: move that folder away first, or
-restore elsewhere with `FOLIO_STORE_DIR=<other-folder> folio restore <file>`.
-A file whose name ends in neither `--folio.tar.gz` nor `--folio.gpg`, or that is not an EnvFolio backup,
-is refused too. Nothing is left behind when it fails.
-
-Examples: see `folio backup` above.
-
----
-
-## `folio export`
-
-Copies some items into one file, to bring them into another store with `folio import` — on
-a server, in a booth, or on another machine. Your store's key never leaves this machine.
-
-```
-folio export [-s|--secrets] [--to <key>|--file-passphrase-stdin|--file-passphrase-fd <n>] [--store-passphrase-fd <n>] [--use <@namespace>]... [--vars <file>]... [-o|--output <file>|<folder>] [<name>...]
-```
-
-| Option | Meaning |
-| --- | --- |
-| `-s`, `--secrets` | Take the secrets in a folder, or under a `--use`, too. A secret named on its own always goes; one a vars file names needs it. |
-| `--to <key>` | Lock the file to this public key — a key file (`.asc`) or a key in your keyring (fingerprint, key id or email) — instead of a passphrase. Only its secret key can open the file. A key file is never added to your keyring. |
-| `--file-passphrase-stdin` | Read the file's passphrase from the first line of stdin instead of gpg's prompt. Not with `--to`. Needs a `<name>`, `--use` or `--vars`. An empty passphrase is refused. |
-| `--file-passphrase-fd <n>` | Read the file's passphrase from the first line of file descriptor `<n>`. Not with `--to`. stdin stays free, so the items can still be picked. An empty passphrase is refused. |
-| `--store-passphrase-fd <n>` | The store key's passphrase (to read the secrets), from the first line of file descriptor `<n>`, instead of gpg's prompt. See [Passphrases without a prompt](#passphrases-without-a-prompt). |
-| `--use <@namespace>` | Take every item under `<@namespace>` (e.g. `@app2`, or `@app2/@prod`), named without it. Can be given more than once. See [One environment, with --use](#one-environment-with---use). Experimental: it may change. |
-| `--vars <file>` | Take the items a [vars file](#from-a-vars-file) names. Can be given more than once. See [The items a vars file names](#the-items-a-vars-file-names). |
-| `-o`, `--output <file>\|<folder>` | Where to write the file. With no `-o`, EnvFolio asks. |
-| `-h`, `--help` | Show the options and stop. |
-
-A `<name>` is a text or a secret, or a folder: every text under it, and its secrets with
-`--secrets`. With `--use`, the items under a namespace are taken, named without it, as
-[`folio exec --use`](#peel-a-namespace-with---use) does. With `--vars`, the items a vars file names
-are taken too. With no `<name>`, `--use` or `--vars`, EnvFolio lists every item, numbered, and asks
-which ones (`1 3 5-7`, or `all`).
-
-With neither `--to` nor a passphrase option, EnvFolio asks how to lock the file: with a passphrase
-(gpg asks for it, after EnvFolio says so and waits for Enter), or with a public key — picked from the
-usable keys in your keyring, or given as a key file.
-
-The file is `<file>` (`.folio` added when missing), or `store-<date>.folio` in `<folder>` —
-never inside the store. With no `-o`, EnvFolio asks, offering `store-<date>.folio` in the current
-folder (Tab completes names). An existing file is never replaced. The file
-is readable by you only.
-
-How it works:
-
-- A **new key** is made for this export only, in a keyring of its own that is removed afterwards.
-  Each secret is decrypted with your store's key and encrypted to the new key through a pipe —
-  the value never touches the disk. gpg may ask for your store key's passphrase. Each text is
-  checked and signed again with the new key.
-- The file holds `folio-export.txt` (when it was made, the new key's fingerprint), `key.asc` (the
-  new key, with no passphrase of its own) and `store/` — a `pass` store of the chosen items.
-- The whole file is **always locked**: with a passphrase, or with `--to`, to the public key of
-  where it is going. Whoever opens the file can read every item in it, so it is never written
-  unlocked.
-
-### Export with a passphrase
-
-```bash
-folio export web
-```
-
-Takes the texts under `web/` (its secrets need `--secrets`). EnvFolio asks where to write the file
-(Enter takes `store-20261006.folio` here) and how to lock it; pick the passphrase, and
-gpg asks for one for the file (twice).
-
-### Lock it to the server's public key
-
-```bash
-# on the server:
-gpg --armor --export server@example.com > server.asc
-# here:
-folio export --secrets --to server.asc web
-```
-
-Only the server's secret key can open the file, so it can travel through places you do not trust
-(a provider, a chat, a shared drive).
-
-### The items a vars file names
-
-```bash
-folio export -s --vars prod-deploy.vars -o deploy.folio
-# there, with the same vars file — no store needed:
-folio exec -s --from deploy.folio --vars prod-deploy.vars -- ./deploy
-```
-
-Takes every item the [vars file](#from-a-vars-file) names — each `@{name}` and `@{folder/*}`,
-wherever it is — and nothing else; `${…}` and constants are not items, and stay in the file. An
-`@{…}` in a fallback is taken too when it is there (whether it is needed depends on the
-environment where the command runs), and left out with a note when it is not:
-
-```
-folio export: prod-deploy.vars:4: 'gh/token' is not a text or secret in the store; left out (it has a fallback or is one).
-```
-
-A `${NAME}` is not an item either. When the file is fed by entries or `--use` at run time (see
-[Feeding a command](#feeding-a-command-contract-store-and-namespaces)), give them here too, and
-the file holds what feeds it:
-
-```bash
-folio export -s --vars server.vars server --use @app2/@prod -o app2-prod.folio
-folio exec -s --from app2-prod.folio --vars server.vars --all -- ./deploy.sh
-```
-
-### One environment, with --use
-
-> **Experimental:** `--use` may change in a later version.
-
-```
-server/port                       (T)  22
-@app2/@prod/server/{db, user}     (T)
-@app2/@prod/server/password       (S)
-@app2/@staging/server/{db, user}  (T)
-@app2/@staging/server/port        (T)  2222
-@app2/@staging/server/password    (S)
-```
-
-```bash
-folio export --secrets server --use @app2/@staging -o app2-staging.folio
-```
-
-Takes `server/port`, then every item under `@app2/@staging`, laid over it with `@app2/@staging/`
-taken off the front of the path: the file holds `server/{port, db, user, password}` — the port
-being staging's `2222`, as `--use` came last — and nothing of `@app2/@prod`. Typed the other way
-round, `--use @app2/@staging server`, the shared `server/port` would win.
-
-`--use @app2` alone takes both environments, as `@prod/…` and `@staging/…`: whoever opens that
-file has both, and picks one with `folio exec --from … --use @prod`. A file for each environment
-gives each only its own.
-
-One with no fallback that is not there stops the export, as it would stop `folio exec`. Any secret
-in the file needs `--secrets`, as in `folio exec`. `<name>`s can be given too; each item goes
-once. The closing box shows the `folio exec --from` line — with `--all` when `<name>`s or `--use` were
-given, so what they brought feeds the `${NAME}`s there too.
-
----
-
-## `folio import`
-
-Brings items from a file made by `folio export` into the EnvFolio store.
-
-```
-folio import [-a|--all] [--overwrite|--skip-existing] [--key <id>] [--file-passphrase-stdin|--file-passphrase-fd <n>] [--store-passphrase-fd <n>] [--allow-unsafe-folder] [<file> [<name>...]]
-```
-
-| Option | Meaning |
-| --- | --- |
-| `-a`, `--all` | Take every item in the export. |
-| `--overwrite` | Replace the items already in the store. |
-| `--skip-existing` | Keep the items already in the store; take only the new ones. |
-| `--key <id>` | With no store yet: make it with this key, as `folio init --key`. |
-| `--file-passphrase-stdin` | Read the file's passphrase (or your key's, for a file locked to it) from the first line of stdin. Needs `<file>`, and `--all` or a `<name>`; with no store yet, `--key` too. |
-| `--file-passphrase-fd <n>` | The same, from the first line of file descriptor `<n>`. stdin stays free, so anything not given is still asked for. |
-| `--store-passphrase-fd <n>` | The store key's passphrase (to sign the texts), from the first line of file descriptor `<n>`, instead of gpg's prompt. With no store yet and a new key made for it, that new key's passphrase. See [Passphrases without a prompt](#passphrases-without-a-prompt). |
-| `--allow-unsafe-folder` | Import into a store folder that is someone else's or open to other users without asking. The warning still shows. |
-| `-h`, `--help` | Show the options and stop. |
-
-With no `<file>`, EnvFolio asks for it (Tab completes names). A `<name>` is an item in the export,
-or a folder: every item under it. With neither `<name>` nor `--all`, EnvFolio lists the export's
-items and asks which ones. Before gpg asks for the passphrase of a file locked with one, EnvFolio
-says so and waits for Enter.
-
-Every text is checked against the export's signature first; one that does not verify stops the
-import before anything is written. Then each secret is encrypted to the store's key (by
-`pass insert`) and each text is signed with it (gpg may ask for its passphrase); every item is
-one commit in the store's history, as when you add it by hand. The export's key is used in a
-keyring of its own and never added to yours.
-
-With no store yet, one is made first, as `folio init` does: its key — `--key`, or picked,
-or a new one from your name and email — is asked for before anything is made. An item already in
-the store is overwritten or skipped as `--overwrite` or
-`--skip-existing` says; with neither, EnvFolio lists them and asks.
-
-### Into a new store
-
-```bash
-folio import --all --key server@example.com store-20261006.folio
-```
-
-Makes the store with the server's key, then imports every item.
-
-### Merge into a store, keeping what is there
-
-```bash
-folio import --skip-existing store-20261006.folio aws/key web/user
-```
-
-Takes `aws/key` and `web/user`; one already in the store stays as it is.
-
----
-
 ## `folio ls`
 
 Lists the texts and secrets in the EnvFolio store together as one tree: names only, never values.
@@ -1860,6 +1573,293 @@ folio completion
 
 Says which line to add to `~/.bashrc` or `~/.zshrc`, and fails, so `eval "$(folio completion)"`
 loads nothing by mistake.
+
+---
+
+## `folio backup`
+
+Saves the whole EnvFolio store and its GPG key into one file, to get it all back with
+`folio restore` — on this machine or a new one.
+
+```
+folio backup [--history] [--encrypt [--file-passphrase-stdin|--file-passphrase-fd <n>]] [--store-passphrase-fd <n>] [<file>|<folder>]
+```
+
+| Option | Meaning |
+| --- | --- |
+| `--history` | Keep the store's git history too. Without it, a restore starts a new one. |
+| `--encrypt` | Encrypt the backup with a passphrase of its own (`gpg --symmetric`); the file ends in `--folio.gpg` instead of `--folio.tar.gz`. |
+| `--file-passphrase-stdin` | Read that passphrase from the first line of stdin instead of gpg's prompt. Needs `--encrypt`. An empty passphrase is refused. |
+| `--file-passphrase-fd <n>` | The same, from the first line of file descriptor `<n>`. Needs `--encrypt`. |
+| `--store-passphrase-fd <n>` | The store key's passphrase (to copy the key into the backup), from the first line of file descriptor `<n>`, instead of gpg's prompt. See [Passphrases without a prompt](#passphrases-without-a-prompt). |
+| `-h`, `--help` | Show the options and stop. |
+
+The file is `<file>` (the suffix added when missing), or `backup-<date>-<time>--folio.tar.gz` in
+`<folder>` — default the current folder. An existing file is never replaced. The file is readable
+by you only.
+
+What is in it:
+
+- `folio-backup.txt` — when it was made, the store's folder name, and the key's fingerprint.
+- `key.asc` — the store's secret key, exported with `gpg --export-secret-keys`. gpg asks for the
+  key's passphrase to export it, and the key stays protected by that passphrase in the file.
+- The store's folder: the secrets (encrypted), the texts and their signatures (plain) — and with
+  `--history`, its `.git`.
+
+Without `--encrypt`, anyone with the file can read the texts and the names of the secrets; the
+secrets themselves need the key and its passphrase. Keep the file somewhere safe and offline.
+
+### Back up into the current folder
+
+```bash
+folio backup
+```
+
+Writes `backup-20261006-120000--folio.tar.gz` (the date and time now) here.
+
+### Restore on a new machine
+
+```bash
+folio backup /media/usb
+# ... on the new machine:
+folio restore /media/usb/backup-20261006-120000--folio.tar.gz
+```
+
+The store comes back with a new git history, its texts still verify and its secrets decrypt.
+
+### With the git history
+
+```bash
+folio backup --history
+```
+
+The restored store has the same history as this one.
+
+### Encrypted
+
+```bash
+folio backup --encrypt
+```
+
+gpg asks for a passphrase for the backup (twice), and writes `backup-…--folio.gpg`. A restore asks
+for it again. With `--file-passphrase-stdin`, the first line of stdin is the passphrase — feed it from
+a file or another secret tool, not with `echo`.
+
+---
+
+## `folio restore`
+
+Brings back an EnvFolio store from a file made by `folio backup`.
+
+```
+folio restore [--file-passphrase-stdin|--file-passphrase-fd <n>] [--allow-unsafe-folder] <file>
+```
+
+| Option | Meaning |
+| --- | --- |
+| `--file-passphrase-stdin` | Read the passphrase of an encrypted backup (`--folio.gpg`) from the first line of stdin instead of gpg's prompt. |
+| `--file-passphrase-fd <n>` | The same, from the first line of file descriptor `<n>`. |
+| `--allow-unsafe-folder` | Use an existing empty folder that is someone else's or open to other users without asking. The warning still shows. |
+| `-h`, `--help` | Show the options and stop. |
+
+It imports the backup's key into your keyring and trusts it as your own (so `pass` can encrypt to
+it), then puts the store at `$FOLIO_STORE_DIR` (default `~/.folio`). A key already in your keyring
+is fine. A backup without its git history gets a new one: one commit of everything restored.
+
+An empty folder at `$FOLIO_STORE_DIR` is fine: the store is moved inside it (it may be a mount
+point, such as an encrypted volume or a bind mount), its mode and owner left as they are. A folder
+made by the restore is private (`700`) — see *The store folder is private* under
+`folio init`.
+
+It refuses when the folder has anything in it, and changes nothing: move that folder away first, or
+restore elsewhere with `FOLIO_STORE_DIR=<other-folder> folio restore <file>`.
+A file whose name ends in neither `--folio.tar.gz` nor `--folio.gpg`, or that is not an EnvFolio backup,
+is refused too. Nothing is left behind when it fails.
+
+Examples: see `folio backup` above.
+
+---
+
+## `folio export`
+
+Copies some items into one file, to bring them into another store with `folio import` — on
+a server, in a booth, or on another machine. Your store's key never leaves this machine.
+
+```
+folio export [-s|--secrets] [--to <key>|--file-passphrase-stdin|--file-passphrase-fd <n>] [--store-passphrase-fd <n>] [--use <@namespace>]... [--vars <file>]... [-o|--output <file>|<folder>] [<name>...]
+```
+
+| Option | Meaning |
+| --- | --- |
+| `-s`, `--secrets` | Take the secrets in a folder, or under a `--use`, too. A secret named on its own always goes; one a vars file names needs it. |
+| `--to <key>` | Lock the file to this public key — a key file (`.asc`) or a key in your keyring (fingerprint, key id or email) — instead of a passphrase. Only its secret key can open the file. A key file is never added to your keyring. |
+| `--file-passphrase-stdin` | Read the file's passphrase from the first line of stdin instead of gpg's prompt. Not with `--to`. Needs a `<name>`, `--use` or `--vars`. An empty passphrase is refused. |
+| `--file-passphrase-fd <n>` | Read the file's passphrase from the first line of file descriptor `<n>`. Not with `--to`. stdin stays free, so the items can still be picked. An empty passphrase is refused. |
+| `--store-passphrase-fd <n>` | The store key's passphrase (to read the secrets), from the first line of file descriptor `<n>`, instead of gpg's prompt. See [Passphrases without a prompt](#passphrases-without-a-prompt). |
+| `--use <@namespace>` | Take every item under `<@namespace>` (e.g. `@app2`, or `@app2/@prod`), named without it. Can be given more than once. See [One environment, with --use](#one-environment-with---use). Experimental: it may change. |
+| `--vars <file>` | Take the items a [vars file](#from-a-vars-file) names. Can be given more than once. See [The items a vars file names](#the-items-a-vars-file-names). |
+| `-o`, `--output <file>\|<folder>` | Where to write the file. With no `-o`, EnvFolio asks. |
+| `-h`, `--help` | Show the options and stop. |
+
+A `<name>` is a text or a secret, or a folder: every text under it, and its secrets with
+`--secrets`. With `--use`, the items under a namespace are taken, named without it, as
+[`folio exec --use`](#peel-a-namespace-with---use) does. With `--vars`, the items a vars file names
+are taken too. With no `<name>`, `--use` or `--vars`, EnvFolio lists every item, numbered, and asks
+which ones (`1 3 5-7`, or `all`).
+
+With neither `--to` nor a passphrase option, EnvFolio asks how to lock the file: with a passphrase
+(gpg asks for it, after EnvFolio says so and waits for Enter), or with a public key — picked from the
+usable keys in your keyring, or given as a key file.
+
+The file is `<file>` (`.folio` added when missing), or `store-<date>.folio` in `<folder>` —
+never inside the store. With no `-o`, EnvFolio asks, offering `store-<date>.folio` in the current
+folder (Tab completes names). An existing file is never replaced. The file
+is readable by you only.
+
+How it works:
+
+- A **new key** is made for this export only, in a keyring of its own that is removed afterwards.
+  Each secret is decrypted with your store's key and encrypted to the new key through a pipe —
+  the value never touches the disk. gpg may ask for your store key's passphrase. Each text is
+  checked and signed again with the new key.
+- The file holds `folio-export.txt` (when it was made, the new key's fingerprint), `key.asc` (the
+  new key, with no passphrase of its own) and `store/` — a `pass` store of the chosen items.
+- The whole file is **always locked**: with a passphrase, or with `--to`, to the public key of
+  where it is going. Whoever opens the file can read every item in it, so it is never written
+  unlocked.
+
+### Export with a passphrase
+
+```bash
+folio export web
+```
+
+Takes the texts under `web/` (its secrets need `--secrets`). EnvFolio asks where to write the file
+(Enter takes `store-20261006.folio` here) and how to lock it; pick the passphrase, and
+gpg asks for one for the file (twice).
+
+### Lock it to the server's public key
+
+```bash
+# on the server:
+gpg --armor --export server@example.com > server.asc
+# here:
+folio export --secrets --to server.asc web
+```
+
+Only the server's secret key can open the file, so it can travel through places you do not trust
+(a provider, a chat, a shared drive).
+
+### The items a vars file names
+
+```bash
+folio export -s --vars prod-deploy.vars -o deploy.folio
+# there, with the same vars file — no store needed:
+folio exec -s --from deploy.folio --vars prod-deploy.vars -- ./deploy
+```
+
+Takes every item the [vars file](#from-a-vars-file) names — each `@{name}` and `@{folder/*}`,
+wherever it is — and nothing else; `${…}` and constants are not items, and stay in the file. An
+`@{…}` in a fallback is taken too when it is there (whether it is needed depends on the
+environment where the command runs), and left out with a note when it is not:
+
+```
+folio export: prod-deploy.vars:4: 'gh/token' is not a text or secret in the store; left out (it has a fallback or is one).
+```
+
+A `${NAME}` is not an item either. When the file is fed by entries or `--use` at run time (see
+[Feeding a command](#feeding-a-command-contract-store-and-namespaces)), give them here too, and
+the file holds what feeds it:
+
+```bash
+folio export -s --vars server.vars server --use @app2/@prod -o app2-prod.folio
+folio exec -s --from app2-prod.folio --vars server.vars --all -- ./deploy.sh
+```
+
+### One environment, with --use
+
+> **Experimental:** `--use` may change in a later version.
+
+```
+server/port                       (T)  22
+@app2/@prod/server/{db, user}     (T)
+@app2/@prod/server/password       (S)
+@app2/@staging/server/{db, user}  (T)
+@app2/@staging/server/port        (T)  2222
+@app2/@staging/server/password    (S)
+```
+
+```bash
+folio export --secrets server --use @app2/@staging -o app2-staging.folio
+```
+
+Takes `server/port`, then every item under `@app2/@staging`, laid over it with `@app2/@staging/`
+taken off the front of the path: the file holds `server/{port, db, user, password}` — the port
+being staging's `2222`, as `--use` came last — and nothing of `@app2/@prod`. Typed the other way
+round, `--use @app2/@staging server`, the shared `server/port` would win.
+
+`--use @app2` alone takes both environments, as `@prod/…` and `@staging/…`: whoever opens that
+file has both, and picks one with `folio exec --from … --use @prod`. A file for each environment
+gives each only its own.
+
+One with no fallback that is not there stops the export, as it would stop `folio exec`. Any secret
+in the file needs `--secrets`, as in `folio exec`. `<name>`s can be given too; each item goes
+once. The closing box shows the `folio exec --from` line — with `--all` when `<name>`s or `--use` were
+given, so what they brought feeds the `${NAME}`s there too.
+
+---
+
+## `folio import`
+
+Brings items from a file made by `folio export` into the EnvFolio store.
+
+```
+folio import [-a|--all] [--overwrite|--skip-existing] [--key <id>] [--file-passphrase-stdin|--file-passphrase-fd <n>] [--store-passphrase-fd <n>] [--allow-unsafe-folder] [<file> [<name>...]]
+```
+
+| Option | Meaning |
+| --- | --- |
+| `-a`, `--all` | Take every item in the export. |
+| `--overwrite` | Replace the items already in the store. |
+| `--skip-existing` | Keep the items already in the store; take only the new ones. |
+| `--key <id>` | With no store yet: make it with this key, as `folio init --key`. |
+| `--file-passphrase-stdin` | Read the file's passphrase (or your key's, for a file locked to it) from the first line of stdin. Needs `<file>`, and `--all` or a `<name>`; with no store yet, `--key` too. |
+| `--file-passphrase-fd <n>` | The same, from the first line of file descriptor `<n>`. stdin stays free, so anything not given is still asked for. |
+| `--store-passphrase-fd <n>` | The store key's passphrase (to sign the texts), from the first line of file descriptor `<n>`, instead of gpg's prompt. With no store yet and a new key made for it, that new key's passphrase. See [Passphrases without a prompt](#passphrases-without-a-prompt). |
+| `--allow-unsafe-folder` | Import into a store folder that is someone else's or open to other users without asking. The warning still shows. |
+| `-h`, `--help` | Show the options and stop. |
+
+With no `<file>`, EnvFolio asks for it (Tab completes names). A `<name>` is an item in the export,
+or a folder: every item under it. With neither `<name>` nor `--all`, EnvFolio lists the export's
+items and asks which ones. Before gpg asks for the passphrase of a file locked with one, EnvFolio
+says so and waits for Enter.
+
+Every text is checked against the export's signature first; one that does not verify stops the
+import before anything is written. Then each secret is encrypted to the store's key (by
+`pass insert`) and each text is signed with it (gpg may ask for its passphrase); every item is
+one commit in the store's history, as when you add it by hand. The export's key is used in a
+keyring of its own and never added to yours.
+
+With no store yet, one is made first, as `folio init` does: its key — `--key`, or picked,
+or a new one from your name and email — is asked for before anything is made. An item already in
+the store is overwritten or skipped as `--overwrite` or
+`--skip-existing` says; with neither, EnvFolio lists them and asks.
+
+### Into a new store
+
+```bash
+folio import --all --key server@example.com store-20261006.folio
+```
+
+Makes the store with the server's key, then imports every item.
+
+### Merge into a store, keeping what is there
+
+```bash
+folio import --skip-existing store-20261006.folio aws/key web/user
+```
+
+Takes `aws/key` and `web/user`; one already in the store stays as it is.
 
 ---
 
