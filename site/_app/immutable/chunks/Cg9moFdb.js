@@ -1,0 +1,1 @@
+import{h as u,a as l}from"./CEs3rGIG.js";function d(e,t,n,s,r){var f;u&&l();var i=(f=t.$$slots)==null?void 0:f[n],a=!1;i===!0&&(i=t.children,a=!0),i===void 0?r!==null&&r(e):i(e,a?()=>s:s)}function c(e){const t={};e.children&&(t.default=!0);for(const n in e.$$slots)t[n]=!0;return t}export{c as a,d as s};
