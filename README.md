@@ -124,7 +124,8 @@ Details: [MANUAL.md](MANUAL.md).
 
 An item's variable name comes from its path:
 
-1. a top folder whose name starts with `@` — a *namespace* — is dropped;
+1. a top folder whose name starts with `@` — a *namespace* — is dropped, or with `--use`, the
+   namespaces it names;
 2. `/` turns into `_`;
 3. it is uppercased.
 
@@ -134,8 +135,12 @@ An item's variable name comes from its path:
 | `@me/gh/token` | `GH_TOKEN` |
 | `gh/api-key` | none — not a valid name; left out with a warning |
 
-Only a top folder is a namespace; deeper down, `@` is an ordinary character. To pick the name
-yourself, write `VAR=<name>` on the command line:
+Namespaces can nest from the front of the path — `@app1/@prod/db/user` — but naming drops only the
+top one: items under a nested namespace are left out, with a note to add `--use @app1/@prod`,
+which peels the whole prefix (see [One contract, many environments](#one-contract-many-environments)).
+After a folder without `@`, `@` is an ordinary character: `gh/@work/token` is not a valid name.
+
+To pick the name yourself, write `VAR=<name>` on the command line:
 
 ```bash
 folio exec --secrets GITHUB_TOKEN=gh/token -- gh release list
