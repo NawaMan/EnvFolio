@@ -1531,8 +1531,11 @@ path once the namespace is peeled off — whatever was selected:
 | `git/user_name` | `GIT_USER_NAME` |
 | `@nawa/gh/token` | `GH_TOKEN` |
 
-Only a top folder is a namespace. Deeper down, `@` is an ordinary character: `gh/@work/token`
-would be `GH_@WORK_TOKEN`, which is not a valid variable name (see below).
+Namespaces can nest from the front of the path — `@app2/@prod/server/user` — but the rule removes
+only the top one: the entries under a nested namespace are left out, with a note to add
+`--use @app2/@prod`, which peels the whole prefix (see [Peel a namespace with
+--use](#peel-a-namespace-with---use)). After a folder without `@`, `@` is an ordinary character:
+`gh/@work/token` would be `GH_@WORK_TOKEN`, which is not a valid variable name (see below).
 
 The variables are worked out in this order:
 
