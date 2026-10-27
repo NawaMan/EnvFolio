@@ -23,7 +23,7 @@ jobs:
   # forever and the test hangs. perl puts SIGPIPE back to default before running the tests.
   test-linux-bash5:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
       - name: Install dependencies
@@ -34,7 +34,7 @@ jobs:
 
   test-macos-bash32:
     runs-on: macos-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
       # coreutils for `timeout` only (some tests use it), linked alone so the tests still run
