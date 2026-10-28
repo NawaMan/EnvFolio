@@ -3,6 +3,30 @@
 One section per command, one subsection per example. Every example that can run without a
 keyboard has a matching test in `tests/` named `MANUAL: <command> — <example>`.
 
+## Contents
+
+- **Start:** [`help`](#folio-help) · [`init`](#folio-init) · [`path`](#folio-path) ·
+  [`ls`](#folio-ls)
+- **Texts:** [`ls text`](#folio-ls-text) · [`find text`](#folio-find-text) ·
+  [`grep text`](#folio-grep-text) · [`show text`](#folio-show-text) ·
+  [`insert text`](#folio-insert-text) · [`edit text`](#folio-edit-text) ·
+  [`generate text`](#folio-generate-text) · [`rm text`](#folio-rm-text) ·
+  [`mv text`](#folio-mv-text) · [`cp text`](#folio-cp-text)
+- **Secrets:** [`ls secret`](#folio-ls-secret) · [`find secret`](#folio-find-secret) ·
+  [`grep secret`](#folio-grep-secret) · [`show secret`](#folio-show-secret) ·
+  [`insert secret`](#folio-insert-secret) · [`edit secret`](#folio-edit-secret) ·
+  [`generate secret`](#folio-generate-secret) · [`rm secret`](#folio-rm-secret) ·
+  [`mv secret`](#folio-mv-secret) · [`cp secret`](#folio-cp-secret)
+- **Running commands:** [Feeding a command](#feeding-a-command-contract-store-and-namespaces) ·
+  [`exec`](#folio-exec) · [`shell`](#folio-shell) · [`check vars`](#folio-check-vars)
+- **Tab completion:** [`completion`](#folio-completion)
+- **Moving the store:** [`backup`](#folio-backup) · [`restore`](#folio-restore) ·
+  [`export`](#folio-export) · [`import`](#folio-import)
+- **Passphrases:** [Prompts in a window (GUI)](#passphrase-prompts-in-a-window-gui) ·
+  [Without a prompt](#passphrases-without-a-prompt) ·
+  [Never asked, on a machine you trust](#never-asked-on-a-machine-you-trust) ·
+  [Leave no passphrase behind](#leave-no-passphrase-behind)
+
 ---
 
 ## `folio help`
