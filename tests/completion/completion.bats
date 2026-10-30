@@ -49,6 +49,39 @@ bash-tab() {
              IFS=, ; echo "${COMPREPLY[*]}"' _ "$1"
 }
 
+# What an interactive zsh, with its completion system, shows after <load>, for each <line> then
+# Tab, one after another in the same shell: driven through a pseudo-terminal. Ctrl-X prints the
+# line as Tab left it (BUF:[…]), without running it, and clears it for the next (not Ctrl-U: typed
+# ahead, before zle has the terminal, the terminal takes that as its own kill-line). The driver
+# waits for every BUF, up to 10 seconds, rather than a fixed sleep (too short on macOS). Escapes
+# are taken out in zsh: BSD sed has no \x1b.
+zsh-tab() {
+    cat > "$SANDBOX/setup.zsh" <<EOF
+PS1="> "
+$1
+(( \$+functions[compdef] )) || { autoload -Uz compinit; compinit -u -d \$HOME/.zcompdump ; }
+show-buffer() { zle -I; print -r -- "BUF:[\$BUFFER]" ; BUFFER= ; }
+zle -N show-buffer; bindkey '^X' show-buffer
+EOF
+    shift
+    cat > "$SANDBOX/drive.zsh" <<'EOF'
+setopt extendedglob
+zmodload zsh/zpty
+zpty z zsh -f -i
+zpty -w z "source ${0:h}/setup.zsh"
+for line in "$@"; do zpty -w -n z $line$'\t\C-x'; done
+out= ; integer i
+for (( i = 0; i < 100; i++ )); do
+    while zpty -r -t z line; do out+=$line; done
+    (( ${#out} - ${#${out//BUF:\[/}} >= 5 * $# )) && break   # 5: the length of BUF:[
+    sleep 0.1
+done
+zpty -d z
+out=${out//$'\e'\[[0-9;?]#[a-zA-Z]/} ; print -r -- ${out//$'\r'/}
+EOF
+    zsh -f "$SANDBOX/drive.zsh" "$@"
+}
+
 # --- What there is to complete --------------------------------------------------
 
 @test "completion: every command in folio help has its arguments in completion-args" {
@@ -257,34 +290,25 @@ bash-tab() {
 
 @test "MANUAL: completion — zsh" {
     make-names
-    # A real interactive zsh, with its completion system, driven through a pseudo-terminal.
-    # Ctrl-X prints the line as Tab left it (BUF:[…]), without running it; the driver waits for
-    # that, up to 10 seconds, rather than a fixed sleep (too short on macOS). Escapes are taken
-    # out in zsh: BSD sed has no \x1b.
-    cat > "$SANDBOX/setup.zsh" <<'EOF'
-PS1="> "
-autoload -Uz compinit; compinit -u -d $HOME/.zcompdump
-eval "$(folio completion zsh)"
-show-buffer() { zle -I; print -r -- "BUF:[$BUFFER]" ; }
-zle -N show-buffer; bindkey '^X' show-buffer
-EOF
-    cat > "$SANDBOX/drive.zsh" <<'EOF'
-setopt extendedglob
-zmodload zsh/zpty
-zpty z zsh -f -i
-zpty -w z "source ${0:h}/setup.zsh"
-zpty -w -n z $1$'\t\C-x'
-out= ; integer i
-for (( i = 0; i < 100; i++ )); do
-    while zpty -r -t z line; do out+=$line; done
-    [[ $out == *BUF:\[*\]* ]] && break
-    sleep 0.1
-done
-zpty -d z
-out=${out//$'\e'\[[0-9;?]#[a-zA-Z]/} ; print -r -- ${out//$'\r'/}
-EOF
-    run zsh -f "$SANDBOX/drive.zsh" "folio secret sh"
+    run zsh-tab 'eval "$(folio completion zsh)"' "folio secret sh" "folio secret show web/d"
     [[ $output == *"BUF:[folio secret show ]"* ]] || false
-    run zsh -f "$SANDBOX/drive.zsh" "folio secret show web/d"
     [[ $output == *"BUF:[folio secret show web/deep/down/key"* ]] || false
+}
+
+@test "completion: zsh — the script as the file _folio on fpath (as Homebrew installs it)" {
+    make-names
+    mkdir "$SANDBOX/site-functions" && "$FOLIO" completion zsh > "$SANDBOX/site-functions/_folio"
+    # The first Tab loads the file and completes at once; the next uses what it defined.
+    run zsh-tab "fpath=('$SANDBOX/site-functions' \$fpath)" "folio secret sh" "folio secret show web/d"
+    [[ $output == *"BUF:[folio secret show ]"* ]] || false
+    [[ $output == *"BUF:[folio secret show web/deep/down/key"* ]] || false
+}
+
+@test "completion: bash — the script as a file bash-completion loads (as Homebrew installs it)" {
+    make-names
+    "$FOLIO" completion bash > "$SANDBOX/folio.bash"
+    run bash -c 'source "$1"
+                 COMP_LINE="folio show secret web/d" COMP_POINT=23 ; _folio
+                 echo "${COMPREPLY[*]}"' _ "$SANDBOX/folio.bash"
+    [ "$output" = "web/deep/down/key" ]
 }
