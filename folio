@@ -3622,7 +3622,9 @@ EOF
 # The script for zsh: its own completion system, with a description beside each choice.
 function completion-zsh() {
     cat <<'EOF'
-# Tab completion for folio (EnvFolio), from `folio completion zsh`.
+#compdef folio
+# Tab completion for folio (EnvFolio), from `folio completion zsh`: eval'd from ~/.zshrc, or as the
+# file _folio on $fpath (as Homebrew installs it), which compinit loads at the first Tab.
 _folio() {
     local how line word desc folio=${words[1]}
     local -a lines plain folders
@@ -3647,9 +3649,14 @@ _folio() {
     esac
     return 0
 }
-# -i: skip completion files zsh does not trust, rather than ask (no one may be there to answer).
-(( $+functions[compdef] )) || { autoload -Uz compinit && compinit -i ; }
-compdef _folio folio
+if [[ ${funcstack[1]-} == _folio ]]; then
+    # Loaded from the file _folio at a Tab: the function above replaces this one; complete now.
+    _folio "$@"
+else
+    # -i: skip completion files zsh does not trust, rather than ask (no one may be there to answer).
+    (( $+functions[compdef] )) || { autoload -Uz compinit && compinit -i ; }
+    compdef _folio folio
+fi
 EOF
 }
 
