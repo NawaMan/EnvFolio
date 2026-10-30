@@ -1589,6 +1589,19 @@ edit      -- Edit a secret in $EDITOR
 …
 ```
 
+### Installed by Homebrew
+
+`brew install nawaman/tap/folio` puts the scripts where bash and zsh look for completion, so no
+`eval` line is needed when your shell looks there:
+
+- zsh: `$(brew --prefix)/share/zsh/site-functions` on `fpath` before `compinit` runs — most
+  setups have it (Homebrew's own shell setup on macOS, oh-my-zsh); if not, add
+  `fpath=("$(brew --prefix)/share/zsh/site-functions" $fpath)` before it in `~/.zshrc`;
+- bash: the `bash-completion@2` package, loaded from `~/.bashrc`.
+
+Otherwise, the `eval` line above works with Homebrew's `folio` too. The zsh script is the same
+either way: as a file, it starts with `#compdef folio`.
+
 ### No shell named
 
 ```bash

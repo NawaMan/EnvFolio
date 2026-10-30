@@ -48,7 +48,9 @@ add `export PATH="$HOME/.local/bin:$PATH"` to your shell's rc file, or move `fol
 folder on it. To upgrade, do the same with the new release; to uninstall, delete the file.
 
 For Tab completion of commands, options and item names, add `eval "$(folio completion bash)"` to
-`~/.bashrc`, or `eval "$(folio completion zsh)"` to `~/.zshrc`.
+`~/.bashrc`, or `eval "$(folio completion zsh)"` to `~/.zshrc`. Homebrew installs it for you, for
+shells that load completion from Homebrew's folders (see
+[`folio completion`](MANUAL.md#folio-completion)).
 
 ### Dependencies
 

@@ -4,6 +4,12 @@ User-visible changes to EnvFolio. Newest first.
 
 ## Unreleased
 
+### Fixed
+
+- `folio completion zsh` also works as the file `_folio` on `$fpath` (it starts with
+  `#compdef folio`), so Homebrew can install Tab completion for zsh, as it does for bash: no
+  `eval` line needed. `eval "$(folio completion zsh)"` works as before.
+
 ## 1.0.0 — 2026-10-27
 
 1.0.0: commands, options and file formats (the store, vars files, `.folio` exports, backups) are
