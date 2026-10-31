@@ -33,6 +33,17 @@ With [Homebrew](https://brew.sh) (macOS or Linux):
 brew install nawaman/tap/folio
 ```
 
+Without Homebrew, with the install script:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/NawaMan/EnvFolio/main/install.sh | bash
+```
+
+It downloads `folio` from the latest release, checks it against the release's `SHA256SUMS`, and
+puts it in `~/.local/bin` — no sudo. `| FOLIO_INSTALL_DIR=<folder> bash` puts it elsewhere,
+`| FOLIO_VERSION=1.0.1 bash` installs that release. Read
+[install.sh](install.sh) first if you'd rather. Run it again to upgrade.
+
 Or by hand — EnvFolio is one bash script. Download `folio` and `SHA256SUMS` from the
 [latest release](https://github.com/NawaMan/EnvFolio/releases/latest), check it, make it
 executable and put it on your `PATH`:
@@ -48,7 +59,8 @@ folio version
 
 If `folio version` is not found, `~/.local/bin` is not on your `PATH` (often the case on macOS):
 add `export PATH="$HOME/.local/bin:$PATH"` to your shell's rc file, or move `folio` to another
-folder on it. To upgrade, do the same with the new release; to uninstall, delete the file.
+folder on it. To upgrade, do the same with the new release; to uninstall, delete the file
+(either way you installed it).
 
 For Tab completion of commands, options and item names, add `eval "$(folio completion bash)"` to
 `~/.bashrc`, or `eval "$(folio completion zsh)"` to `~/.zshrc`. Homebrew installs it for you, for
@@ -324,7 +336,7 @@ EnvFolio is developed in a [CodingBooth](https://codingbooth.io) container that 
 
 ```bash
 just test-all                                  # every test, under bash 3.2 and bash 5
-./booth exec --run -- shellcheck folio tools/*.sh tests/test-all.sh
+./booth exec --run -- shellcheck folio install.sh tools/*.sh tests/test-all.sh
 ```
 
 Read [AGENTS.md](AGENTS.md) for the conventions — bash 3.2, Linux and macOS, how secrets are

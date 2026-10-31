@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - run: shellcheck folio tools/*.sh tests/test-all.sh
+      - run: shellcheck folio install.sh tools/*.sh tests/test-all.sh
 
   # The runner starts steps with SIGPIPE ignored, and bash cannot undo that for its children:
   # `tr < /dev/urandom` (in `pass generate`, `text generate`) then never stops — on macOS it runs

@@ -4,6 +4,13 @@ User-visible changes to EnvFolio. Newest first.
 
 ## Unreleased
 
+### Added
+
+- An install script for installing without Homebrew:
+  `curl -fsSL https://raw.githubusercontent.com/NawaMan/EnvFolio/main/install.sh | bash`. It checks
+  the download against the release's `SHA256SUMS` and puts `folio` in `~/.local/bin`, no sudo;
+  `FOLIO_INSTALL_DIR` and `FOLIO_VERSION` pick the folder and the release.
+
 ## 1.0.1 — 2026-10-30
 
 ### Fixed
