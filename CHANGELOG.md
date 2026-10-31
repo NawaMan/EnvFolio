@@ -11,6 +11,14 @@ User-visible changes to EnvFolio. Newest first.
   the download against the release's `SHA256SUMS` and puts `folio` in `~/.local/bin`, no sudo;
   `FOLIO_INSTALL_DIR` and `FOLIO_VERSION` pick the folder and the release.
 
+### Fixed
+
+- `folio import` and `exec`/`shell --from` work with Ubuntu's gpg 2.4.8 (with libgcrypt 1.12.0),
+  which refused every export ("cannot use the key in …"): it often cannot use a key it has just
+  imported — a gpg bug that depends on the GnuPG folder's path — so EnvFolio tries a folder a
+  character longer. The message, when it still cannot, no longer suggests 2.4. `folio restore`
+  can still fail on that gpg ("Bad passphrase" when the store is used): use Homebrew's gpg.
+
 ## 1.0.1 — 2026-10-30
 
 ### Fixed
