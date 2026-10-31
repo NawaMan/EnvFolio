@@ -42,6 +42,14 @@ teardown() {
 # Forget any passphrase the agent has.
 forget() { gpgconf --kill gpg-agent ; }
 
+# gpg-uses-key: whether gpg itself decrypts with the store's key, given "pw" — a word encrypted to
+# it and decrypted. Ubuntu's gpg 2.4.8 (with libgcrypt 1.12.0) often cannot with a key it has just
+# imported: "Bad passphrase", with the right one. A gpg bug; EnvFolio cannot work around it here.
+gpg-uses-key() {
+    printf 'folio\n' | gpg --batch --quiet --trust-model always --encrypt --recipient test@example.com 2>/dev/null \
+        | gpg --batch --quiet --pinentry-mode loopback --passphrase pw --decrypt 2>/dev/null | grep -qx folio
+}
+
 # --- The store's passphrase ------------------------------------------------------
 
 @test "store passphrase: without it, gpg's prompt is all there is (here it cancels)" {
@@ -230,6 +238,8 @@ forget() { gpgconf --kill gpg-agent ; }
     use-pinentry --cancel
     run "$FOLIO" restore --file-passphrase-fd 3 "${file[0]}" 3< <(printf 'file-pw\n') < /dev/null
     [ "$status" -eq 0 ]
+    gpg-uses-key || skip "this gpg cannot use the key it has just imported: a gpg bug (e.g. Ubuntu's 2.4.8), not EnvFolio's"
+    forget    # so show gets the passphrase from the fd, not from the agent's cache
     [ "$("$FOLIO" show secret --store-passphrase-fd 3 web/github 3< <(printf 'pw\n'))" = "s3cr3t" ]
 }
 
