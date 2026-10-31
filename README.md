@@ -38,8 +38,11 @@ Or by hand — EnvFolio is one bash script. Download `folio` and `SHA256SUMS` fr
 executable and put it on your `PATH`:
 
 ```bash
+cd "$(mktemp -d)"
+curl -fsSLO https://github.com/NawaMan/EnvFolio/releases/latest/download/folio
+curl -fsSLO https://github.com/NawaMan/EnvFolio/releases/latest/download/SHA256SUMS
 sha256sum -c SHA256SUMS            # macOS: shasum -a 256 -c SHA256SUMS
-chmod +x folio && mv folio ~/.local/bin/
+chmod +x folio && mkdir -p ~/.local/bin && mv folio ~/.local/bin/
 folio version
 ```
 
