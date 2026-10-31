@@ -1521,8 +1521,7 @@ function open-export() {
     umask 077
     stage=$(mktemp -d) || die "Cannot make a temporary folder."
     remove-on-exit "$stage"
-    EXPORT_HOME=$stage/home EXPORT_ROOT=$stage/unpack/store
-    new-gpg-home "$EXPORT_HOME"
+    EXPORT_HOME="" EXPORT_ROOT=$stage/unpack/store
     mkdir "$stage/unpack"
     # An older gpg cannot open a file locked to a post-quantum key, and says only "No secret key".
     if has-pqc-key "$file" && ! gpg-has-pqc; then
@@ -1551,19 +1550,32 @@ function open-export() {
     [[ $format == 1 ]]                 || die "$file is an EnvFolio export of a format this EnvFolio cannot read ($format)."
     [[ $key =~ ^[0-9A-F]{40,64}$ ]]    || die "$file names a key that is not a fingerprint: $key"
     [[ -s $stage/unpack/key.asc && -d $EXPORT_ROOT ]] || die "$file has no key or no items in it."
-    GNUPGHOME=$EXPORT_HOME gpg --batch --quiet --import "$stage/unpack/key.asc" 2>/dev/null
-    GNUPGHOME=$EXPORT_HOME gpg --list-secret-keys "$key" >/dev/null 2>&1 || die "$file has no secret key $key."
-    can-use-imported-key "$EXPORT_HOME" "$key" \
-        || die "This gpg ($(gpg-version)) cannot use the key in $file: gpg 2.5.23 and 2.5.24, as" \
-               "released, cannot decrypt with a key they imported without a passphrase, as an" \
-               "export's is (https://dev.gnupg.org/T8469). Use a gpg with the fix — Homebrew's," \
-               "2.4, or a later 2.5. Nothing changed."$'\n'"$PQC_GPG_HELP"
-    EXPORT_KEY=$key
+    # Some gpg builds cannot decrypt with a key they have just imported: 2.5.23 and 2.5.24 as
+    # released, for a key without a passphrase, as an export's is (https://dev.gnupg.org/T8469);
+    # and, a bug of its own, Ubuntu's 2.4.8 (with libgcrypt 1.12.0) for a GnuPG home whose path is
+    # of some lengths (23-24, 37-39, … characters). So a home whose path is a character longer is
+    # tried next, a few times. A home is used only once gpg has decrypted with the key in it.
+    local home
+    for home in "$stage/home" "$stage/home1" "$stage/home12" "$stage/home123"; do
+        new-gpg-home "$home"
+        GNUPGHOME=$home gpg --batch --quiet --import "$stage/unpack/key.asc" 2>/dev/null
+        GNUPGHOME=$home gpg --list-secret-keys "$key" >/dev/null 2>&1 || die "$file has no secret key $key."
+        if can-use-imported-key "$home" "$key"; then
+            EXPORT_HOME=$home EXPORT_KEY=$key
+            return 0
+        fi
+    done
+    die "This gpg ($(gpg-version)) cannot use the key in $file: some gpg builds cannot decrypt" \
+        "with a key they have just imported — 2.5.23 and 2.5.24 as released, for a key without a" \
+        "passphrase, as an export's is (https://dev.gnupg.org/T8469), and Ubuntu's 2.4.8 (with" \
+        "libgcrypt 1.12.0), often. Use another gpg — Homebrew's, or a later 2.5." \
+        "Nothing changed."$'\n'"$PQC_GPG_HELP"
 }
 
 # can-use-imported-key <gnupg-home> <key>: whether gpg decrypts with <key>, a secret key just imported
-# into <gnupg-home> — by encrypting a word to it and decrypting that. gpg 2.5.23 and 2.5.24 as
-# released cannot, for a key without a passphrase (https://dev.gnupg.org/T8469); Homebrew's can.
+# into <gnupg-home> — by encrypting a word to it and decrypting that. Some builds cannot: 2.5.23 and
+# 2.5.24 as released, for a key without a passphrase (https://dev.gnupg.org/T8469), and Ubuntu's
+# 2.4.8 (with libgcrypt 1.12.0) for a home of some path lengths. Homebrew's can.
 function can-use-imported-key() {
     printf 'folio\n' | GNUPGHOME=$1 gpg --batch --quiet --trust-model always --encrypt --recipient "$2" 2>/dev/null \
         | GNUPGHOME=$1 gpg --batch --quiet --decrypt 2>/dev/null | grep -qx folio

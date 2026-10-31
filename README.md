@@ -357,7 +357,11 @@ with classical keys, but it cannot make, restore or open post-quantum ones.
   [gnupg.org](https://gnupg.org/download/). gpg 2.5.23 and 2.5.24 as released have a bug
   ([T8469](https://dev.gnupg.org/T8469)): they cannot use a key imported without a passphrase,
   so EnvFolio cannot open an export with them. Homebrew's has the fix; building it yourself, add
-  the two commits linked from that bug, or take a later 2.5.
+  the two commits linked from that bug, or take a later 2.5. Ubuntu's 2.4.8 (with libgcrypt
+  1.12.0) has a bug of its own that looks alike: it often cannot use a key it has just imported,
+  with a passphrase or without. For an export EnvFolio works around it, and says so if it cannot;
+  for `folio restore`, which imports the store's key into your keyring, it cannot — use
+  Homebrew's gpg there.
 - **Windows** — EnvFolio runs in WSL: follow the Linux steps there.
 
 Then stop the old gpg-agent, so the new gpg starts its own: `gpgconf --kill all`. `pass` uses a

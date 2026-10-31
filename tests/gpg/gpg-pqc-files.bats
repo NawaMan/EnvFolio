@@ -161,6 +161,20 @@ old-gpg-meets-pqc() {
     [[ $output == *"cannot use the key in"*"T8469"* ]] || false
 }
 
+@test "import and --from: a GnuPG home where gpg cannot use the export's key is left for one a character longer (Ubuntu's 2.4.8 bug)" {
+    make-store
+    run Export --secrets --file-passphrase-fd 3 -o "$SANDBOX/out/items" web/github < /dev/null 3< <(printf 'x\n')
+    [ "$status" -eq 0 ]
+    # Fake: this gpg cannot use the key in the first home; the real check for the next.
+    eval "real-$(declare -f can-use-imported-key)"
+    # shellcheck disable=SC2317  # called by the command under test
+    can-use-imported-key() { echo "$1" >> "$SANDBOX/homes" ; [[ $1 != */home ]] && real-can-use-imported-key "$@" ; }
+    run Exec --secrets --from "$SANDBOX/out/items.folio" --file-passphrase-fd 3 web/github -- true 3< <(printf 'x\n')
+    [ "$status" -eq 0 ]
+    [ "$(wc -l < "$SANDBOX/homes")" -eq 2 ]
+    [[ $(sed -n 2p "$SANDBOX/homes") == */home1 ]] || false
+}
+
 @test "can-use-imported-key: yes for a key this gpg imported and can use" {
     make-store
     run Export --secrets --file-passphrase-fd 3 -o "$SANDBOX/out/items" web/github < /dev/null 3< <(printf 'x\n')
