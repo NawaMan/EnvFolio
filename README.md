@@ -355,13 +355,14 @@ with classical keys, but it cannot make, restore or open post-quantum ones.
   Many still ship 2.4; then install gpg with [Homebrew on Linux](https://docs.brew.sh/Homebrew-on-Linux)
   (`brew install gnupg`) and put its `bin` folder ahead on your `PATH`, or build it from
   [gnupg.org](https://gnupg.org/download/). gpg 2.5.23 and 2.5.24 as released have a bug
-  ([T8469](https://dev.gnupg.org/T8469)): they cannot use a key imported without a passphrase,
-  so EnvFolio cannot open an export with them. Homebrew's has the fix; building it yourself, add
-  the two commits linked from that bug, or take a later 2.5. Ubuntu's 2.4.8 (with libgcrypt
-  1.12.0) has a bug of its own that looks alike: it often cannot use a key it has just imported,
-  with a passphrase or without. For an export EnvFolio works around it, and says so if it cannot;
-  for `folio restore`, which imports the store's key into your keyring, it cannot — use
-  Homebrew's gpg there.
+  ([T8469](https://dev.gnupg.org/T8469)): they cannot use an ECDH key (such as gpg's default,
+  cv25519) imported without a passphrase. Homebrew's has the fix; building it yourself, add the
+  two commits linked from that bug, or take a later 2.5. Ubuntu's 2.4.8 (with libgcrypt 1.12.0)
+  has a bug of its own that looks alike: it often cannot use a cv25519 key it has just imported,
+  with a passphrase or without. An export made with EnvFolio 1.1.0 or later has an RSA key, which
+  both can use; one made before has a cv25519 key — export it again, or open it with Homebrew's
+  gpg. `folio restore` imports the store's own key into your keyring: if that key is cv25519, as
+  gpg makes by default, use Homebrew's gpg there.
 - **Windows** — EnvFolio runs in WSL: follow the Linux steps there.
 
 Then stop the old gpg-agent, so the new gpg starts its own: `gpgconf --kill all`. `pass` uses a

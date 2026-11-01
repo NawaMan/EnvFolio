@@ -1177,11 +1177,16 @@ EOF
     section "Exporting"
     info "That is everything needed. Exporting now." >&2
 
+    # Its encryption subkey is RSA, not gpg's default cv25519: some gpg builds cannot decrypt with a
+    # cv25519 key they have just imported — Ubuntu's 2.4.8 (with libgcrypt 1.12.0) often, and 2.5.23
+    # and 2.5.24 as released (https://dev.gnupg.org/T8469, a bug of ECDH keys) — as import does.
     section "Make the export's own key"
     status=$(GNUPGHOME=$home gpg --batch --passphrase '' --status-fd 3 \
-                 --quick-generate-key "EnvFolio export $(date +%Y%m%d-%H%M%S)" default default never 3>&1 1>/dev/null 2>/dev/null)
+                 --quick-generate-key "EnvFolio export $(date +%Y%m%d-%H%M%S)" ed25519 sign never 3>&1 1>/dev/null 2>/dev/null)
     key=$(printf '%s\n' "$status" | awk '$2 == "KEY_CREATED" { print $4 }')
     [[ -n $key ]] || die "Making the export's key failed."
+    GNUPGHOME=$home gpg --batch --passphrase '' --quick-add-key "$key" rsa3072 encr never >/dev/null 2>&1 \
+        || die "Making the export's key failed."
     echo "$key" > "$pack/store/.gpg-id"
     show-answer "Key" "$key"
 
@@ -1550,32 +1555,24 @@ function open-export() {
     [[ $format == 1 ]]                 || die "$file is an EnvFolio export of a format this EnvFolio cannot read ($format)."
     [[ $key =~ ^[0-9A-F]{40,64}$ ]]    || die "$file names a key that is not a fingerprint: $key"
     [[ -s $stage/unpack/key.asc && -d $EXPORT_ROOT ]] || die "$file has no key or no items in it."
-    # Some gpg builds cannot decrypt with a key they have just imported: 2.5.23 and 2.5.24 as
-    # released, for a key without a passphrase, as an export's is (https://dev.gnupg.org/T8469);
-    # and, a bug of its own, Ubuntu's 2.4.8 (with libgcrypt 1.12.0) for a GnuPG home whose path is
-    # of some lengths (23-24, 37-39, … characters). So a home whose path is a character longer is
-    # tried next, a few times. A home is used only once gpg has decrypted with the key in it.
-    local home
-    for home in "$stage/home" "$stage/home1" "$stage/home12" "$stage/home123"; do
-        new-gpg-home "$home"
-        GNUPGHOME=$home gpg --batch --quiet --import "$stage/unpack/key.asc" 2>/dev/null
-        GNUPGHOME=$home gpg --list-secret-keys "$key" >/dev/null 2>&1 || die "$file has no secret key $key."
-        if can-use-imported-key "$home" "$key"; then
-            EXPORT_HOME=$home EXPORT_KEY=$key
-            return 0
-        fi
-    done
-    die "This gpg ($(gpg-version)) cannot use the key in $file: some gpg builds cannot decrypt" \
-        "with a key they have just imported — 2.5.23 and 2.5.24 as released, for a key without a" \
-        "passphrase, as an export's is (https://dev.gnupg.org/T8469), and Ubuntu's 2.4.8 (with" \
-        "libgcrypt 1.12.0), often. Use another gpg — Homebrew's, or a later 2.5." \
-        "Nothing changed."$'\n'"$PQC_GPG_HELP"
+    local home=$stage/home
+    new-gpg-home "$home"
+    GNUPGHOME=$home gpg --batch --quiet --import "$stage/unpack/key.asc" 2>/dev/null
+    GNUPGHOME=$home gpg --list-secret-keys "$key" >/dev/null 2>&1 || die "$file has no secret key $key."
+    # An export made before 1.1.0 has a cv25519 key, which some gpg builds cannot use once imported.
+    can-use-imported-key "$home" "$key" \
+        || die "This gpg ($(gpg-version)) cannot use the key in $file: some gpg builds cannot decrypt" \
+               "with a cv25519 key they have just imported, as an export made before EnvFolio 1.1.0" \
+               "has — Ubuntu's 2.4.8 (with libgcrypt 1.12.0), often, and 2.5.23 and 2.5.24 as released" \
+               "(https://dev.gnupg.org/T8469). Export it again with this EnvFolio, or use another gpg" \
+               "— Homebrew's, or a later 2.5. Nothing changed."$'\n'"$PQC_GPG_HELP"
+    EXPORT_HOME=$home EXPORT_KEY=$key
 }
 
 # can-use-imported-key <gnupg-home> <key>: whether gpg decrypts with <key>, a secret key just imported
-# into <gnupg-home> — by encrypting a word to it and decrypting that. Some builds cannot: 2.5.23 and
-# 2.5.24 as released, for a key without a passphrase (https://dev.gnupg.org/T8469), and Ubuntu's
-# 2.4.8 (with libgcrypt 1.12.0) for a home of some path lengths. Homebrew's can.
+# into <gnupg-home> — by encrypting a word to it and decrypting that. Some builds cannot with a
+# cv25519 key: Ubuntu's 2.4.8 (with libgcrypt 1.12.0), and 2.5.23 and 2.5.24 as released
+# (https://dev.gnupg.org/T8469). Homebrew's can.
 function can-use-imported-key() {
     printf 'folio\n' | GNUPGHOME=$1 gpg --batch --quiet --trust-model always --encrypt --recipient "$2" 2>/dev/null \
         | GNUPGHOME=$1 gpg --batch --quiet --decrypt 2>/dev/null | grep -qx folio
