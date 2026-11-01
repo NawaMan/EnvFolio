@@ -96,7 +96,7 @@ green light** — it is a separate pre-edit check.
 - The development is done within CodingBooth (a wrapper around a container). The booth will have
     all the toolchain needed.
 - Use `./booth exec --run -- <cmd>` for everything (Justfile will use the same technique).
-- The booth's gpg comes from the project template `gnupg` (`.booth/templates/project/gnupg/`):
+- The booth's gpg comes from the project template `gnupg` (`.booth/templates/gnupg.toml`):
   `gnupg:2.5.24` builds that gpg (post-quantum keys, with the upstream T8469 fixes Homebrew has)
   into `/opt/gnupg-2.5.24`, linked into `/usr/local/bin`; `gnupg:none` keeps Ubuntu's 2.4 in
   `/usr/bin`. With 2.5.24, `just test-bash32` gets it and runs `tests/gpg/gpg-pqc-real.bats`, while
@@ -262,7 +262,7 @@ Starting style, not law — deviate explicitly (say so and why) rather than sile
   case changes (`${var,,}`, `${var^^}`), namerefs (`local -n`), `${var@Q}`, `;&`/`;;&`, `|&`,
   `coproc`, `wait -n` or negative array indexes. Also avoid `"${arr[@]}"` on an empty array
   under `set -u`, which 3.2 treats as unset. `just test-all` runs every test under bash 3.2
-  (`just test-bash32`, `/opt/bash-3.2/bin/bash` in the booth, off `PATH`) and bash 5 (`just test-bash5`); each
+  (`just test-bash32`, which runs them under `use-bash 3.2` from CodingBooth's `bash` template) and bash 5 (`just test-bash5`); each
   fails at once if the wanted bash is not the one found.
 - **Runtime dependencies: `bash`, `pass`, `gpg`, `git`, `tree`, `tar`, `gzip` — and that's the
   list.** `gpg` is a direct dependency because first-run setup has to find or create a key before

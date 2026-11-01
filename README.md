@@ -1,4 +1,4 @@
-<p align="center"><img src="logo.svg" alt="EnvFolio" width="160"></p>
+<p align="center"><img src="logo-on-dark.svg" alt="EnvFolio" width="160"></p>
 
 # EnvFolio
 
