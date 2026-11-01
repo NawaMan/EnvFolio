@@ -14,10 +14,12 @@ User-visible changes to EnvFolio. Newest first.
 ### Fixed
 
 - `folio import` and `exec`/`shell --from` work with Ubuntu's gpg 2.4.8 (with libgcrypt 1.12.0),
-  which refused every export ("cannot use the key in …"): it often cannot use a key it has just
-  imported — a gpg bug that depends on the GnuPG folder's path — so EnvFolio tries a folder a
-  character longer. The message, when it still cannot, no longer suggests 2.4. `folio restore`
-  can still fail on that gpg ("Bad passphrase" when the store is used): use Homebrew's gpg.
+  which refused every export ("cannot use the key in …"): it often cannot use a cv25519 key it has
+  just imported, a gpg bug. An export's own key is now ed25519 with an RSA encryption subkey,
+  which that gpg — and 2.5.23 and 2.5.24 as released ([T8469](https://dev.gnupg.org/T8469)) — can
+  use; an export made before still has a cv25519 key, and the message says to export it again or
+  use Homebrew's gpg. `folio restore` of a cv25519 store key can still fail on that gpg ("Bad
+  passphrase" when the store is used): use Homebrew's gpg.
 
 ## 1.0.1 — 2026-10-30
 
