@@ -154,25 +154,22 @@ old-gpg-meets-pqc() {
     FOLIO_STORE_DIR=$there STORE_PATH=$there PASSWORD_STORE_DIR=$there \
         run Import --all --key test@example.com --file-passphrase-fd 3 "$SANDBOX/out/items.folio" < /dev/null 3< <(printf 'x\n')
     [ "$status" -eq 1 ]
-    [[ $output == *"This gpg (2.5.24) cannot use the key in $SANDBOX/out/items.folio"*"https://dev.gnupg.org/T8469"*"Nothing changed."* ]] || false
+    [[ $output == *"This gpg (2.5.24) cannot use the key in $SANDBOX/out/items.folio"*"made before EnvFolio 1.1.0"*"https://dev.gnupg.org/T8469"*"Export it again with this EnvFolio"*"Nothing changed."* ]] || false
     [ ! -e "$there" ]
     run Exec --secrets --from "$SANDBOX/out/items.folio" --file-passphrase-fd 3 web/github -- true 3< <(printf 'x\n')
     [ "$status" -eq 1 ]
     [[ $output == *"cannot use the key in"*"T8469"* ]] || false
 }
 
-@test "import and --from: a GnuPG home where gpg cannot use the export's key is left for one a character longer (Ubuntu's 2.4.8 bug)" {
+@test "export: the export's own key encrypts with RSA, not cv25519 (some gpg builds cannot use one just imported)" {
     make-store
     run Export --secrets --file-passphrase-fd 3 -o "$SANDBOX/out/items" web/github < /dev/null 3< <(printf 'x\n')
     [ "$status" -eq 0 ]
-    # Fake: this gpg cannot use the key in the first home; the real check for the next.
-    eval "real-$(declare -f can-use-imported-key)"
-    # shellcheck disable=SC2317  # called by the command under test
-    can-use-imported-key() { echo "$1" >> "$SANDBOX/homes" ; [[ $1 != */home ]] && real-can-use-imported-key "$@" ; }
-    run Exec --secrets --from "$SANDBOX/out/items.folio" --file-passphrase-fd 3 web/github -- true 3< <(printf 'x\n')
-    [ "$status" -eq 0 ]
-    [ "$(wc -l < "$SANDBOX/homes")" -eq 2 ]
-    [[ $(sed -n 2p "$SANDBOX/homes") == */home1 ]] || false
+    mkdir "$SANDBOX/x"
+    gpg --batch --pinentry-mode loopback --passphrase x --decrypt "$SANDBOX/out/items.folio" 2>/dev/null | tar -xzf - -C "$SANDBOX/x"
+    run gpg --list-packets "$SANDBOX/x/key.asc"
+    [[ $output == *":secret key packet:"*"algo 22,"*":secret sub key packet:"*"algo 1,"* ]] || false
+    [[ $output != *"algo 18,"* ]] || false
 }
 
 @test "can-use-imported-key: yes for a key this gpg imported and can use" {
