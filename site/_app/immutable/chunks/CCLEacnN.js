@@ -1,1 +1,0 @@
-import{h as u,d}from"./DAnVPQ9k.js";function o(e,t,n,s,r){var a;u&&d();var i=(a=t.$$slots)==null?void 0:a[n],f=!1;i===!0&&(i=t.children,f=!0),i===void 0?r!==null&&r(e):i(e,f?()=>s:s)}function c(e){const t={};e.children&&(t.default=!0);for(const n in e.$$slots)t[n]=!0;return t}export{c as a,o as s};
