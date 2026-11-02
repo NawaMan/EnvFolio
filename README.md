@@ -21,9 +21,14 @@ folio exec --secrets gh/token -- gh release list     # gh gets GH_TOKEN
   can put their sensitive items for themselves to use inside the booth, in a way that
   `CodingBooths.online` (the provider) never needs to touch the actual secrets.
 
-Website: [nawaman.github.io/EnvFolio](https://nawaman.github.io/EnvFolio/) ·
+[![Latest release](https://img.shields.io/github/v/release/NawaMan/EnvFolio?label=latest%20release)](https://github.com/NawaMan/EnvFolio/releases/latest)
+
+Videos and articles:
+[nawaman.github.io/EnvFolio](https://nawaman.github.io/EnvFolio/) ·
+Install: [below](#install) ·
 Every command, with examples: [MANUAL.md](MANUAL.md) ·
-What changed: [CHANGELOG.md](CHANGELOG.md)
+What changed: [CHANGELOG.md](CHANGELOG.md) ·
+Download: [the latest release](https://github.com/NawaMan/EnvFolio/releases/latest)
 
 ## Install
 
