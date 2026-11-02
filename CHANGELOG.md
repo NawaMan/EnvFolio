@@ -4,6 +4,12 @@ User-visible changes to EnvFolio. Newest first.
 
 ## Unreleased
 
+### Changed
+
+- The README shows the latest release, and links to the website's videos and articles; the
+  website links back to the README, and every episode's last slide shows the install script. The
+  website shows EP001 only for now: EP002 and EP003 are drafts, off the site.
+
 ## 1.1.0 — 2026-11-01
 
 ### Added
