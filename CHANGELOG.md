@@ -4,7 +4,16 @@ User-visible changes to EnvFolio. Newest first.
 
 ## Unreleased
 
+### Added
+
+- `folio export` asks whether to set a passphrase on the export's own key too (no by default;
+  not asked with `--file-passphrase-stdin`). On yes, gpg asks you to choose it; `folio import`
+  and `exec`/`shell --from` then ask for it, or take it with the new `--key-passphrase-fd <n>`.
+
 ### Changed
+
+- The temporary keyring an export's key is used in now asks with your own pinentry (the
+  `pinentry-program` in your `gpg-agent.conf`, a window one too).
 
 - The README shows the latest release, and links to the website's videos and articles; the
   website links back to the README, and every episode's last slide shows the install script. The
