@@ -5,6 +5,8 @@
 
 bats_require_minimum_version 1.5.0    # run --separate-stderr
 
+load fake-pinentry
+
 setup() {
     SANDBOX=$(mktemp -d)
     export HOME="$SANDBOX/home"
@@ -369,4 +371,81 @@ V
     [ "$status" -ne 0 ]
     run parse-picks 3 '*'
     [ "$status" -ne 0 ]
+}
+
+# --- An export whose own key has a passphrase --------------------------------------
+
+# An export of web with its secrets, the file locked with passphrase "fp", its own key with "kp":
+# the fake pinentry gives "kp" when the key is made. stdin answers yes, then Enter to go on.
+make-key-passphrase-export() {
+    make-store
+    use-pinentry kp
+    "$FOLIO" export -s -o "$SANDBOX/out" --file-passphrase-fd 5 web \
+        < <(printf 'y\n\n') 5< <(printf 'fp\n') >/dev/null 2>&1
+    export-file >/dev/null
+    left-clean
+}
+
+@test "import: the export's key has a passphrase — --key-passphrase-fd unlocks it" {
+    make-key-passphrase-export
+    local file ; file=$(export-file)
+    go-there
+    run "$FOLIO" import --all --key server@example.com --file-passphrase-stdin --key-passphrase-fd 5 "$file" \
+        < <(printf 'fp\n') 5< <(printf 'kp\n')
+    [ "$status" -eq 0 ]
+    [[ $output != *"gpg asks for the passphrase of the export's own key"* ]] || false
+    [ "$("$FOLIO" show secret web/github)" = "s3cr3t" ]
+    [ "$("$FOLIO" show text web/user)" = "jane" ]
+    left-clean
+}
+
+@test "import: the export's key has a passphrase — with no --key-passphrase-fd, gpg asks" {
+    make-key-passphrase-export
+    local file ; file=$(export-file)
+    go-there
+    use-pinentry kp
+    run "$FOLIO" import --all --key server@example.com --file-passphrase-stdin "$file" < <(printf 'fp\n')
+    [ "$status" -eq 0 ]
+    [[ $output == *"gpg asks for the passphrase of the export's own key"* ]] || false
+    [ "$("$FOLIO" show secret web/github)" = "s3cr3t" ]
+}
+
+@test "import: the export key's passphrase wrong, or gpg's prompt cancelled — nothing imported" {
+    make-key-passphrase-export
+    local file ; file=$(export-file)
+    go-there
+    run "$FOLIO" import --all --key server@example.com --file-passphrase-stdin --key-passphrase-fd 5 "$file" \
+        < <(printf 'fp\n') 5< <(printf 'wrong\n')
+    [ "$status" -ne 0 ]
+    [[ $output == *"Cannot unlock the key in"*"--key-passphrase-fd"* && $output != *"cv25519"* ]] || false
+    use-pinentry --cancel
+    run "$FOLIO" import --all --key server@example.com --file-passphrase-stdin "$file" < <(printf 'fp\n')
+    [ "$status" -ne 0 ]
+    [[ $output == *"Cannot unlock the key in"* ]] || false
+    [ ! -e "$FOLIO_STORE_DIR" ]
+    [ -z "$(ls -A "$TMPDIR")" ]
+}
+
+@test "import: --key-passphrase-fd on a closed fd — refused before anything" {
+    run "$FOLIO" import --all --key-passphrase-fd 7 "$SANDBOX/none.folio" < /dev/null
+    [ "$status" -ne 0 ]
+    [[ $output == *"--key-passphrase-fd 7: no such file descriptor is open."* ]] || false
+}
+
+@test "exec --from: the export's key has a passphrase — --key-passphrase-fd unlocks it" {
+    make-key-passphrase-export
+    local file ; file=$(export-file)
+    go-there
+    run --separate-stderr "$FOLIO" exec -s --from "$file" --file-passphrase-fd 5 --key-passphrase-fd 6 \
+        web/github web/user -- sh -c 'echo "$WEB_GITHUB $WEB_USER"' 5< <(printf 'fp\n') 6< <(printf 'kp\n')
+    [ "$status" -eq 0 ]
+    [ "$output" = "s3cr3t jane" ]
+    [ ! -e "$FOLIO_STORE_DIR" ]
+}
+
+@test "exec: --key-passphrase-fd without --from — refused" {
+    make-store
+    run "$FOLIO" exec --key-passphrase-fd 5 web/user -- true 5< <(printf 'kp\n')
+    [ "$status" -ne 0 ]
+    [[ $output == *"--key-passphrase-fd is for opening a --from file."* ]] || false
 }

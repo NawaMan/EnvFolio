@@ -947,9 +947,9 @@ Restore() {
 # --- export -------------------------------------------------------------------
 
 # An export is one file, always locked: folio-export.txt (what it holds), key.asc (a new key made
-# for this export only, with no passphrase — the lock on the file protects it) and store/, a pass
-# store of the chosen items encrypted and signed with that key. Secrets go from one key to the
-# other through a pipe, never through a file.
+# for this export only — the lock on the file protects it; by default it has no passphrase, but
+# one can be set on it too) and store/, a pass store of the chosen items encrypted and signed with
+# that key. Secrets go from one key to the other through a pipe, never through a file.
 EXPORT_SUFFIX=.folio
 
 function store-export-usage() {
@@ -968,7 +968,9 @@ Copy some items into one file, to bring them into another store with `folio impo
 a server, in a booth, or on another machine. Your store's key stays here: the items are encrypted
 and signed with a new key made for this export only, and the file is locked — with a passphrase,
 or with --to, to the public key of where it is going. With neither given, EnvFolio asks which.
-gpg may ask for your store key's passphrase to read the secrets.
+EnvFolio also asks whether to set a passphrase on the export's own key too (no by default; never
+asked with --file-passphrase-stdin): then gpg asks you to choose it, and opening the file needs it
+as well as what unlocks the file. gpg may ask for your store key's passphrase to read the secrets.
 
 A <name> is a text or secret, or a folder: every text under it, and its secrets with --secrets.
 With --use @app2, every item under @app2 is taken as if @app2/ were not in its path, and the file
@@ -1062,6 +1064,7 @@ It needs:
   - The items to export.
   - Where to write the file.
   - How to lock it.
+  - Whether the export's own key gets a passphrase too (no by default).
 gpg may ask for your store key's passphrase to read the secrets.
 EOF
 
@@ -1140,6 +1143,21 @@ EOF
         fi
     fi
 
+    # Input: a passphrase on the export's own key too — asked, no by default (the lock on the file
+    # protects the key); not with --file-passphrase-stdin, whose stdin cannot answer. gpg asks for
+    # it when it makes the key.
+    local key_passphrase=0
+    if (( ! passphrase_stdin )); then
+        echo >&2
+        confirm "Set a passphrase on the export's own key too? Opening the file would need it as well." \
+            && key_passphrase=1
+    fi
+    if (( key_passphrase )); then
+        show-answer "Key passphrase" "yes: gpg asks for it when it makes the key"
+    else
+        show-answer "Key passphrase" "none (the lock on the file protects the key)"
+    fi
+
     umask 077
     local stage home pack status key recipient="" passphrase=""
     stage=$(mktemp -d) || die "Cannot make a temporary folder."
@@ -1180,12 +1198,21 @@ EOF
     # Its encryption subkey is RSA, not gpg's default cv25519: some gpg builds cannot decrypt with a
     # cv25519 key they have just imported — Ubuntu's 2.4.8 (with libgcrypt 1.12.0) often, and 2.5.23
     # and 2.5.24 as released (https://dev.gnupg.org/T8469, a bug of ECDH keys) — as import does.
+    # With a passphrase, gpg's pinentry asks for it (twice) when it makes the key, then once to
+    # unlock it to add the subkey; its agent keeps it from then on (new-gpg-home).
     section "Make the export's own key"
-    status=$(GNUPGHOME=$home gpg --batch --passphrase '' --status-fd 3 \
+    local no_passphrase=(--passphrase '')
+    if (( key_passphrase )); then
+        no_passphrase=()
+        acknowledge "Next, gpg will ask you to choose a passphrase for the export's own key (twice)," \
+                    "then once more to unlock it." \
+                    "Whoever opens the file needs it too: tell them another way than the file itself."
+    fi
+    status=$(GNUPGHOME=$home gpg --batch ${no_passphrase[@]+"${no_passphrase[@]}"} --status-fd 3 \
                  --quick-generate-key "EnvFolio export $(date +%Y%m%d-%H%M%S)" ed25519 sign never 3>&1 1>/dev/null 2>/dev/null)
     key=$(printf '%s\n' "$status" | awk '$2 == "KEY_CREATED" { print $4 }')
     [[ -n $key ]] || die "Making the export's key failed."
-    GNUPGHOME=$home gpg --batch --passphrase '' --quick-add-key "$key" rsa3072 encr never >/dev/null 2>&1 \
+    GNUPGHOME=$home gpg --batch ${no_passphrase[@]+"${no_passphrase[@]}"} --quick-add-key "$key" rsa3072 encr never >/dev/null 2>&1 \
         || die "Making the export's key failed."
     echo "$key" > "$pack/store/.gpg-id"
     show-answer "Key" "$key"
@@ -1243,6 +1270,7 @@ EOF
         [[ $(GNUPGHOME=$home key-kind "$recipient") != post-quantum* ]] \
             || opens+=", and gpg 2.5.21 or later (the key is post-quantum)"
     fi
+    (( ! key_passphrase )) || opens+=", and the passphrase of the export's own key"
     local box=("Your items are exported."
                ""
                "File:   $(tilde-path "$file")"
@@ -1273,8 +1301,8 @@ EOF
 function store-import-usage() {
     cat <<'EOF'
 Usage: folio import [-a|--all] [--overwrite|--skip-existing] [--key <id>]
-                    [--file-passphrase-stdin|--file-passphrase-fd <n>] [--store-passphrase-fd <n>]
-                    [--allow-unsafe-folder] [<file> [<name>...]]
+                    [--file-passphrase-stdin|--file-passphrase-fd <n>] [--key-passphrase-fd <n>]
+                    [--store-passphrase-fd <n>] [--allow-unsafe-folder] [<file> [<name>...]]
 EOF
 }
 
@@ -1286,7 +1314,8 @@ Bring items from a file made by `folio export` into the EnvFolio store
 ($FOLIO_STORE_DIR, default ~/.folio): the secrets are encrypted to the store's key, the texts
 checked and signed with it (gpg may ask for its passphrase). With no store yet, one is made first,
 as `folio init` does: its key is asked for here, before anything is made. The export's key
-is used here only, never added to your keyring.
+is used here only, never added to your keyring. If a passphrase was set on it when it was
+exported, gpg asks for that too (or give it with --key-passphrase-fd).
 
 With no <file>, EnvFolio asks for it. A <name> is an item in the export, or a folder: every item
 under it. With neither <name> nor --all, EnvFolio lists the export's items and asks which ones. An
@@ -1305,6 +1334,10 @@ Options:
                       The same, from the first line of file descriptor <n>, e.g.
                       --file-passphrase-fd 3 3< pass.txt. stdin stays free, so anything not given
                       is still asked for.
+  --key-passphrase-fd <n>
+                      The passphrase of the export's own key, if one was set on it when it was
+                      exported, from the first line of file descriptor <n>, instead of gpg's
+                      prompt.
   --store-passphrase-fd <n>
                       The store key's passphrase (to sign the texts), from the first line of file
                       descriptor <n>, instead of gpg's prompt. With no store yet and a new key
@@ -1317,24 +1350,29 @@ EOF
 }
 
 # folio import [-a|--all] [--overwrite|--skip-existing] [--key <id>]
-#              [--file-passphrase-stdin|--file-passphrase-fd <n>] [--store-passphrase-fd <n>]
-#              [--allow-unsafe-folder] [<file> [<name>...]]
+#              [--file-passphrase-stdin|--file-passphrase-fd <n>] [--key-passphrase-fd <n>]
+#              [--store-passphrase-fd <n>] [--allow-unsafe-folder] [<file> [<name>...]]
 # Anything not given is asked for: the file, a new store's key, the items, what to do with clashes.
 Import() {
     # Process the command-line options
-    local all=0 clash="" key_id="" passphrase_stdin=0 passphrase_fd="" allow_unsafe=0 file="" names=() arg
+    local all=0 clash="" key_id="" passphrase_stdin=0 passphrase_fd="" key_passphrase_fd="" allow_unsafe=0 file="" names=() arg
     while (( $# > 0 )); do
         arg=$1 ; shift
         case $arg in
             -a|--all)           all=1 ;;
             --overwrite)        clash=overwrite ;;
             --skip-existing)    clash=skip ;;
-            --key|--file-passphrase-fd)
+            --key|--file-passphrase-fd|--key-passphrase-fd)
                                 [[ $# -gt 0 && -n $1 ]] || die "$arg needs a value."
-                                if [[ $arg == --key ]]; then key_id=$1 ; else passphrase_fd=$1 ; fi
+                                case $arg in
+                                    --key)                key_id=$1 ;;
+                                    --file-passphrase-fd) passphrase_fd=$1 ;;
+                                    *)                    key_passphrase_fd=$1 ;;
+                                esac
                                 shift ;;
             --key=*)            key_id=${arg#*=} ;;
             --file-passphrase-fd=*)  passphrase_fd=${arg#*=} ;;
+            --key-passphrase-fd=*)   key_passphrase_fd=${arg#*=} ;;
             --file-passphrase-stdin) passphrase_stdin=1 ;;
             --allow-unsafe-folder) allow_unsafe=1 ;;
             -h|--help)          import-help ; return 0 ;;
@@ -1353,6 +1391,7 @@ Import() {
             || die "--file-passphrase-stdin needs --all or the items named: stdin cannot also answer which ones."
     fi
     [[ -z $passphrase_fd ]] || check-passphrase-fd --file-passphrase-fd "$passphrase_fd"
+    [[ -z $key_passphrase_fd ]] || check-passphrase-fd --key-passphrase-fd "$key_passphrase_fd"
     [[ -z $file ]] || check-export-file "$file"
     # The store's folder: one there is, or none yet (missing, or an empty folder) to make one in.
     local status=0 new_store=0
@@ -1399,11 +1438,19 @@ EOF
         unset PASSPHRASE
     fi
 
+    # And the export's own key, if a passphrase was set on it: --key-passphrase-fd, or gpg asks.
+    local key_passphrase=""
+    if [[ -n $key_passphrase_fd ]]; then
+        read-passphrase-fd "$key_passphrase_fd"
+        key_passphrase=$PASSPHRASE
+        unset PASSPHRASE
+    fi
+
     if [[ -z $passphrase ]] && is-passphrase-locked "$file"; then
         acknowledge "Next, gpg asks for the export file's passphrase: the one chosen when it was exported."
     fi
-    open-export "$file" "$passphrase"
-    unset passphrase
+    open-export "$file" "$passphrase" "" "$key_passphrase"
+    unset passphrase key_passphrase
     local home=$EXPORT_HOME root=$EXPORT_ROOT
     show-answer "Opened" "the export's key is $EXPORT_KEY"
 
@@ -1516,13 +1563,14 @@ EOF
              "Skipped: $skipped (already in the store)"
 }
 
-# open-export <file> <passphrase> [quiet]: unpack an export into a private temporary folder, its key into
-# a GnuPG home of its own (never your keyring); both are removed when EnvFolio exits. Sets
-# EXPORT_HOME, EXPORT_ROOT (its items, laid out like a store) and EXPORT_KEY. An empty
-# <passphrase> leaves opening to gpg: it asks for the file's passphrase, or uses your key the file
-# is locked to. With quiet, gpg says only what goes wrong.
+# open-export <file> <passphrase> [quiet] [<key-passphrase>]: unpack an export into a private
+# temporary folder, its key into a GnuPG home of its own (never your keyring); both are removed
+# when EnvFolio exits. Sets EXPORT_HOME, EXPORT_ROOT (its items, laid out like a store) and
+# EXPORT_KEY. An empty <passphrase> leaves opening to gpg: it asks for the file's passphrase, or
+# uses your key the file is locked to. With quiet, gpg says only what goes wrong. A key with a
+# passphrase of its own is unlocked here, once, with <key-passphrase>, or gpg asks for it.
 function open-export() {
-    local file=$1 passphrase=$2 quiet=${3:-} stage
+    local file=$1 passphrase=$2 quiet=${3:-} key_passphrase=${4:-} stage
     umask 077
     stage=$(mktemp -d) || die "Cannot make a temporary folder."
     remove-on-exit "$stage"
@@ -1559,6 +1607,14 @@ function open-export() {
     new-gpg-home "$home"
     GNUPGHOME=$home gpg --batch --quiet --import "$stage/unpack/key.asc" 2>/dev/null
     GNUPGHOME=$home gpg --list-secret-keys "$key" >/dev/null 2>&1 || die "$file has no secret key $key."
+    if is-protected-key "$stage/unpack/key.asc"; then
+        [[ -n $key_passphrase ]] \
+            || info "gpg asks for the passphrase of the export's own key: the one set on it when it was exported." >&2
+        unlock-export-key "$home" "$key" "$key_passphrase" \
+            || die "Cannot unlock the key in $file: its passphrase (set when it was exported) is not right," \
+                   "or was not given. Give it with --key-passphrase-fd <n> where there is no terminal to ask on."
+    fi
+    unset key_passphrase
     # An export made before 1.1.0 has a cv25519 key, which some gpg builds cannot use once imported.
     can-use-imported-key "$home" "$key" \
         || die "This gpg ($(gpg-version)) cannot use the key in $file: some gpg builds cannot decrypt" \
@@ -1576,6 +1632,17 @@ function open-export() {
 function can-use-imported-key() {
     printf 'folio\n' | GNUPGHOME=$1 gpg --batch --quiet --trust-model always --encrypt --recipient "$2" 2>/dev/null \
         | GNUPGHOME=$1 gpg --batch --quiet --decrypt 2>/dev/null | grep -qx folio
+}
+
+# unlock-export-key <gnupg-home> <key> <passphrase>: have the gpg-agent of <gnupg-home> unlock
+# <key>, an export's key with a passphrase of its own, by decrypting a word encrypted to it — with
+# <passphrase> (on fd 3, never in argv), or gpg's pinentry asks when it is empty. The agent keeps
+# it from then on (new-gpg-home), so every later decrypt needs nothing more.
+function unlock-export-key() {
+    local open=(gpg --batch --quiet --decrypt)
+    [[ -z $3 ]] || open=(gpg --batch --quiet --pinentry-mode loopback --passphrase-fd 3 --decrypt)
+    printf 'folio\n' | GNUPGHOME=$1 gpg --batch --quiet --trust-model always --encrypt --recipient "$2" 2>/dev/null \
+        | GNUPGHOME=$1 "${open[@]}" 2>/dev/null 3< <(printf '%s\n' "$3") | grep -qx folio
 }
 
 # verify-export-text <how> <name> [<root>]: die unless the text <name> in the opened export — or
@@ -2535,7 +2602,8 @@ function run-exec-help() {
     cat <<'HELP'
 Usage: folio exec [-s|--secrets] [-a|--all] [-n|--names|--debug|--confirm] [--plain]
                   [--use <@namespace>]... [--vars <file>]... [--store-passphrase-fd <n>]
-                  [--from <file> [--file-passphrase-fd <n>]] <entry>... -- <command> [<arg>...]
+                  [--from <file> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]]
+                  <entry>... -- <command> [<arg>...]
 
 Run a command with entries from the store as environment variables. Texts load by default;
 secrets only with --secrets. Values are never printed.
@@ -2585,6 +2653,10 @@ Options:
   --file-passphrase-fd <n>
                       With --from: the file's passphrase, from the first line of file descriptor
                       <n>, e.g. --file-passphrase-fd 3 3< pass.txt.
+  --key-passphrase-fd <n>
+                      With --from: the passphrase of the export's own key, if one was set on it
+                      when it was exported, from the first line of file descriptor <n>, instead
+                      of gpg's prompt.
   --store-passphrase-fd <n>
                       Without --from: the store key's passphrase (to read the secrets), from the
                       first line of file descriptor <n>, instead of gpg's prompt.
@@ -2596,7 +2668,7 @@ function run-shell-help() {
     cat <<'HELP'
 Usage: folio shell [-s|--secrets] [-a|--all] [-n|--names|--debug|--confirm] [--plain]
                    [--use <@namespace>]... [--vars <file>]... [--store-passphrase-fd <n>]
-                   [--from <file> [--file-passphrase-fd <n>]] <entry>...
+                   [--from <file> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]] <entry>...
 
 Start your shell ($SHELL) with entries from the store as environment variables, and say which
 names were loaded (never their values). FOLIO_SHELL=1 is set. Type `exit` to leave.
@@ -2622,6 +2694,8 @@ Options:
   --from <file>       Take the entries from a file made by `folio export`, as in `folio exec`.
   --file-passphrase-fd <n>
                       With --from: the file's passphrase, from the first line of file descriptor <n>.
+  --key-passphrase-fd <n>
+                      With --from: the passphrase of the export's own key, as in `folio exec`.
   --store-passphrase-fd <n>
                       Without --from: the store key's passphrase, as in `folio exec`.
   -h, --help          Show this help and stop.
@@ -2635,14 +2709,15 @@ VAR_NAME_PATTERN='^[A-Za-z_][A-Za-z0-9_]*$'
 # Where the entries come from, in messages: the store, or with --from, the export.
 ENTRIES_IN="the store"
 
-# exec-with-entries <exec|shell> [-s|--secrets] [--use <@namespace>]... [--vars <file>]... [--from <file> [--file-passphrase-fd <n>]]
+# exec-with-entries <exec|shell> [-s|--secrets] [--use <@namespace>]... [--vars <file>]...
+#                   [--from <file> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]]
 #                   <entry>... [-- <command> [<arg>...]]
 # Read every entry first, then export them all at once and exec: no `pass` or `gpg` call made
 # while reading ever sees a value already loaded. With --from, the entries come from an export
 # file instead of the store, which is then not needed at all.
 function exec-with-entries() {
     # The entries, --all ("") and --use (--use=<@namespace>) in the order typed: the last one wins.
-    local how=$1 secrets=0 only_names=0 debug=0 confirm=0 dashes=0 from_file="" passphrase_fd="" entries=() arg ; shift
+    local how=$1 secrets=0 only_names=0 debug=0 confirm=0 dashes=0 from_file="" passphrase_fd="" key_passphrase_fd="" entries=() arg ; shift
     while (( $# > 0 )); do
         arg=$1 ; shift
         case $arg in
@@ -2653,12 +2728,13 @@ function exec-with-entries() {
             --debug)      debug=1 ;;
             --confirm)    debug=1 confirm=1 ;;
             --plain)      PLAIN=1 ;;
-            --from|--file-passphrase-fd|--vars|--use)
+            --from|--file-passphrase-fd|--key-passphrase-fd|--vars|--use)
                           [[ $# -gt 0 && -n $1 ]] || die "$arg needs a value."
                           case $arg in
                               --from) from_file=$1 ;;
                               --vars) read-vars-file "$how" "$1" ;;
                               --use)  entries+=("--use=${1%/}") ;;
+                              --key-passphrase-fd) key_passphrase_fd=$1 ;;
                               *)      passphrase_fd=$1 ;;
                           esac
                           shift ;;
@@ -2666,12 +2742,13 @@ function exec-with-entries() {
             --use=*)           arg=${arg#--use=} ; entries+=("--use=${arg%/}") ;;
             --from=*)          from_file=${arg#*=} ;;
             --file-passphrase-fd=*) passphrase_fd=${arg#*=} ;;
+            --key-passphrase-fd=*)  key_passphrase_fd=${arg#*=} ;;
             --)           dashes=1 ; break ;;
             -*)           die "$how: unknown option: $arg" ;;
             *)            entries+=("$arg") ;;
         esac
     done
-    local from_usage="[--use <@namespace>]... [--vars <file>]... [--store-passphrase-fd <n>] [--from <file> [--file-passphrase-fd <n>]]"
+    local from_usage="[--use <@namespace>]... [--vars <file>]... [--store-passphrase-fd <n>] [--from <file> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]]"
     (( ! (only_names && debug) )) \
         || die "$how: --names only shows the names; --debug and --confirm show them and go on."
     # --debug and --confirm show the names on stderr: marked for that screen, not stdout's.
@@ -2690,10 +2767,11 @@ function exec-with-entries() {
         [[ -z $STORE_PASSPHRASE_FD ]] || die "$how: --store-passphrase-fd is for the store; --from does not use it."
         # Nor FOLIO_STORE_PASSPHRASE_FILE: the store is not opened.
         STORE_PASSPHRASE_FILE=""
-        open-export-for "$how" "$from_file" "$passphrase_fd"
+        open-export-for "$how" "$from_file" "$passphrase_fd" "$key_passphrase_fd"
         FROM_EXPORT=1
     else
         [[ -z $passphrase_fd ]] || die "$how: --file-passphrase-fd is for opening a --from file."
+        [[ -z $key_passphrase_fd ]] || die "$how: --key-passphrase-fd is for opening a --from file."
         # The key is unlocked below, once a value is to be read: not for --names, nor before
         # --confirm's yes.
         check-store
@@ -2773,13 +2851,20 @@ function exec-with-entries() {
     export-and-exec "$@"
 }
 
-# open-export-for <exec|shell> <file> <passphrase-fd>: open the export <file> for exec or shell,
-# and read the entries from it from here on (STORE_PATH is its unpacked items). The passphrase is
-# the first line of fd <passphrase-fd>, if given; otherwise gpg asks for it, or uses your key the
-# file is locked to.
+# open-export-for <exec|shell> <file> <passphrase-fd> [<key-passphrase-fd>]: open the export
+# <file> for exec or shell, and read the entries from it from here on (STORE_PATH is its unpacked
+# items). The passphrase is the first line of fd <passphrase-fd>, if given; otherwise gpg asks for
+# it, or uses your key the file is locked to. The same for the export's own key, if a passphrase
+# was set on it, from fd <key-passphrase-fd>.
 function open-export-for() {
-    local how=$1 file=$2 fd=$3 passphrase=""
+    local how=$1 file=$2 fd=$3 key_fd=${4:-} passphrase="" key_passphrase=""
     check-export-file "$file"
+    if [[ -n $key_fd ]]; then
+        check-passphrase-fd --key-passphrase-fd "$key_fd"
+        read-passphrase-fd "$key_fd"
+        key_passphrase=$PASSPHRASE
+        unset PASSPHRASE
+    fi
     if [[ -n $fd ]]; then
         check-passphrase-fd --file-passphrase-fd "$fd"
         read-passphrase-fd "$fd"
@@ -2789,8 +2874,8 @@ function open-export-for() {
  is-passphrase-locked "$file"; then
         info "folio $how: gpg asks for the passphrase of $(tilde-path "$file")." >&2
     fi
-    open-export "$file" "$passphrase" quiet
-    unset passphrase
+    open-export "$file" "$passphrase" quiet "$key_passphrase"
+    unset passphrase key_passphrase
     STORE_PATH=$EXPORT_ROOT ENTRIES_IN="the export"
 }
 
@@ -4380,10 +4465,20 @@ function remove-now() {
     (( ! FRESH_PASSPHRASE )) || forget-passphrases
 }
 # new-gpg-home <folder>: a GnuPG home of its own, for an export's key; gone when EnvFolio exits.
+# Its gpg-agent asks with your pinentry (a window one too: your gpg-agent.conf's pinentry-program),
+# and keeps a passphrase for as long as EnvFolio runs — the export's key, if it has one, is
+# unlocked once (open-export).
 function new-gpg-home() {
     mkdir -m 700 "$1" || die "Cannot make a temporary folder."
     GPG_HOMES+=("$1")
     remove-on-exit "$1"
+    local yours
+    yours=$(gpgconf --list-dirs homedir 2>/dev/null)/gpg-agent.conf
+    {
+        grep -E '^[[:space:]]*pinentry-program[[:space:]]' "$yours" 2>/dev/null | tail -n 1
+        echo "default-cache-ttl 86400"
+        echo "max-cache-ttl 86400"
+    } > "$1/gpg-agent.conf"
 }
 
 # section lines up: ==| Title |=====…
@@ -4710,6 +4805,17 @@ function gpg-version() {
     local version
     version=$(gpg --with-colons --list-config version 2>/dev/null)
     printf '%s\n' "${version#cfg:version:}"
+}
+
+# is-protected-key <file>: whether <file>, an exported secret key (an export's key.asc), has a
+# passphrase on it: its secret key packets list how they are protected (an S2K, `[v4 protected]`);
+# one with no passphrase lists only its numbers. Read from the file: nothing decrypted or asked.
+function is-protected-key() {
+    gpg --batch --list-packets "$1" 2>/dev/null | awk '
+        /^:secret (sub )?key packet:/            { secret = 1 ; next }
+        /^:/                                     { secret = 0 }
+        secret && /protect count:|protected\]/   { found = 1 }
+        END { exit !found }'
 }
 
 # has-pqc-key <file>: whether <file> holds a post-quantum key (an exported key, as a backup's
