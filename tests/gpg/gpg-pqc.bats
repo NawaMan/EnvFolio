@@ -158,3 +158,20 @@ init-new-key() {
     [[ $output != *"ost-quantum"* ]] || false
     [ "$(cat "$SANDBOX/algo")" = default ]
 }
+
+@test "export --key-type: pqc refused on a gpg that cannot make one; anything else refused" {
+    fake-gpg 2.4.4 'RSA;ELG;DSA;ECDH;ECDSA;EDDSA'
+    run Export --key-type pqc -o "$SANDBOX/out" web < /dev/null
+    [ "$status" -eq 1 ]
+    [[ $output == *"--key-type pqc needs gpg 2.5.21 or later (this one is 2.4.4)."*"#updating-gpg-for-post-quantum-keys"* ]] || false
+    run Export --key-type kyber -o "$SANDBOX/out" web < /dev/null
+    [ "$status" -eq 1 ]
+    [[ $output == *"--key-type is pqc or classical, not 'kyber'."* ]] || false
+}
+
+@test "ask-export-key-kind: Enter takes classical; 2 is post-quantum" {
+    [ "$(ask-export-key-kind < <(printf '\n') 2>/dev/null)" = default ]
+    [ "$(ask-export-key-kind < <(printf '2\n') 2>/dev/null)" = pqc ]
+    run ask-export-key-kind < /dev/null
+    [ "$status" -ne 0 ]
+}

@@ -54,15 +54,16 @@ make-server-key() {
 
 # export-answering [<answer>...] -- [<option>...]: run `folio export <option>...` with the
 # answers on stdin, one per line (stdin is empty when there are none). After the lock comes the
-# question of a passphrase on the export's own key: "" is no.
+# question of a passphrase on the export's own key: "" is no. --key-type classical keeps the
+# key-kind question out, which a gpg that can make a post-quantum key would ask.
 export-answering() {
     local answers=()
     while (( $# > 0 )) && [[ $1 != -- ]]; do answers+=("$1") ; shift ; done
     (( $# > 0 )) && shift
     if (( ${#answers[@]} > 0 )); then
-        run "$FOLIO" export "$@" < <(printf '%s\n' "${answers[@]}")
+        run "$FOLIO" export --key-type classical "$@" < <(printf '%s\n' "${answers[@]}")
     else
-        run "$FOLIO" export "$@" < /dev/null
+        run "$FOLIO" export --key-type classical "$@" < /dev/null
     fi
 }
 
@@ -157,7 +158,7 @@ ALL=(aws/key.gpg web/github.gpg web/home.txt web/user.txt)
 }
 
 @test "export flow 5b: --file-passphrase-fd leaves stdin free for picking the items" {
-    run "$FOLIO" export -o "$SANDBOX/out/to-server" --file-passphrase-fd 5 \
+    run "$FOLIO" export --key-type classical -o "$SANDBOX/out/to-server" --file-passphrase-fd 5 \
         < <(printf '%s\n' "1 3") 5< <(printf '%s\n' pw-five-b)
     [[ $output == *"Which items?"* && $output != *"How should the file be locked?"* ]] || false
     assert-export "$SANDBOX/out/to-server.folio" pw-five-b aws/key.gpg web/home.txt
