@@ -955,8 +955,8 @@ EXPORT_SUFFIX=.folio
 function store-export-usage() {
     cat <<'EOF'
 Usage: folio export [-s|--secrets] [--to <key>|--file-passphrase-stdin|--file-passphrase-fd <n>]
-                    [--store-passphrase-fd <n>] [--use <@namespace>]... [--vars <file>]...
-                    [-o|--output <file>|<folder>] [<name>...]
+                    [--key-type <pqc|classical>] [--store-passphrase-fd <n>] [--use <@namespace>]...
+                    [--vars <file>]... [-o|--output <file>|<folder>] [<name>...]
 EOF
 }
 
@@ -968,7 +968,9 @@ Copy some items into one file, to bring them into another store with `folio impo
 a server, in a booth, or on another machine. Your store's key stays here: the items are encrypted
 and signed with a new key made for this export only, and the file is locked — with a passphrase,
 or with --to, to the public key of where it is going. With neither given, EnvFolio asks which.
-EnvFolio also asks whether to set a passphrase on the export's own key too (no by default; never
+When this gpg can make a post-quantum key, EnvFolio asks which kind the export's own key is
+(--key-type): classical by default, as any gpg can open it; a post-quantum one needs gpg 2.5.21 or
+later wherever the file is opened. EnvFolio also asks whether to set a passphrase on the export's own key too (no by default; never
 asked with --file-passphrase-stdin): then gpg asks you to choose it, and opening the file needs it
 as well as what unlocks the file. gpg may ask for your store key's passphrase to read the secrets.
 
@@ -996,6 +998,11 @@ Options:
                       Read the file's passphrase from the first line of file descriptor <n>,
                       e.g. --file-passphrase-fd 3 3< pass.txt. Not with --to. stdin stays free,
                       so the items can still be picked. An empty passphrase is refused.
+  --key-type <pqc|classical>
+                      The export's own key: classical (Ed25519 + RSA-3072; any gpg opens the
+                      file), or pqc (post-quantum, ML-KEM + ECC; opening the file needs gpg
+                      2.5.21 or later, there too). Not given: classical, and asked when this gpg
+                      can make a post-quantum key and something else is asked too.
   --store-passphrase-fd <n>
                       The store key's passphrase (to read the secrets), from the first line of
                       file descriptor <n>, instead of gpg's prompt.
@@ -1013,20 +1020,22 @@ EOF
 }
 
 # folio export [-s|--secrets] [--to <key>|--file-passphrase-stdin|--file-passphrase-fd <n>]
-#              [--store-passphrase-fd <n>] [-o|--output <file>|<folder>] [<name>...]
-# Anything not given is asked for: the items, and how to lock the file.
+#              [--key-type <pqc|classical>] [--store-passphrase-fd <n>] [-o|--output <file>|<folder>]
+#              [<name>...]
+# Anything not given is asked for: the items, the file, how to lock it, and about the export's key.
 Export() {
     # Process the command-line options
     # layers: the <name>s and --use (--use=<@namespace>) in the order typed, for make-view.
-    local secrets=0 to="" passphrase_stdin=0 passphrase_fd="" target="" names=() uses=() layers=() vars_files=() arg
+    local secrets=0 to="" passphrase_stdin=0 passphrase_fd="" key_type="" target="" names=() uses=() layers=() vars_files=() arg
     while (( $# > 0 )); do
         arg=$1 ; shift
         case $arg in
             -s|--secrets)       secrets=1 ;;
-            --to|-o|--output|--file-passphrase-fd|--vars|--use)
+            --to|-o|--output|--file-passphrase-fd|--key-type|--vars|--use)
                                 [[ $# -gt 0 && -n $1 ]] || die "$arg needs a value."
                                 case $arg in
                                     --to)                 to=$1 ;;
+                                    --key-type)           key_type=$1 ;;
                                     --file-passphrase-fd) passphrase_fd=$1 ;;
                                     --vars)               read-vars-file export "$1" ; vars_files+=("$1") ;;
                                     --use)                uses+=("${1%/}") ; layers+=("--use=${1%/}") ;;
@@ -1036,6 +1045,7 @@ Export() {
             --vars=*)           read-vars-file export "${arg#*=}" ; vars_files+=("${arg#*=}") ;;
             --use=*)            arg=${arg#--use=} ; uses+=("${arg%/}") ; layers+=("--use=${arg%/}") ;;
             --to=*)             to=${arg#*=} ;;
+            --key-type=*)       key_type=${arg#*=} ;;
             --output=*)         target=${arg#*=} ;;
             --file-passphrase-fd=*)  passphrase_fd=${arg#*=} ;;
             --file-passphrase-stdin) passphrase_stdin=1 ;;
@@ -1053,6 +1063,11 @@ Export() {
     (( ! passphrase_stdin || ${#names[@]} + ${#uses[@]} + ${#vars_files[@]} > 0 )) \
         || die "--file-passphrase-stdin needs the items named (or --use, --vars): stdin cannot also answer which ones."
     [[ -z $passphrase_fd ]] || check-passphrase-fd --file-passphrase-fd "$passphrase_fd"
+    case $key_type in
+        ""|classical) ;;
+        pqc) gpg-has-pqc || die "--key-type pqc needs gpg 2.5.21 or later (this one is $(gpg-version))."$'\n'"$PQC_GPG_HELP" ;;
+        *)   die "--key-type is pqc or classical, not '$key_type'." ;;
+    esac
     require-store
 
     section "Overview"
@@ -1130,7 +1145,7 @@ EOF
 
     # Input: the lock — --to <key>, or a passphrase (--file-passphrase-stdin / --file-passphrase-fd);
     # with neither, asked: a passphrase (gpg asks for it later), or a public key.
-    local choice to_key="With a public key"
+    local choice="" to_key="With a public key"
     if [[ -z $to && -z $passphrase_fd ]] && (( ! passphrase_stdin )); then
         echo >&2
         choice=$(ask-choice "How should the file be locked?" "With a passphrase" "$to_key") \
@@ -1142,6 +1157,22 @@ EOF
             [[ -n $to ]] || die "A public key is needed to lock the file to it."
         fi
     fi
+
+    # Input: the export key's kind — --key-type; otherwise classical, as any gpg can open the file.
+    # Asked (classical or post-quantum) when this gpg can make a post-quantum key, and the items,
+    # the file or the lock were asked too: a run with no prompts stays one.
+    local key_algo=default asked=0
+    (( ${#names[@]} + ${#uses[@]} + ${#vars_files[@]} > 0 )) || asked=1
+    [[ -n $target ]] || (( passphrase_stdin )) || asked=1
+    [[ -n $choice ]] && asked=1
+    if [[ $key_type == pqc ]]; then
+        key_algo=pqc
+    elif [[ -z $key_type ]] && (( asked )) && gpg-has-pqc; then
+        key_algo=$(ask-export-key-kind) || exit 1
+    fi
+    show-answer "Key type" "$(export-key-kind-label "$key_algo")"
+    [[ $key_algo != pqc ]] \
+        || info "Wherever the file is opened, gpg must be 2.5.21 or later: check there first (gpg --version)." >&2
 
     # Input: a passphrase on the export's own key too — asked, no by default (the lock on the file
     # protects the key); not with --file-passphrase-stdin, whose stdin cannot answer. gpg asks for
@@ -1195,9 +1226,10 @@ EOF
     section "Exporting"
     info "That is everything needed. Exporting now." >&2
 
-    # Its encryption subkey is RSA, not gpg's default cv25519: some gpg builds cannot decrypt with a
-    # cv25519 key they have just imported — Ubuntu's 2.4.8 (with libgcrypt 1.12.0) often, and 2.5.23
-    # and 2.5.24 as released (https://dev.gnupg.org/T8469, a bug of ECDH keys) — as import does.
+    # A classical one's encryption subkey is RSA, not gpg's default cv25519: some gpg builds cannot
+    # decrypt with a cv25519 key they have just imported — Ubuntu's 2.4.8 (with libgcrypt 1.12.0)
+    # often, and 2.5.23 and 2.5.24 as released (https://dev.gnupg.org/T8469, a bug of ECDH keys) — as
+    # import does. A post-quantum one is gpg's pqc: its primary key and subkey in one go.
     # With a passphrase, gpg's pinentry asks for it (twice) when it makes the key, then once to
     # unlock it to add the subkey; its agent keeps it from then on (new-gpg-home).
     section "Make the export's own key"
@@ -1208,12 +1240,16 @@ EOF
                     "then once more to unlock it." \
                     "Whoever opens the file needs it too: tell them another way than the file itself."
     fi
+    local primary=(ed25519 sign never)
+    [[ $key_algo != pqc ]] || primary=(pqc default never)
     status=$(GNUPGHOME=$home gpg --batch ${no_passphrase[@]+"${no_passphrase[@]}"} --status-fd 3 \
-                 --quick-generate-key "EnvFolio export $(date +%Y%m%d-%H%M%S)" ed25519 sign never 3>&1 1>/dev/null 2>/dev/null)
+                 --quick-generate-key "EnvFolio export $(date +%Y%m%d-%H%M%S)" "${primary[@]}" 3>&1 1>/dev/null 2>/dev/null)
     key=$(printf '%s\n' "$status" | awk '$2 == "KEY_CREATED" { print $4 }')
     [[ -n $key ]] || die "Making the export's key failed."
-    GNUPGHOME=$home gpg --batch ${no_passphrase[@]+"${no_passphrase[@]}"} --quick-add-key "$key" rsa3072 encr never >/dev/null 2>&1 \
-        || die "Making the export's key failed."
+    if [[ $key_algo != pqc ]]; then
+        GNUPGHOME=$home gpg --batch ${no_passphrase[@]+"${no_passphrase[@]}"} --quick-add-key "$key" rsa3072 encr never >/dev/null 2>&1 \
+            || die "Making the export's key failed."
+    fi
     echo "$key" > "$pack/store/.gpg-id"
     show-answer "Key" "$key"
 
@@ -1271,6 +1307,9 @@ EOF
             || opens+=", and gpg 2.5.21 or later (the key is post-quantum)"
     fi
     (( ! key_passphrase )) || opens+=", and the passphrase of the export's own key"
+    # Once only, with a --to post-quantum key too.
+    [[ $key_algo != pqc || $opens == *"gpg 2.5.21 or later"* ]] \
+        || opens+=", and gpg 2.5.21 or later (the export's own key is post-quantum)"
     local box=("Your items are exported."
                ""
                "File:   $(tilde-path "$file")"
@@ -1603,6 +1642,14 @@ function open-export() {
     [[ $format == 1 ]]                 || die "$file is an EnvFolio export of a format this EnvFolio cannot read ($format)."
     [[ $key =~ ^[0-9A-F]{40,64}$ ]]    || die "$file names a key that is not a fingerprint: $key"
     [[ -s $stage/unpack/key.asc && -d $EXPORT_ROOT ]] || die "$file has no key or no items in it."
+    # The export's own key post-quantum (export --key-type pqc): an older gpg cannot import it, and
+    # would say only that the key is not there.
+    local pqc_key=0
+    has-pqc-key "$stage/unpack/key.asc" && pqc_key=1
+    if (( pqc_key )) && ! gpg-has-pqc; then
+        die "The key in $file is post-quantum: opening it needs gpg 2.5.21 or later" \
+            "(this one is $(gpg-version))."$'\n'"$PQC_GPG_HELP"
+    fi
     local home=$stage/home
     new-gpg-home "$home"
     GNUPGHOME=$home gpg --batch --quiet --import "$stage/unpack/key.asc" 2>/dev/null
@@ -1616,6 +1663,12 @@ function open-export() {
     fi
     unset key_passphrase
     # An export made before 1.1.0 has a cv25519 key, which some gpg builds cannot use once imported.
+    # A post-quantum one's ML-KEM is paired with an ECDH key, so the same gpg bug may stop it.
+    (( ! pqc_key )) || can-use-imported-key "$home" "$key" \
+        || die "This gpg ($(gpg-version)) cannot use the post-quantum key in $file once imported: 2.5.23" \
+               "and 2.5.24 as released cannot, a gpg bug of ECDH keys (https://dev.gnupg.org/T8469)." \
+               "Use another gpg — Homebrew's, or a later 2.5 — or export it again with --key-type" \
+               "classical. Nothing changed."$'\n'"$PQC_GPG_HELP"
     can-use-imported-key "$home" "$key" \
         || die "This gpg ($(gpg-version)) cannot use the key in $file: some gpg builds cannot decrypt" \
                "with a cv25519 key they have just imported, as an export made before EnvFolio 1.1.0" \
@@ -4756,6 +4809,27 @@ function key-kind-label() {
     else
         printf '%s\n' "gpg's default"
     fi
+}
+
+# The two kinds of an export's own key. Classical is not gpg's default: its subkey is RSA (Export).
+EXPORT_CLASSICAL_LABEL="Classical (default) — Ed25519, RSA-3072: any gpg opens the file"
+EXPORT_PQC_LABEL="Post-quantum — ML-KEM-768 + Brainpool P-256, Brainpool P-384: opening the file needs gpg 2.5.21 or later, there too"
+
+# export-key-kind-label <algo>: how an export's own key of <algo> (pqc or default) is shown once picked.
+function export-key-kind-label() {
+    if [[ $1 == pqc ]]; then printf '%s\n' "${PQC_KEY_LABEL/ (recommended)/}"
+    else                     printf '%s\n' "Classical — Ed25519, RSA-3072"
+    fi
+}
+
+# Ask which kind of key an export's own key is; prints gpg's algorithm for it: pqc or default
+# (classical, the default: Enter). Dies on cancel.
+function ask-export-key-kind() {
+    local choice
+    echo >&2
+    choice=$(ask-choice --default 1 "Which kind of key for the export's own key?" \
+                 "$EXPORT_CLASSICAL_LABEL" "$EXPORT_PQC_LABEL") || die "Cancelled."
+    if [[ $choice == "$EXPORT_PQC_LABEL" ]]; then echo pqc; else echo default; fi
 }
 
 # Ask which kind of key to make; prints gpg's algorithm for it: pqc or default. Dies on cancel.

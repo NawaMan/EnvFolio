@@ -180,3 +180,34 @@ old-gpg-meets-pqc() {
     run Exec --secrets --from "$SANDBOX/out/items.folio" --file-passphrase-fd 3 web/github -- true 3< <(printf 'x\n')
     [ "$status" -eq 0 ]
 }
+
+@test "export: a gpg that cannot make a post-quantum key — the key's kind is not asked" {
+    make-store
+    # shellcheck disable=SC2317  # called by Export
+    gpg-has-pqc() { return 1; }
+    run Export --secrets --file-passphrase-fd 3 web/github < <(printf '%s\n' "$SANDBOX/out/items" "") 3< <(printf 'x\n')
+    [ "$status" -eq 0 ]
+    [[ $output != *"Which kind of key"* && $output == *"Key type: Classical — Ed25519, RSA-3072"* ]] || false
+}
+
+@test "import and --from: an export whose own key is post-quantum, on a gpg that cannot use it — refused" {
+    make-store
+    run Export --secrets --file-passphrase-fd 3 -o "$SANDBOX/out/items" web/github < /dev/null 3< <(printf 'x\n')
+    [ "$status" -eq 0 ]
+    # Fake: only the export's key.asc is post-quantum (the file is locked with a passphrase).
+    # shellcheck disable=SC2317  # called by the command under test
+    has-pqc-key() { [[ $1 == */key.asc ]]; }
+    # shellcheck disable=SC2317  # called by the command under test
+    gpg-has-pqc() { return 1; }
+    # shellcheck disable=SC2317  # called by the command under test
+    gpg-version() { echo 2.4.4; }
+    local there="$SANDBOX/there"
+    FOLIO_STORE_DIR=$there STORE_PATH=$there PASSWORD_STORE_DIR=$there \
+        run Import --all --key test@example.com --file-passphrase-fd 3 "$SANDBOX/out/items.folio" < /dev/null 3< <(printf 'x\n')
+    [ "$status" -eq 1 ]
+    [[ $output == *"The key in $SANDBOX/out/items.folio is post-quantum: opening it needs gpg 2.5.21 or later (this one is 2.4.4)."*"#updating-gpg-for-post-quantum-keys"* ]] || false
+    [ ! -e "$there" ]
+    run Exec --secrets --from "$SANDBOX/out/items.folio" --file-passphrase-fd 3 web/github -- true 3< <(printf 'x\n')
+    [ "$status" -eq 1 ]
+    [[ $output == *"is post-quantum: opening it needs gpg 2.5.21 or later"* ]] || false
+}

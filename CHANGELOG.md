@@ -10,6 +10,11 @@ User-visible changes to EnvFolio. Newest first.
   not asked with `--file-passphrase-stdin`). On yes, gpg asks you to choose it; `folio import`
   and `exec`/`shell --from` then ask for it, or take it with the new `--key-passphrase-fd <n>`.
 
+- `folio export --key-type <pqc|classical>`: the export's own key can be post-quantum. When this
+  gpg can make one, EnvFolio asks (classical by default, as the file may be opened where gpg cannot
+  use one yet), and reminds that opening the file then needs gpg 2.5.21 or later. `folio import`
+  and `exec`/`shell --from` on an older gpg say so, instead of "has no secret key".
+
 ### Changed
 
 - The temporary keyring an export's key is used in now asks with your own pinentry (the
