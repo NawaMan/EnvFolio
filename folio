@@ -955,8 +955,8 @@ EXPORT_SUFFIX=.folio
 function store-export-usage() {
     cat <<'EOF'
 Usage: folio export [-s|--secrets] [--to <key>|--file-passphrase-stdin|--file-passphrase-fd <n>]
-                    [--key-type <pqc|classical>] [--store-passphrase-fd <n>] [--use <@namespace>]...
-                    [--vars <file>]... [-o|--output <file>|<folder>] [<name>...]
+                    [--key-type <pqc|classical>] [--key-passphrase-fd <n>] [--store-passphrase-fd <n>]
+                    [--use <@namespace>]... [--vars <file>]... [-o|--output <file>|<folder>] [<name>...]
 EOF
 }
 
@@ -970,9 +970,12 @@ and signed with a new key made for this export only, and the file is locked — 
 or with --to, to the public key of where it is going. With neither given, EnvFolio asks which.
 When this gpg can make a post-quantum key, EnvFolio asks which kind the export's own key is
 (--key-type): classical by default, as any gpg can open it; a post-quantum one needs gpg 2.5.21 or
-later wherever the file is opened. EnvFolio also asks whether to set a passphrase on the export's own key too (no by default; never
-asked with --file-passphrase-stdin): then gpg asks you to choose it, and opening the file needs it
-as well as what unlocks the file. gpg may ask for your store key's passphrase to read the secrets.
+later wherever the file is opened. EnvFolio also asks whether to set a passphrase on the export's
+own key too (no by default; never asked with --file-passphrase-stdin or --key-passphrase-fd), and
+then how to lock the file. With a passphrase on the key, gpg asks you to choose it, then once more
+to pack the key into the file; opening the file needs it as well as what unlocks the file. Before
+each passphrase gpg asks for, EnvFolio shows the file and its locks, and which one is asked. gpg
+may ask for your store key's passphrase to read the secrets.
 
 A <name> is a text or secret, or a folder: every text under it, and its secrets with --secrets.
 With --use @app2, every item under @app2 is taken as if @app2/ were not in its path, and the file
@@ -999,10 +1002,14 @@ Options:
                       e.g. --file-passphrase-fd 3 3< pass.txt. Not with --to. stdin stays free,
                       so the items can still be picked. An empty passphrase is refused.
   --key-type <pqc|classical>
-                      The export's own key: classical (Ed25519 + RSA-3072; any gpg opens the
+                      The export's own key: classical (RSA-3072; any gpg opens the
                       file), or pqc (post-quantum, ML-KEM + ECC; opening the file needs gpg
                       2.5.21 or later, there too). Not given: classical, and asked when this gpg
                       can make a post-quantum key and something else is asked too.
+  --key-passphrase-fd <n>
+                      Set a passphrase on the export's own key, from the first line of file
+                      descriptor <n>, instead of asking and gpg's prompt. Opening the file then
+                      needs it too (import and exec/shell --from take --key-passphrase-fd).
   --store-passphrase-fd <n>
                       The store key's passphrase (to read the secrets), from the first line of
                       file descriptor <n>, instead of gpg's prompt.
@@ -1020,23 +1027,24 @@ EOF
 }
 
 # folio export [-s|--secrets] [--to <key>|--file-passphrase-stdin|--file-passphrase-fd <n>]
-#              [--key-type <pqc|classical>] [--store-passphrase-fd <n>] [-o|--output <file>|<folder>]
-#              [<name>...]
+#              [--key-type <pqc|classical>] [--key-passphrase-fd <n>] [--store-passphrase-fd <n>]
+#              [-o|--output <file>|<folder>] [<name>...]
 # Anything not given is asked for: the items, the file, how to lock it, and about the export's key.
 Export() {
     # Process the command-line options
     # layers: the <name>s and --use (--use=<@namespace>) in the order typed, for make-view.
-    local secrets=0 to="" passphrase_stdin=0 passphrase_fd="" key_type="" target="" names=() uses=() layers=() vars_files=() arg
+    local secrets=0 to="" passphrase_stdin=0 passphrase_fd="" key_type="" key_passphrase_fd="" target="" names=() uses=() layers=() vars_files=() arg
     while (( $# > 0 )); do
         arg=$1 ; shift
         case $arg in
             -s|--secrets)       secrets=1 ;;
-            --to|-o|--output|--file-passphrase-fd|--key-type|--vars|--use)
+            --to|-o|--output|--file-passphrase-fd|--key-passphrase-fd|--key-type|--vars|--use)
                                 [[ $# -gt 0 && -n $1 ]] || die "$arg needs a value."
                                 case $arg in
                                     --to)                 to=$1 ;;
                                     --key-type)           key_type=$1 ;;
                                     --file-passphrase-fd) passphrase_fd=$1 ;;
+                                    --key-passphrase-fd)  key_passphrase_fd=$1 ;;
                                     --vars)               read-vars-file export "$1" ; vars_files+=("$1") ;;
                                     --use)                uses+=("${1%/}") ; layers+=("--use=${1%/}") ;;
                                     *)                    target=$1 ;;
@@ -1048,6 +1056,7 @@ Export() {
             --key-type=*)       key_type=${arg#*=} ;;
             --output=*)         target=${arg#*=} ;;
             --file-passphrase-fd=*)  passphrase_fd=${arg#*=} ;;
+            --key-passphrase-fd=*)   key_passphrase_fd=${arg#*=} ;;
             --file-passphrase-stdin) passphrase_stdin=1 ;;
             -h|--help)          export-help ; return 0 ;;
             --)                 names+=("$@") ; layers+=("$@") ; break ;;
@@ -1063,6 +1072,9 @@ Export() {
     (( ! passphrase_stdin || ${#names[@]} + ${#uses[@]} + ${#vars_files[@]} > 0 )) \
         || die "--file-passphrase-stdin needs the items named (or --use, --vars): stdin cannot also answer which ones."
     [[ -z $passphrase_fd ]] || check-passphrase-fd --file-passphrase-fd "$passphrase_fd"
+    [[ -z $key_passphrase_fd ]] || check-passphrase-fd --key-passphrase-fd "$key_passphrase_fd"
+    [[ -z $key_passphrase_fd || $key_passphrase_fd != "$passphrase_fd" ]] \
+        || die "--file-passphrase-fd and --key-passphrase-fd need a file descriptor each."
     case $key_type in
         ""|classical) ;;
         pqc) gpg-has-pqc || die "--key-type pqc needs gpg 2.5.21 or later (this one is $(gpg-version))."$'\n'"$PQC_GPG_HELP" ;;
@@ -1143,28 +1155,16 @@ EOF
         || die "$file is inside the store; write the export somewhere else."
     show-answer "File" "$(tilde-path "$file")"
 
-    # Input: the lock — --to <key>, or a passphrase (--file-passphrase-stdin / --file-passphrase-fd);
-    # with neither, asked: a passphrase (gpg asks for it later), or a public key.
-    local choice="" to_key="With a public key"
-    if [[ -z $to && -z $passphrase_fd ]] && (( ! passphrase_stdin )); then
-        echo >&2
-        choice=$(ask-choice "How should the file be locked?" "With a passphrase" "$to_key") \
-            || die "Cancelled."
-        if [[ $choice == "$to_key" ]]; then
-            to=$(pick-public-key) || exit 1
-            [[ -n $to ]] \
-                || to=$(ask-path "Public key" "a .asc file, or a fingerprint, key id or email") || exit 1
-            [[ -n $to ]] || die "A public key is needed to lock the file to it."
-        fi
-    fi
+    # The lock is asked below when none is given: --to, --file-passphrase-stdin or -fd.
+    local ask_lock=0
+    [[ -n $to || -n $passphrase_fd ]] || (( passphrase_stdin )) || ask_lock=1
 
     # Input: the export key's kind — --key-type; otherwise classical, as any gpg can open the file.
     # Asked (classical or post-quantum) when this gpg can make a post-quantum key, and the items,
-    # the file or the lock were asked too: a run with no prompts stays one.
-    local key_algo=default asked=0
+    # the file or the lock are asked too: a run with no prompts stays one.
+    local key_algo=default asked=$ask_lock
     (( ${#names[@]} + ${#uses[@]} + ${#vars_files[@]} > 0 )) || asked=1
     [[ -n $target ]] || (( passphrase_stdin )) || asked=1
-    [[ -n $choice ]] && asked=1
     if [[ $key_type == pqc ]]; then
         key_algo=pqc
     elif [[ -z $key_type ]] && (( asked )) && gpg-has-pqc; then
@@ -1174,19 +1174,39 @@ EOF
     [[ $key_algo != pqc ]] \
         || info "Wherever the file is opened, gpg must be 2.5.21 or later: check there first (gpg --version)." >&2
 
-    # Input: a passphrase on the export's own key too — asked, no by default (the lock on the file
-    # protects the key); not with --file-passphrase-stdin, whose stdin cannot answer. gpg asks for
-    # it when it makes the key.
+    # Input: a passphrase on the export's own key too — --key-passphrase-fd; otherwise asked, no by
+    # default (the lock on the file protects the key), and gpg asks for it once the key has done its
+    # work; not with --file-passphrase-stdin, whose stdin cannot answer.
     local key_passphrase=0
-    if (( ! passphrase_stdin )); then
-        echo >&2
-        confirm "Set a passphrase on the export's own key too? Opening the file would need it as well." \
-            && key_passphrase=1
-    fi
-    if (( key_passphrase )); then
-        show-answer "Key passphrase" "yes: gpg asks for it when it makes the key"
+    if [[ -n $key_passphrase_fd ]]; then
+        key_passphrase=1
+        show-answer "Key passphrase" "yes: from --key-passphrase-fd"
     else
-        show-answer "Key passphrase" "none (the lock on the file protects the key)"
+        if (( ! passphrase_stdin )); then
+            echo >&2
+            confirm "Set a passphrase on the export's own key too? Opening the file would need it as well." \
+                && key_passphrase=1
+        fi
+        if (( key_passphrase )); then
+            show-answer "Key passphrase" "yes: gpg asks you to choose it"
+        else
+            show-answer "Key passphrase" "none (the lock on the file protects the key)"
+        fi
+    fi
+
+    # Input: the lock — --to <key>, or a passphrase (--file-passphrase-stdin / --file-passphrase-fd);
+    # with neither, asked: a passphrase (gpg asks for it later), or a public key.
+    local choice="" to_key="With a public key"
+    if (( ask_lock )); then
+        echo >&2
+        choice=$(ask-choice "How should the file be locked?" "With a passphrase" "$to_key") \
+            || die "Cancelled."
+        if [[ $choice == "$to_key" ]]; then
+            to=$(pick-public-key) || exit 1
+            [[ -n $to ]] \
+                || to=$(ask-path "Public key" "a .asc file, or a fingerprint, key id or email") || exit 1
+            [[ -n $to ]] || die "A public key is needed to lock the file to it."
+        fi
     fi
 
     umask 077
@@ -1222,39 +1242,65 @@ EOF
             show-answer "Lock" "a passphrase: gpg asks for it when it locks the file"
         fi
     fi
+    local key_pass=""
+    if [[ -n $key_passphrase_fd ]]; then
+        read-passphrase-fd "$key_passphrase_fd"
+        key_pass=$PASSPHRASE
+        unset PASSPHRASE
+    fi
+    # The file's two locks, as show-locks draws them before gpg asks for either.
+    local lock1="the file's passphrase" lock2=no
+    [[ -z $recipient ]] || lock1="the key of $(GNUPGHOME=$home key-uid "$recipient")"
+    (( ! key_passphrase )) || lock2=yes
 
     section "Exporting"
     info "That is everything needed. Exporting now." >&2
 
-    # A classical one's encryption subkey is RSA, not gpg's default cv25519: some gpg builds cannot
-    # decrypt with a cv25519 key they have just imported — Ubuntu's 2.4.8 (with libgcrypt 1.12.0)
-    # often, and 2.5.23 and 2.5.24 as released (https://dev.gnupg.org/T8469, a bug of ECDH keys) — as
-    # import does. A post-quantum one is gpg's pqc: its primary key and subkey in one go.
-    # With a passphrase, gpg's pinentry asks for it (twice) when it makes the key, then once to
-    # unlock it to add the subkey; its agent keeps it from then on (new-gpg-home).
-    section "Make the export's own key"
-    local no_passphrase=(--passphrase '')
+    # A classical one is one RSA key that signs and encrypts, not gpg's default cv25519 subkey: some
+    # gpg builds cannot decrypt with a cv25519 key they have just imported — Ubuntu's 2.4.8 (with
+    # libgcrypt 1.12.0) often, and 2.5.23 and 2.5.24 as released (https://dev.gnupg.org/T8469, a bug
+    # of ECDH keys) — as import does. A post-quantum one is gpg's pqc: its primary key and subkey in
+    # one go.
+    # The key's passphrase, when one is set: from --key-passphrase-fd, every gpg call that needs it
+    # takes it on fd 3 (with_key; never in argv); otherwise gpg's pinentry asks. A classical key is made
+    # with none, and gets it once it has signed and encrypted everything (--passwd: chosen once); a
+    # post-quantum one gets it when it is made, as gpg 2.5 cannot --passwd a Kyber subkey ("Invalid
+    # S-expression"), and then asks once to sign the texts. Either way gpg-agent asks once more to
+    # export it, whatever it keeps.
+    local with_key=(gpg --batch) ask_key=0 set_now=0
     if (( key_passphrase )); then
-        no_passphrase=()
-        acknowledge "Next, gpg will ask you to choose a passphrase for the export's own key (twice)," \
-                    "then once more to unlock it." \
+        if [[ -n $key_pass ]]; then with_key=(gpg --batch --pinentry-mode loopback --passphrase-fd 3)
+        else                        ask_key=1
+        fi
+        [[ $key_algo != pqc ]] || set_now=1
+    fi
+    # The note before gpg asks for the key's passphrase: when the key is made (post-quantum), or
+    # after the items, once the store key's passphrase has been asked (classical).
+    local steps="choose it (and type it again), then once more to pack the key into the file."
+    (( ! set_now )) || steps="choose it (and type it again), then once to sign the texts, and once more to pack the key into the file."
+    if (( ask_key && set_now )); then
+        show-locks key "$lock1" "$lock2" "$file"
+        acknowledge "Next, gpg asks for Lock 2: the passphrase of the export's own key. It asks you to" \
+                    "$steps" \
                     "Whoever opens the file needs it too: tell them another way than the file itself."
     fi
-    local primary=(ed25519 sign never)
+
+    section "Make the export's own key"
+    # shellcheck disable=SC2054  # sign,encr is one argument: the key's usage
+    local primary=(rsa3072 sign,encr never) make_key=(gpg --batch --passphrase '')
     [[ $key_algo != pqc ]] || primary=(pqc default never)
-    status=$(GNUPGHOME=$home gpg --batch ${no_passphrase[@]+"${no_passphrase[@]}"} --status-fd 3 \
-                 --quick-generate-key "EnvFolio export $(date +%Y%m%d-%H%M%S)" "${primary[@]}" 3>&1 1>/dev/null 2>/dev/null)
+    (( ! set_now )) || make_key=("${with_key[@]}")
+    status=$(GNUPGHOME=$home "${make_key[@]}" --status-fd 4 \
+                 --quick-generate-key "EnvFolio export key $(date +%Y%m%d-%H%M%S)" "${primary[@]}" \
+                 4>&1 1>/dev/null 2>/dev/null 3< <(printf '%s\n' "$key_pass"))
     key=$(printf '%s\n' "$status" | awk '$2 == "KEY_CREATED" { print $4 }')
     [[ -n $key ]] || die "Making the export's key failed."
-    if [[ $key_algo != pqc ]]; then
-        GNUPGHOME=$home gpg --batch ${no_passphrase[@]+"${no_passphrase[@]}"} --quick-add-key "$key" rsa3072 encr never >/dev/null 2>&1 \
-            || die "Making the export's key failed."
-    fi
     echo "$key" > "$pack/store/.gpg-id"
     show-answer "Key" "$key"
 
     section "Copy the items (gpg may ask for your store key's passphrase)"
-    local name out
+    local name out sign=(gpg --batch)
+    (( ! set_now )) || sign=("${with_key[@]}")
     for item in "${SELECTED[@]}"; do
         name=${item%.*} out=$pack/store/$item
         mkdir -p "$(dirname "$out")"
@@ -1266,13 +1312,36 @@ EOF
         else
             verify-text "$name"
             cp "$STORE_PATH/$item" "$out"
-            GNUPGHOME=$home gpg --batch --quiet --local-user "$key" --detach-sign --output "$out.sig" "$out" \
-                || die "export: could not sign '$name'."
+            GNUPGHOME=$home "${sign[@]}" --quiet --local-user "$key" --detach-sign --output "$out.sig" "$out" \
+                3< <(printf '%s\n' "$key_pass") || die "export: could not sign '$name'."
         fi
         show-answer "Copied" "$(item-label "$item")"
     done
-    GNUPGHOME=$home gpg --batch --armor --export-secret-keys "$key" > "$pack/key.asc" 2>/dev/null
+
+    if (( key_passphrase )); then
+        section "Pack the export's own key"
+        if (( ask_key && ! set_now )); then
+            show-locks key "$lock1" "$lock2" "$file"
+            acknowledge "Next, gpg asks for Lock 2: the passphrase of the export's own key. It asks you to" \
+                        "$steps" \
+                        "Whoever opens the file needs it too: tell them another way than the file itself."
+        fi
+        if (( ! set_now )); then
+            GNUPGHOME=$home "${with_key[@]}" --passwd "$key" >/dev/null 2>&1 3< <(printf '%s\n' "$key_pass") \
+                || die "Setting the passphrase of the export's own key failed."
+        fi
+        if (( ask_key )); then
+            show-locks key-again "$lock1" "$lock2" "$file"
+            info "gpg asks for Lock 2 once more: the same passphrase, to pack the key into the file." >&2
+        fi
+    fi
+    GNUPGHOME=$home "${with_key[@]}" --armor --export-secret-keys "$key" > "$pack/key.asc" 2>/dev/null \
+        3< <(printf '%s\n' "$key_pass")
+    unset key_pass
     [[ -s $pack/key.asc ]] || die "Exporting the export's key failed."
+    # gpg --passwd says nothing when its prompt is cancelled, or left empty: the key would go without.
+    (( ! key_passphrase )) || is-protected-key "$pack/key.asc" \
+        || die "Setting the passphrase of the export's own key failed: gpg's prompt was cancelled, or left empty."
     {
         echo "folio-export 1"
         echo "created $(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -1281,7 +1350,8 @@ EOF
 
     section "Pack and lock the file"
     if [[ -z $recipient && -z $passphrase ]]; then
-        acknowledge "Next, gpg will ask you to choose a passphrase for the export file (twice)." \
+        show-locks file "$lock1" "$lock2" "$file"
+        acknowledge "Next, gpg will ask you to choose a passphrase for the export file (twice): Lock 1." \
                     "Whoever imports the file needs it: tell them another way than the file itself." \
                     "" \
                     "Be prepared to provide the new passphrase."
@@ -1486,6 +1556,7 @@ EOF
     fi
 
     if [[ -z $passphrase ]] && is-passphrase-locked "$file"; then
+        show-locks file "$(file-lock-label "$file")" maybe "$file"
         acknowledge "Next, gpg asks for the export file's passphrase: the one chosen when it was exported."
     fi
     open-export "$file" "$passphrase" "" "$key_passphrase"
@@ -1655,8 +1726,10 @@ function open-export() {
     GNUPGHOME=$home gpg --batch --quiet --import "$stage/unpack/key.asc" 2>/dev/null
     GNUPGHOME=$home gpg --list-secret-keys "$key" >/dev/null 2>&1 || die "$file has no secret key $key."
     if is-protected-key "$stage/unpack/key.asc"; then
-        [[ -n $key_passphrase ]] \
-            || info "gpg asks for the passphrase of the export's own key: the one set on it when it was exported." >&2
+        if [[ -z $key_passphrase ]]; then
+            show-locks key "$(file-lock-label "$file")" yes "$file"
+            info "gpg asks for the passphrase of the export's own key: the one set on it when it was exported." >&2
+        fi
         unlock-export-key "$home" "$key" "$key_passphrase" \
             || die "Cannot unlock the key in $file: its passphrase (set when it was exported) is not right," \
                    "or was not given. Give it with --key-passphrase-fd <n> where there is no terminal to ask on."
@@ -1711,6 +1784,13 @@ function verify-export-text() {
 function check-export-file() {
     [[ -f $1 ]] || die "There is no file $1."
     [[ $1 == *"$EXPORT_SUFFIX" ]] || die "$1 is not an EnvFolio export: its name does not end in $EXPORT_SUFFIX."
+}
+
+# file-lock-label <file>: what unlocks an export, as show-locks names its lock 1.
+function file-lock-label() {
+    if is-passphrase-locked "$1"; then echo "the file's passphrase"
+    else                               echo "your key it is locked to"
+    fi
 }
 
 # is-passphrase-locked <file>: whether an export is locked with a passphrase, not to a key — its first
@@ -2923,8 +3003,8 @@ function open-export-for() {
         read-passphrase-fd "$fd"
         passphrase=$PASSPHRASE
         unset PASSPHRASE
-    elif
- is-passphrase-locked "$file"; then
+    elif is-passphrase-locked "$file"; then
+        show-locks file "$(file-lock-label "$file")" maybe "$file"
         info "folio $how: gpg asks for the passphrase of $(tilde-path "$file")." >&2
     fi
     open-export "$file" "$passphrase" quiet "$key_passphrase"
@@ -4689,6 +4769,54 @@ function show-box() {
     printf '╰%s╯\n' "$border"
 }
 
+# show-locks <asked> <lock 1> <lock 2> <file>: on stderr, an export <file> and its two locks, and
+# which one gpg asks for next — <asked>: file (lock 1), key, or key-again (lock 2, once more to pack
+# it). <lock 1> is what unlocks the file ("the file's passphrase", "the key of …"); <lock 2>, the
+# passphrase of the export's own key inside it: yes, no, or maybe (not known before the file is
+# open). The lock asked for is marked with an arrow, and in colour on a screen that shows it.
+function show-locks() {
+    local asked=$1 lock1="Lock 1  $2" name=${4##*/} key_row on="" off="" arrow
+    case $3 in
+        yes) key_row="Lock 2  the passphrase of the export's own key" ;;
+        no)  key_row="Lock 2  none: the export's own key has no passphrase" ;;
+        *)   key_row="Lock 2  the passphrase of the export's own key, if it has one" ;;
+    esac
+    local rows=("$key_row" "key.asc the export's own key: it opens the secrets" "texts   signed with that key")
+    local row inner=0 width
+    for row in "${rows[@]}"; do (( ${#row} > inner )) && inner=${#row} ; done
+    width=$(( inner + 4 ))
+    (( ${#lock1} > width )) && width=${#lock1}
+    (( ${#name} + 1 > width )) && width=$(( ${#name} + 1 ))
+    if SCREEN_FD=2 use-color; then on=$'\e[1;33m' off=$'\e[0m' ; fi
+    arrow="  ◀ gpg asks for this one now"
+    [[ $asked != key-again ]] || arrow="  ◀ gpg asks for this one again, to pack it"
+
+    # show-locks-line <left> <text> <width> <right> <marked: 0|1>: <text> padded to <width>, in colour and with
+    # the arrow when marked.
+    show-locks-line() {
+        local pad=$(( $3 - ${#2} ))
+        if (( $5 )); then printf '%s%s%s%*s%s%s%s%s\n' "$1" "$on" "$2" "$pad" '' "$off" "$4" "$on$arrow" "$off"
+        else              printf '%s%s%*s%s\n' "$1" "$2" "$pad" '' "$4"
+        fi
+    }
+    # show-locks-fill <n>: n times ─.
+    show-locks-fill() { local f ; f=$(printf '%*s' "$1" '') ; printf '%s' "${f// /─}" ; }
+
+    local file_marked=0 key_marked=0
+    [[ $asked == file ]] && file_marked=1 || key_marked=1
+    {
+        echo
+        printf '┌─ %s %s┐\n' "$name" "$(show-locks-fill $(( width - ${#name} - 1 )))"
+        show-locks-line "│ " "$lock1" "$width" " │" "$file_marked"
+        printf '│ ┌─ inside %s┐%*s │\n' "$(show-locks-fill $(( inner - 7 )))" $(( width - inner - 4 )) ''
+        show-locks-line "│ │ " "${rows[0]}" "$inner" " │$(printf '%*s' $(( width - inner - 4 )) '') │" "$key_marked"
+        show-locks-line "│ │ " "${rows[1]}" "$inner" " │$(printf '%*s' $(( width - inner - 4 )) '') │" 0
+        show-locks-line "│ │ " "${rows[2]}" "$inner" " │$(printf '%*s' $(( width - inner - 4 )) '') │" 0
+        printf '│ └%s┘%*s │\n' "$(show-locks-fill $(( inner + 2 )))" $(( width - inner - 4 )) ''
+        printf '└%s┘\n' "$(show-locks-fill $(( width + 2 )))"
+    } >&2
+}
+
 # --- User + Key ---------------------------------------------------------------
 
 # Best guess at the user's name
@@ -4812,13 +4940,13 @@ function key-kind-label() {
 }
 
 # The two kinds of an export's own key. Classical is not gpg's default: its subkey is RSA (Export).
-EXPORT_CLASSICAL_LABEL="Classical (default) — Ed25519, RSA-3072: any gpg opens the file"
+EXPORT_CLASSICAL_LABEL="Classical (default) — RSA-3072: any gpg opens the file"
 EXPORT_PQC_LABEL="Post-quantum — ML-KEM-768 + Brainpool P-256, Brainpool P-384: opening the file needs gpg 2.5.21 or later, there too"
 
 # export-key-kind-label <algo>: how an export's own key of <algo> (pqc or default) is shown once picked.
 function export-key-kind-label() {
     if [[ $1 == pqc ]]; then printf '%s\n' "${PQC_KEY_LABEL/ (recommended)/}"
-    else                     printf '%s\n' "Classical — Ed25519, RSA-3072"
+    else                     printf '%s\n' "Classical — RSA-3072"
     fi
 }
 
