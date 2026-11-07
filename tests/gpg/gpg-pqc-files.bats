@@ -161,15 +161,15 @@ old-gpg-meets-pqc() {
     [[ $output == *"cannot use the key in"*"T8469"* ]] || false
 }
 
-@test "export: the export's own key encrypts with RSA, not cv25519 (some gpg builds cannot use one just imported)" {
+@test "export: the export's own key is one RSA key that signs and encrypts, not cv25519 (some gpg builds cannot use one just imported)" {
     make-store
     run Export --secrets --file-passphrase-fd 3 -o "$SANDBOX/out/items" web/github < /dev/null 3< <(printf 'x\n')
     [ "$status" -eq 0 ]
     mkdir "$SANDBOX/x"
     gpg --batch --pinentry-mode loopback --passphrase x --decrypt "$SANDBOX/out/items.folio" 2>/dev/null | tar -xzf - -C "$SANDBOX/x"
     run gpg --list-packets "$SANDBOX/x/key.asc"
-    [[ $output == *":secret key packet:"*"algo 22,"*":secret sub key packet:"*"algo 1,"* ]] || false
-    [[ $output != *"algo 18,"* ]] || false
+    [[ $output == *":secret key packet:"*"algo 1,"* ]] || false
+    [[ $output != *":secret sub key packet:"* && $output != *"algo 18,"* ]] || false
 }
 
 @test "can-use-imported-key: yes for a key this gpg imported and can use" {
@@ -187,7 +187,7 @@ old-gpg-meets-pqc() {
     gpg-has-pqc() { return 1; }
     run Export --secrets --file-passphrase-fd 3 web/github < <(printf '%s\n' "$SANDBOX/out/items" "") 3< <(printf 'x\n')
     [ "$status" -eq 0 ]
-    [[ $output != *"Which kind of key"* && $output == *"Key type: Classical — Ed25519, RSA-3072"* ]] || false
+    [[ $output != *"Which kind of key"* && $output == *"Key type: Classical — RSA-3072"* ]] || false
 }
 
 @test "import and --from: an export whose own key is post-quantum, on a gpg that cannot use it — refused" {

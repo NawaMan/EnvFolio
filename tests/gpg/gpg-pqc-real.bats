@@ -99,7 +99,7 @@ unpack-key() {
         < <(printf '%s\n' "$SANDBOX/out/items" "" "") 5< <(printf 'fp\n')
     [ "$status" -eq 0 ]
     [[ $output == *"Which kind of key for the export's own key?"*"opening the file needs gpg 2.5.21 or later, there too"* ]] || false
-    [[ $output == *"Key type: Classical — Ed25519, RSA-3072"* && $output != *"export's own key is post-quantum"* ]] || false
+    [[ $output == *"Key type: Classical — RSA-3072"* && $output != *"export's own key is post-quantum"* ]] || false
     unpack-key "$SANDBOX/out/items.folio"
     run bash -c 'source "$1" && has-pqc-key "$2"' _ "$FOLIO" "$SANDBOX/x/key.asc"
     [ "$status" -ne 0 ]

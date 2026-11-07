@@ -112,7 +112,7 @@ ALL=(aws/key.gpg web/github.gpg web/home.txt web/user.txt)
 @test "export flow 1: nothing given — picks items, asks the file and the lock; gpg asks the passphrase" {
     use-pinentry pw-one
     cd "$SANDBOX/out"
-    export-answering all "" 1 "" "" --
+    export-answering all "" "" "" 1 "" --
     [[ $output == *"Which items?"* && $output == *"File (or a folder)"* && $output == *"How should the file be locked?"* ]] || false
     [[ $output == *"gpg asks for it when it locks the file"* ]] || false
     assert-export "$(export-file-in "$SANDBOX/out")" pw-one "${ALL[@]}"
@@ -121,7 +121,7 @@ ALL=(aws/key.gpg web/github.gpg web/home.txt web/user.txt)
 @test "export flow 2: <name> — asks the file and the lock" {
     use-pinentry pw-two
     cd "$SANDBOX/out"
-    export-answering "" 1 "" "" -- web
+    export-answering "" "" "" 1 "" -- web
     [[ $output != *"Which items?"* && $output == *"File (or a folder)"* && $output == *"How should the file be locked?"* ]] || false
     [[ $output == *"left out 1 secret(s) under 'web'"* ]] || false
     assert-export "$(export-file-in "$SANDBOX/out")" pw-two web/home.txt web/user.txt
@@ -130,21 +130,21 @@ ALL=(aws/key.gpg web/github.gpg web/home.txt web/user.txt)
 @test "export flow 3: <name> --secrets — the folder's secrets too" {
     use-pinentry pw-three
     cd "$SANDBOX/out"
-    export-answering "" 1 "" "" -- --secrets web
+    export-answering "" "" "" 1 "" -- --secrets web
     [[ $output != *"Which items?"* ]] || false
     assert-export "$(export-file-in "$SANDBOX/out")" pw-three web/github.gpg web/home.txt web/user.txt
 }
 
 @test "export flow 3b: the file typed at the prompt — written there, .folio added" {
     use-pinentry pw-three-b
-    export-answering "$SANDBOX/out/typed" 1 "" "" -- --secrets web
+    export-answering "$SANDBOX/out/typed" "" "" 1 "" -- --secrets web
     [[ $output == *"File (or a folder)"* ]] || false
     assert-export "$SANDBOX/out/typed.folio" pw-three-b web/github.gpg web/home.txt web/user.txt
 }
 
 @test "export flow 4: + -o <file> — written there, .folio added, not asked" {
     use-pinentry pw-four
-    export-answering 1 "" "" -- --secrets -o "$SANDBOX/out/to-server" web
+    export-answering "" "" 1 "" -- --secrets -o "$SANDBOX/out/to-server" web
     [[ $output != *"Which items?"* && $output != *"File (or a folder)"* ]] || false
     assert-export "$SANDBOX/out/to-server.folio" pw-four web/github.gpg web/home.txt web/user.txt
 }
@@ -174,7 +174,7 @@ ALL=(aws/key.gpg web/github.gpg web/home.txt web/user.txt)
 @test "export flow 7: a public key from the keyring, picked from the list" {
     gpg --batch --quiet --import "$SANDBOX/server.asc" 2>/dev/null
     # The list: 1) Test User (the store's key), 2) Server, 3) a key file or another id.
-    export-answering 2 2 -- --secrets -o "$SANDBOX/out/to-server" web
+    export-answering "" "" 2 2 -- --secrets -o "$SANDBOX/out/to-server" web
     [[ $output == *"Which public key?"* && $output == *"Server <server@example.com>"* ]] || false
     [[ $output != *"Public key ["* ]] || false
     [[ $output == *"Lock: to "*"Server <server@example.com>"* ]] || false
@@ -183,7 +183,7 @@ ALL=(aws/key.gpg web/github.gpg web/home.txt web/user.txt)
 
 @test "export flow 7b: a key file, through the list's last choice" {
     # The list: 1) Test User (the store's key), 2) a key file or another id.
-    export-answering 2 2 "$SANDBOX/server.asc" -- --secrets -o "$SANDBOX/out/to-server" web
+    export-answering "" "" 2 2 "$SANDBOX/server.asc" -- --secrets -o "$SANDBOX/out/to-server" web
     [[ $output == *"Which public key?"* && $output == *"Public key ["* ]] || false
     [[ $output == *"Lock: to "*"Server <server@example.com>"* ]] || false
     assert-export "$SANDBOX/out/to-server.folio" --server web/github.gpg web/home.txt web/user.txt
@@ -194,7 +194,7 @@ ALL=(aws/key.gpg web/github.gpg web/home.txt web/user.txt)
     printf 'disable\nsave\n' | gpg --batch --command-fd 0 --edit-key test@example.com 2>/dev/null
     run bash -c 'source "$1" ; list-public-keys' _ "$FOLIO"
     [ -z "$output" ]
-    export-answering 2 "$SANDBOX/server.asc" -- --secrets -o "$SANDBOX/out/to-server" web
+    export-answering "" "" 2 "$SANDBOX/server.asc" -- --secrets -o "$SANDBOX/out/to-server" web
     [[ $output != *"Which public key?"* && $output == *"Public key ["* ]] || false
 }
 
@@ -225,7 +225,7 @@ ALL=(aws/key.gpg web/github.gpg web/home.txt web/user.txt)
 }
 
 @test "export flow: a public key asked for that matches none — nothing made" {
-    export-answering 2 2 nobody@example.com -- -o "$SANDBOX/out" web
+    export-answering "" "" 2 2 nobody@example.com -- -o "$SANDBOX/out" web
     [[ $output == *"No public key"* ]] || false
     assert-nothing-made
 }
@@ -238,7 +238,7 @@ ALL=(aws/key.gpg web/github.gpg web/home.txt web/user.txt)
 
 @test "export flow: gpg's passphrase prompt cancelled — nothing made" {
     use-pinentry --cancel
-    export-answering 1 "" "" -- -o "$SANDBOX/out" web
+    export-answering "" "" 1 "" -- -o "$SANDBOX/out" web
     [[ $output == *"Packing the export failed"* ]] || false
     assert-nothing-made
 }
@@ -258,7 +258,7 @@ ALL=(aws/key.gpg web/github.gpg web/home.txt web/user.txt)
 
 @test "export flow: told before gpg asks the file's passphrase; input ends there — nothing made" {
     use-pinentry pw
-    export-answering 1 -- -o "$SANDBOX/out" web
+    export-answering "" "" 1 -- -o "$SANDBOX/out" web
     [[ $output == *"Next, gpg will ask you to choose a passphrase for the export file"* && $output == *"Cancelled"* ]] || false
     assert-nothing-made
 }
@@ -290,12 +290,16 @@ unpack-key() {
     [ "$status" -ne 0 ]
 }
 
-@test "export flow: the key's passphrase — yes: told first, gpg asks it; the key in the file has one" {
-    # The fake pinentry answers both: the file's passphrase and the key's.
+@test "export flow: the key's passphrase — yes: asked before the lock; gpg asks it after the items; the key in the file has one" {
+    # The fake pinentry answers both: the file's passphrase and the key's. Classical: one part, so
+    # gpg asks to choose it once, then once more to pack it.
     use-pinentry pw-key-yes
-    export-answering 1 y "" "" -- --secrets -o "$SANDBOX/out/to-server" web
+    export-answering y 1 "" "" -- --secrets --key-type classical -o "$SANDBOX/out/to-server" web
+    [[ $output == *"Set a passphrase on the export's own key too?"*"How should the file be locked?"* ]] || false
     [[ $output == *"Key passphrase: yes"* ]] || false
-    [[ $output == *"Next, gpg will ask you to choose a passphrase for the export's own key"* ]] || false
+    # In order: the items copied, then Lock 2 (to choose, then again to pack), then Lock 1.
+    [[ $output == *"Copied"*"Lock 2  the passphrase of the export's own key"*"◀ gpg asks for this one now"*"Next, gpg asks for Lock 2"*"choose it (and type it again), then once more to pack"* ]] || false
+    [[ $output == *"◀ gpg asks for this one again, to pack it"*"gpg asks for Lock 2 once more"*"Lock 1  the file's passphrase"*"◀ gpg asks for this one now"*"for the export file (twice): Lock 1."* ]] || false
     [[ $output == *"and the passphrase of the export's own key."* ]] || false
     assert-export "$SANDBOX/out/to-server.folio" pw-key-yes web/github.gpg web/home.txt web/user.txt
     unpack-key "$SANDBOX/out/to-server.folio" pw-key-yes
@@ -306,6 +310,41 @@ unpack-key() {
 @test "export flow: the key's passphrase prompt cancelled — nothing made" {
     use-pinentry --cancel
     export-answering y "" -- --to "$SANDBOX/server.asc" -o "$SANDBOX/out" web
-    [[ $output == *"Making the export's key failed"* ]] || false
+    [[ $output == *"Setting the passphrase of the export's own key failed"* ]] || false
+    assert-nothing-made
+}
+
+@test "export flow: --key-passphrase-fd — not asked; taken out of the file, the key opens nothing without it" {
+    run "$FOLIO" export --secrets -o "$SANDBOX/out/to-server" --file-passphrase-fd 5 --key-passphrase-fd 6 web \
+        < /dev/null 5< <(printf '%s\n' pw-file) 6< <(printf '%s\n' pw-key)
+    [ "$status" -eq 0 ]
+    [[ $output != *"Set a passphrase on the export's own key too?"* && $output != *"◀ gpg asks"* ]] || false
+    [[ $output == *"Key passphrase: yes: from --key-passphrase-fd"* ]] || false
+    assert-export "$SANDBOX/out/to-server.folio" pw-file web/github.gpg web/home.txt web/user.txt
+    # The whole file unpacked by hand, as a folder left behind would be: its key, and a secret.
+    mkdir -p "$SANDBOX/unpack" && mkdir -m 700 "$SANDBOX/k"
+    gpg --batch --quiet --no-symkey-cache --pinentry-mode loopback --passphrase pw-file \
+        --decrypt "$SANDBOX/out/to-server.folio" 2>/dev/null | tar -xzf - -C "$SANDBOX/unpack"
+    run bash -c 'source "$1" ; is-protected-key "$2"' _ "$FOLIO" "$SANDBOX/unpack/key.asc"
+    [ "$status" -eq 0 ]
+    GNUPGHOME="$SANDBOX/k" gpg --batch --quiet --import "$SANDBOX/unpack/key.asc" 2>/dev/null
+    run env GNUPGHOME="$SANDBOX/k" gpg --batch --quiet --pinentry-mode loopback --passphrase wrong \
+        --decrypt "$SANDBOX/unpack/store/web/github.gpg"
+    [ "$status" -ne 0 ]
+    run env GNUPGHOME="$SANDBOX/k" gpg --batch --quiet --pinentry-mode loopback --passphrase pw-key \
+        --decrypt "$SANDBOX/unpack/store/web/github.gpg"
+    [ "$status" -eq 0 ]
+    [ "$output" = s3cr3t ]
+    GNUPGHOME="$SANDBOX/k" gpgconf --kill all
+}
+
+@test "export flow: --key-passphrase-fd on a closed fd, or the file's own fd — nothing made" {
+    run "$FOLIO" export -o "$SANDBOX/out" --file-passphrase-fd 5 --key-passphrase-fd 7 web \
+        < /dev/null 5< <(printf 'x\n')
+    [[ $output == *"--key-passphrase-fd 7: no such file descriptor is open."* ]] || false
+    assert-nothing-made
+    run "$FOLIO" export -o "$SANDBOX/out" --file-passphrase-fd 5 --key-passphrase-fd 5 web \
+        < /dev/null 5< <(printf 'x\n')
+    [[ $output == *"need a file descriptor each"* ]] || false
     assert-nothing-made
 }
