@@ -31,6 +31,11 @@ User-visible changes to EnvFolio. Newest first.
   `--file-passphrase-fd` and `--key-passphrase-fd`). `--clip` works too. A text is checked with the
   export's own key.
 
+- `-q` (`--quiet`) with every command, or `FOLIO_QUIET=1`: leave out the notes on what happens
+  next — the picture of an export's locks, the note before gpg asks for a passphrase,
+  `Copied … to clipboard`, shell's `loaded …`. Errors, warnings and questions are still said. Not
+  for `grep`, where `-q` is grep's own.
+
 - `folio show --help` and `folio help show` — and so for `find`, `grep`, `insert`, `edit`,
   `generate`, `rm`, `mv` and `cp` — show the help of both kinds, text and secret, instead of
   asking which one.
@@ -50,6 +55,10 @@ User-visible changes to EnvFolio. Newest first.
   name `out/items`: write `-o out/items.folio`), and `-o <folder>` is gone (write
   `-o <folder>/<name>.folio`). With no `-o`, the file offered is `store-<date>` in `FOLIO_FILE_DIR`
   when it is set.
+
+- `show text -c` and `show secret -c` say `Copied … to clipboard` on stderr, not stdout: stdout is
+  only ever the output itself. `-q` alone is no longer refused as `pass`'s `--qrcode`: it is
+  `--quiet` now (`-nq` still is).
 
 - The README shows the latest release, and links to the website's videos and articles; the
   website links back to the README, and every episode's last slide shows the install script. The

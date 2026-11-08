@@ -91,7 +91,8 @@ EOF
 @test "generate secret: --qrcode is refused, in any spelling" {
     make-store
     local arg
-    for arg in -q --qrcode -nq; do
+    # -q alone is folio --quiet (taken before pass sees it); in -nq it is still refused.
+    for arg in --qrcode -nq; do
         run "$FOLIO" generate secret "$arg" api < /dev/null
         [ "$status" -eq 1 ]
         [[ $output == *"--qrcode is not offered"* ]] || false

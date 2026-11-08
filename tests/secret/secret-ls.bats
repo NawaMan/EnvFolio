@@ -60,7 +60,7 @@ make-store() {
 @test "ls secret: pass's options are refused" {
     make-store
     local arg
-    for arg in -c --clip --qrcode -q; do
+    for arg in -c --clip --qrcode; do
         run "$FOLIO" ls secret "$arg" web/github
         [ "$status" -eq 1 ]
         [[ $output != *"s3cr3t"* ]] || false
