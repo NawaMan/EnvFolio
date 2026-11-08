@@ -1145,13 +1145,15 @@ needed, and everything after it is the command, which EnvFolio never parses. It 
 path once the namespace is peeled off — whatever was selected:
 
 1. A namespace — a top folder whose name starts with `@` — is removed.
-2. `/` turns into `_`.
+2. `/`, `-` and `.` turn into `_`.
 3. It is uppercased.
 
 | Entry | Variable |
 | --- | --- |
 | `gh/token` | `GH_TOKEN` |
 | `git/user_name` | `GIT_USER_NAME` |
+| `gh/api-key` | `GH_API_KEY` |
+| `db/host.name` | `DB_HOST_NAME` |
 | `@nawa/gh/token` | `GH_TOKEN` |
 
 Namespaces can nest from the front of the path — `@app2/@prod/server/user` — but the rule removes
@@ -1168,8 +1170,8 @@ The variables are worked out in this order:
    give the same variable, the later one wins. Two items of **one** selection giving the same
    variable are refused, as which one won would be down to the order of their names:
    `--use @app2` holding both `@prod/server/user` and `@staging/server/user` (both `SERVER_USER`)
-   says to pick one, e.g. `--use @app2/@prod`; `a/b` and `a_b` in one folder say to give one a
-   `VAR=<name>` or rename it.
+   says to pick one, e.g. `--use @app2/@prod`; `a/b` and `a_b` in one folder — or `api-key` and
+   `api_key` — say to give one a `VAR=<name>` or rename it.
 3. **Explicit names last.** Each `VAR=<name>`, wherever it is typed, takes `<name>` as it is
    after the selections — with `--use`, `server/user` can be one it peeled — or, if they did not
    select it, from the store. It wins over any variable of the same name. Its item keeps the
@@ -1177,8 +1179,8 @@ The variables are worked out in this order:
    `SERVER_PORT`. `VAR` must be a valid name (`^[A-Za-z_][A-Za-z0-9_]*$`), or the command is
    refused. If two of them give the same `VAR`, the later one wins.
 
-A derived name that is still not a valid variable name (e.g. `GH_API-KEY`, or one starting with a
-digit) is **left out with a warning** that names the entry and suggests `VAR=<name>`. A selection
+A derived name that is still not a valid variable name (e.g. `GH_API+KEY`, or one starting with a
+digit: `2fa` is `2FA`) is **left out with a warning** that names the entry and suggests `VAR=<name>`. A selection
 that matches no entry is an error, and so is a run that would load nothing at all.
 
 **Refused**, before anything runs: a path that is both a text and a secret
@@ -1196,6 +1198,10 @@ fails, the command does not run and EnvFolio exits 1.
 **The command** replaces EnvFolio (`exec`), so its exit status, signals and input/output are its own.
 It gets the caller's environment plus the loaded variables, which override any of the same name.
 EnvFolio's own `PASSWORD_STORE_DIR` is not passed on: the caller's value is put back, or it is unset.
+It runs as typed, **without a shell**: for `$VAR`, pipes or `&&`, run one —
+`folio exec gh -- sh -c 'echo "$GH_USER"'`. A command that is not there (on the `PATH` it gets,
+which a loaded `PATH` sets) is said plainly, with exit status 127, as a shell does; typed in
+quotes as for a shell (`-- 'echo $GH_USER'`), the message says to use `sh -c`.
 
 ### Run a command with texts
 
