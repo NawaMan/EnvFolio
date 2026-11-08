@@ -3219,7 +3219,22 @@ function export-and-exec() {
         shift 2
     done
     shift
+    # Said plainly, not as bash's "line …: exec: …: not found", and with a shell's 127. Checked
+    # here, with the variables set: one of them may be PATH.
+    if [[ $1 == */* ]]; then [[ -f $1 && -x $1 ]] ; else type -P "$1" >/dev/null ; fi || {
+        printf "folio: there is no command '%s' to run.%s\n" "$1" "$(no-command-hint "$1")" >&2
+        exit 127
+    }
     exec "$@"
+}
+
+# no-command-hint <command>: for a <command> with a space or a $ in it — typed in quotes, as for a
+# shell — the hint that it runs without one.
+function no-command-hint() {
+    case $1 in
+        *[[:space:]\$]*) printf '%s\n  %s' " The command runs as typed, without a shell: for one, use" \
+                                         "folio exec … -- sh -c '$1'" ;;
+    esac
 }
 
 # load-entries <exec|shell> <secrets:0|1> <names:0|1> <entry>...: EXEC_VARS[i] <- EXEC_FILES[i]
@@ -3512,13 +3527,15 @@ function note-skipped-secrets() {
     printf "folio %s: left out %d secret(s) %s; add --secrets to load them.\n" "$how" "$count" "$where" >&2
 }
 
-# add-derived <how> <file>: name <file> by its path — @nawa/gh/token.gpg -> GH_TOKEN — or, when
-# that is not a valid variable name, warn and leave it out. Only a top @folder is a namespace.
+# add-derived <how> <file>: name <file> by its path — @nawa/gh/token.gpg -> GH_TOKEN, / - and .
+# turned into _ (gh/api-key -> GH_API_KEY) — or, when that is still not a valid variable name,
+# warn and leave it out. Only a top @folder is a namespace.
 function add-derived() {
     local how=$1 name=${2%.*} var
     var=${name}
     [[ $var == @*/* ]] && var=${var#*/}
-    var=$(printf '%s' "${var//\//_}" | LC_ALL=C tr '[:lower:]' '[:upper:]')
+    var=${var//\//_} ; var=${var//-/_} ; var=${var//./_}
+    var=$(printf '%s' "$var" | LC_ALL=C tr '[:lower:]' '[:upper:]')
     if [[ $var =~ $VAR_NAME_PATTERN ]]; then
         check-selection-var "$how" "$var" "$name"
         set-entry-var "$var" "$2"

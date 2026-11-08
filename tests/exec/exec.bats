@@ -27,7 +27,7 @@ teardown() {
 
 # A ready store.
 #   texts:   git/user_name, git/email, gh/user, @nawa/gh/user, multi/cert (two lines),
-#            odd/ok, odd/api-key (not a valid variable name), both/x
+#            odd/ok, odd/api-key, odd/api+key (not a valid variable name), both/x
 #   secrets: gh/token, @nawa/gh/token, both/x
 make-store() {
     gpg --batch --passphrase '' --quick-generate-key "Test User <test@example.com>" default default never 2>/dev/null
@@ -38,6 +38,7 @@ make-store() {
     "$FOLIO" insert text -t "nawa-user"        "@nawa/gh/user" < /dev/null
     "$FOLIO" insert text -t "ok value"         odd/ok          < /dev/null
     "$FOLIO" insert text -t "dash value"       odd/api-key     < /dev/null
+    "$FOLIO" insert text -t "plus value"       odd/api+key     < /dev/null
     "$FOLIO" insert text -t "both text"        both/x          < /dev/null
     "$FOLIO" insert text -m multi/cert < <(printf 'line one\nline two\n') >/dev/null
     "$FOLIO" insert secret -m gh/token         < <(printf 'shared-token\n') >/dev/null
@@ -97,7 +98,7 @@ make-store() {
     [ "$output" = $'test@example.com|shared-user|unset|both text|line one\nline two' ]
     # Secrets left out are counted outside the namespaces only: gh/token, both/x.
     [[ $stderr == *"folio exec: left out 2 secret(s) in the store; add --secrets to load them."* ]] || false
-    [[ $stderr == *"'odd/api-key' would be ODD_API-KEY"* ]] || false
+    [[ $stderr == *"'odd/api+key' would be ODD_API+KEY"* ]] || false
 }
 
 @test "exec --all: where it is typed, the last one winning; namespaces and VAR= layer over it" {
@@ -226,17 +227,58 @@ folio exec: left out 1 secret(s) under 'gh'; add --secrets to load them." ]
     [ "$output" = $'test@example.com|line one\nline two' ]
 }
 
+@test "exec: - and . turn into _ in a variable's name, as / does" {
+    make-store
+    "$FOLIO" insert text -t "db host" db/host.name      < /dev/null
+    "$FOLIO" insert secret -m gh/client-secret.v2 < <(printf 'cs\n') >/dev/null
+    run --separate-stderr "$FOLIO" exec --secrets odd/api-key db gh/client-secret.v2 \
+        -- sh -c 'echo "$ODD_API_KEY|$DB_HOST_NAME|$GH_CLIENT_SECRET_V2"'
+    [ "$status" -eq 0 ]
+    [ "$output" = "dash value|db host|cs" ]
+    [[ $stderr != *"warning"* ]] || false
+    run "$FOLIO" exec --names odd/api-key
+    [[ $output == *"ODD_API_KEY"*"odd/api-key"* ]] || false
+    # A vars file's @{…} is named the same way.
+    printf '@{odd/api-key}\n' > "$SANDBOX/a.vars"
+    run "$FOLIO" exec --vars "$SANDBOX/a.vars" -- printenv ODD_API_KEY
+    [ "$output" = "dash value" ]
+    # In one selection, api-key beside api_key is a clash, as a/b beside a_b is.
+    "$FOLIO" insert text -t "under" odd/api_key < /dev/null
+    run --separate-stderr "$FOLIO" exec odd -- true
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"'odd/api-key' and 'odd/api_key' would both be ODD_API_KEY; give one VAR=<name>, or rename one."* ]] || false
+}
+
+@test "exec: a command that is not there is said plainly; typed as for a shell, how to run one" {
+    make-store
+    run -127 --separate-stderr "$FOLIO" exec gh/user -- 'echo $GH_USER'
+    [[ $stderr == *"folio: there is no command 'echo \$GH_USER' to run. The command runs as typed, without a shell"* ]] || false
+    [[ $stderr == *"folio exec … -- sh -c 'echo \$GH_USER'"* ]] || false
+    [[ $stderr != *"line "* ]] || false
+    run -127 --separate-stderr "$FOLIO" exec gh/user -- no-such-command-here
+    [ "$stderr" = "folio: there is no command 'no-such-command-here' to run." ]
+    run -127 --separate-stderr "$FOLIO" exec gh/user -- ./nope
+    [[ $stderr == *"there is no command './nope' to run."* ]] || false
+    # Found on the PATH a loaded variable sets.
+    mkdir -p "$SANDBOX/bin"
+    printf '#!/bin/sh\necho "mine $GH_USER"\n' > "$SANDBOX/bin/mine" && chmod +x "$SANDBOX/bin/mine"
+    "$FOLIO" insert text -t "$SANDBOX/bin:$PATH" env/path < /dev/null
+    run "$FOLIO" exec gh/user PATH=env/path -- mine
+    [ "$status" -eq 0 ]
+    [ "$output" = "mine shared-user" ]
+}
+
 @test "exec: a name that is not a valid variable is left out with a warning" {
     make-store
-    run --separate-stderr "$FOLIO" exec odd -- sh -c 'echo "$ODD_OK|${ODD_API-unset}"'
+    run --separate-stderr "$FOLIO" exec odd -- sh -c 'echo "$ODD_OK|$ODD_API_KEY|${ODD_API-unset}"'
     [ "$status" -eq 0 ]
-    [ "$output" = "ok value|unset" ]
-    [[ $stderr == *"warning: 'odd/api-key' would be ODD_API-KEY"*"Use VAR=odd/api-key"* ]] || false
+    [ "$output" = "ok value|dash value|unset" ]
+    [[ $stderr == *"warning: 'odd/api+key' would be ODD_API+KEY"*"Use VAR=odd/api+key"* ]] || false
     # Given a VAR, it loads.
-    run "$FOLIO" exec ODD_API_KEY=odd/api-key -- printenv ODD_API_KEY
-    [ "$output" = "dash value" ]
+    run "$FOLIO" exec ODD_PLUS=odd/api+key -- printenv ODD_PLUS
+    [ "$output" = "plus value" ]
     # Left out and nothing else: there is nothing to load.
-    run "$FOLIO" exec odd/api-key -- true
+    run "$FOLIO" exec odd/api+key -- true
     [ "$status" -eq 1 ]
     [[ $output == *"nothing to load"* ]] || false
 }
