@@ -214,6 +214,31 @@ Guardrails — these hold whether or not the `land` skill is loaded:
   discards work. If git refuses, that refusal is the point: stop and tell the user what is
   unmerged or uncommitted, and let them decide.
 
+### Saying the session can be closed
+
+The user closes the session once the work is fully landed, and needs to see that at a glance.
+When — and only when — all of these hold, the reply ends with one line, set apart by an empty line
+before it (and nothing after it):
+
+- the asked-for work is done and its checks pass (Rule 1);
+- it is landed as the user asked: merged into main (the `land` skill), or, on main, committed when
+  they asked for a commit — nothing of it left only in a worktree or uncommitted (unless the user
+  said to leave it so);
+- nothing you started is still running (background tests, tmux sessions, booths);
+- no question is waiting on the user.
+
+````text
+
+```diff
++ 🟢 All work is landed — this session can be closed.
+```
+````
+
+It is the last thing in the reply, written as that `diff` code block: plain text cannot be
+coloured in the terminal, but a `+` line in a `diff` block is shown in green, so the text is green
+as well as the circle. If anything above is not true, never write that line: end instead with
+what is still open (`Not done yet: …`), so its absence is a signal too.
+
 ### Releasing
 
 A release is made by running the **Release** workflow (`.github/workflows/release.yml`) on `main`:
