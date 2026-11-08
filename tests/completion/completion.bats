@@ -150,7 +150,7 @@ EOF
 
 @test "completion: options from the command's help, long ones for - and --, with a description" {
     # --fresh-passphrase, last: every command takes it.
-    [ "$(words backup -)" = "--history,--encrypt,--file-passphrase-stdin,--file-passphrase-fd,--store-passphrase-fd,--help,--fresh-passphrase" ]
+    [ "$(words backup -)" = "--history,--encrypt,--file-passphrase-stdin,--file-passphrase-fd,--store-passphrase-fd,--help,--fresh-passphrase,--quiet" ]
     [ "$(words backup --e)" = "--encrypt" ]
     [ "$(words secret show -c)" = "-c" ]
     run "$FOLIO" __complete backup --hi

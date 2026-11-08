@@ -106,7 +106,7 @@ EOF
 @test "show secret: --qrcode and unknown options are refused" {
     make-store
     local arg
-    for arg in -q --qrcode --qrcode=1; do
+    for arg in --qrcode --qrcode=1; do
         run "$FOLIO" show secret "$arg" web/github
         [ "$status" -eq 1 ]
         [[ $output == *"--qrcode is not offered"* ]] || false

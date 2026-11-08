@@ -26,6 +26,7 @@ keyboard has a matching test in `tests/` named `MANUAL: <command> — <example>`
   [Without a prompt](#passphrases-without-a-prompt) ·
   [Never asked, on a machine you trust](#never-asked-on-a-machine-you-trust) ·
   [Leave no passphrase behind](#leave-no-passphrase-behind)
+- **Scripts:** [Just the output](#just-the-output) (`-q`, `--quiet`)
 
 ---
 
@@ -791,7 +792,7 @@ folio show secret [-c|--clip[=<line>]] [--store-passphrase-fd <n>] [--from <expo
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
 Only a secret can be shown. A folder is refused, because `pass show <folder>` would list it
-(use `folio ls secret`). `pass`'s `-q`/`--qrcode` is not offered. It needs a ready store
+(use `folio ls secret`). `pass`'s `--qrcode` is not offered (`-q` is [`--quiet`](#just-the-output)). It needs a ready store
 (`folio init`), unless it shows a secret in an export.
 
 ### Print a secret
@@ -925,7 +926,7 @@ folio generate secret [-n|--no-symbols] [-c|--clip] [-i|--in-place|-f|--force] [
 | `--store-passphrase-fd <n>` | The store key's passphrase (needed by `--in-place`, to read the rest), from the first line of file descriptor `<n>`, instead of gpg's prompt. See [Passphrases without a prompt](#passphrases-without-a-prompt). |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
-`pass`'s `-q`/`--qrcode` is not offered. **An existing secret is only asked about at a
+`pass`'s `--qrcode` is not offered (`-q` is [`--quiet`](#just-the-output)). **An existing secret is only asked about at a
 terminal.** From a script or pipe, it is overwritten (the old one stays in the git history).
 
 ### Generate a secret
@@ -2189,4 +2190,35 @@ export FOLIO_FRESH_PASSPHRASE=1     # 0, or unset, to turn it off
   all.
 - It needs `gpg-connect-agent`, which comes with gpg. A command killed outright (`kill -9`) cannot
   make the agent forget.
+
+---
+
+## Just the output
+
+What a command gives you — a text, a secret, a list — goes to **stdout**; everything EnvFolio says
+about it goes to **stderr**: the picture of an export's locks, the note before gpg asks for a
+passphrase, `Copied … to clipboard`, `folio shell: loaded …`, warnings and errors. So
+`user=$(folio show text --from app2-prod gh/user)` gets only the text, and `2>/dev/null` hides
+the rest.
+
+`-q` (`--quiet`) leaves those notes out, for when you know what comes next — in a script, or a
+command you run often. It goes with every command, anywhere before a `--`:
+
+```bash
+folio -q show text --from app2-prod gh/user
+folio show secret -c -q web/github          # copies it, says nothing
+```
+
+Or for every command, from your shell's profile:
+
+```bash
+export FOLIO_QUIET=1     # 0, or unset, to turn it off
+```
+
+- **Still said:** errors, warnings (an unsafe store folder, a secret left out without
+  `--secrets`) and every question. gpg's own prompt still asks for a passphrase.
+- **Not for `grep text` and `grep secret`**: there, `-q` and `--quiet` are grep's own, as typed;
+  `FOLIO_QUIET=1` still applies.
+- `-q` was once refused as `pass`'s `--qrcode`; it never reaches `pass` now, and there is still no
+  QR code.
 
