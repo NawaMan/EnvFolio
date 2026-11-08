@@ -38,5 +38,12 @@ asks to land/merge a worktree's work, never on your own initiative. The guardrai
    If git refuses, that refusal is the point: stop and tell the user what is unmerged or
    uncommitted, and let them decide.
 
+6. **Say whether the session can be closed.** When the land succeeded and nothing else is open,
+   end the reply with the green line from AGENTS.md (*Saying the session can be closed*): an empty
+   line, then a `diff` code block holding the one line
+   `+ 🟢 All work is landed — this session can be closed.` (a `+` line shows green), last. If
+   anything is left (git refused a cleanup, a stash could not be applied, a check failed), end with
+   `Not done yet: …` instead.
+
 **Never push** as part of landing. The merge in step 3 only ever touches the local `main` —
 pushing is its own explicit ask (Rule 4).
