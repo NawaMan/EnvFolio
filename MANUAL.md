@@ -237,16 +237,19 @@ only the colours away) — what scripts and the examples below see.
 Signatures (`.txt.sig`) are left out.
 
 ```
-folio ls [--flat] [--plain] [<subfolder>]
+folio ls [--flat] [--plain] [--from <export> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]] [<subfolder>]
 ```
 
 | Option | Meaning |
 | --- | --- |
 | `--flat` | Full names, one per line, sorted, instead of a tree: `(S)web/github`. |
 | `--plain` | Mark secrets (S) and texts (T), with no colour, even on a screen. |
+| `--from <export>` | List what is in a file made by `folio export`, not in the store: its path, ending in `.folio`, or its name in `FOLIO_FILE_DIR` (see [An export's path, or its name](#an-exports-path-or-its-name)). gpg asks for the file's passphrase, or uses your key the file is locked to. No store is needed, and none is made or touched; the file is opened in a private temporary folder, removed when `folio` is done. |
+| `--file-passphrase-fd <n>` | With `--from`: the file's passphrase, from the first line of file descriptor `<n>`, instead of gpg's prompt. |
+| `--key-passphrase-fd <n>` | With `--from`: the passphrase of the export's own key, if one was set on it when it was exported, from the first line of file descriptor `<n>`. |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
-Only a folder can be listed. It needs a ready store (`folio init`). `folio ls text` and
+Only a folder can be listed. It needs a ready store (`folio init`), unless it lists an export. `folio ls text` and
 `folio ls secret` list one kind (below); a folder named `text` or `secret` at the top is listed
 with its `/`: `folio ls text/`.
 
@@ -288,6 +291,23 @@ folio ls --flat
 
 One full name per line, ready for `grep` or a script.
 
+### List what is in an export file
+
+```bash
+folio ls --from app2-prod
+```
+
+```
+EnvFolio Export: ~/.local/folio/app2-prod.folio
+└── gh
+    ├── (S)token
+    └── (T)user
+```
+
+Lists what `folio export` put in the file, without importing it: `--from` takes the file's path or
+its name in `FOLIO_FILE_DIR`, as `folio exec --from` does. `ls text --from` and `ls secret --from`
+list one kind.
+
 ---
 
 ## `folio ls text`
@@ -297,17 +317,20 @@ tree as `pass ls`, but with the texts instead of the secrets. Signatures (`.txt.
 holding no texts are left out.
 
 ```
-folio ls text [--flat] [--plain] [<subfolder>]
+folio ls text [--flat] [--plain] [--from <export> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]] [<subfolder>]
 ```
 
 | Option | Meaning |
 | --- | --- |
 | `--flat` | Full names, one per line, sorted, instead of a tree. |
 | `--plain` | No colour, even on a screen. |
+| `--from <export>` | List the texts in a file made by `folio export`, not in the store: its path, ending in `.folio`, or its name in `FOLIO_FILE_DIR` (see [An export's path, or its name](#an-exports-path-or-its-name)). gpg asks for the file's passphrase, or uses your key the file is locked to. No store is needed, and none is made or touched; the file is opened in a private temporary folder, removed when `folio` is done. |
+| `--file-passphrase-fd <n>` | With `--from`: the file's passphrase, from the first line of file descriptor `<n>`, instead of gpg's prompt. |
+| `--key-passphrase-fd <n>` | With `--from`: the passphrase of the export's own key, if one was set on it when it was exported, from the first line of file descriptor `<n>`. |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
 Only a folder can be listed; a text's own name is refused (use `folio show text` once it exists).
-It needs a ready store (`folio init`).
+It needs a ready store (`folio init`), unless it lists an export.
 
 ### List every text
 
@@ -399,16 +422,19 @@ Prints a text, after checking its signature: `<name>.txt.sig` must be there, mat
 be by the store's key (the first key in `.gpg-id`). Checking needs no passphrase.
 
 ```
-folio show text [-c|--clip[=<line>]] <name>
+folio show text [-c|--clip[=<line>]] [--from <export> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]] <name>
 ```
 
 | Option | Meaning |
 | --- | --- |
 | `-c`, `--clip[=<line>]` | Copy the first line, or line `<line>`, to the clipboard and print nothing. **The clipboard is not cleared** afterwards: a text is not a secret. Needs `pbcopy`, `wl-copy` or `xclip`. |
+| `--from <export>` | Show the text in a file made by `folio export`, not in the store: its path, ending in `.folio`, or its name in `FOLIO_FILE_DIR` (see [An export's path, or its name](#an-exports-path-or-its-name)). gpg asks for the file's passphrase, or uses your key the file is locked to. No store is needed, and none is made or touched; the file is opened in a private temporary folder, removed when `folio` is done. |
+| `--file-passphrase-fd <n>` | With `--from`: the file's passphrase, from the first line of file descriptor `<n>`, instead of gpg's prompt. |
+| `--key-passphrase-fd <n>` | With `--from`: the passphrase of the export's own key, if one was set on it when it was exported, from the first line of file descriptor `<n>`. |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
 Only a text can be shown; a folder or a secret is refused (use `folio show secret` for secrets).
-It needs a ready store (`folio init`).
+It needs a ready store (`folio init`), unless it shows a text in an export.
 
 ### Show a text
 
@@ -435,6 +461,16 @@ is not printed and the command fails. The message says how to see what changed
 ```bash
 folio insert text -f -m web/user < ~/.folio/web/user.txt
 ```
+
+### Show a text in an export file
+
+```bash
+folio show text --from app2-prod gh/user
+```
+
+Prints `gh/user` from the export, without importing it. Its signature is checked with the
+export's own key, the one that signed it when it was exported; a text changed in the file since is
+not shown. `-c` works the same.
 
 ---
 
@@ -640,18 +676,21 @@ Lists the secrets in the EnvFolio store as a tree: names only, never their value
 without the texts: the same tree, minus `*.txt`/`*.txt.sig` files and folders holding only texts.
 
 ```
-folio ls secret [--flat] [--plain] [<subfolder>]
+folio ls secret [--flat] [--plain] [--from <export> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]] [<subfolder>]
 ```
 
 | Option | Meaning |
 | --- | --- |
 | `--flat` | Full names, one per line, sorted, instead of a tree. |
 | `--plain` | No colour, even on a screen. |
+| `--from <export>` | List the secrets in a file made by `folio export`, not in the store: its path, ending in `.folio`, or its name in `FOLIO_FILE_DIR` (see [An export's path, or its name](#an-exports-path-or-its-name)). gpg asks for the file's passphrase, or uses your key the file is locked to. No store is needed, and none is made or touched; the file is opened in a private temporary folder, removed when `folio` is done. |
+| `--file-passphrase-fd <n>` | With `--from`: the file's passphrase, from the first line of file descriptor `<n>`, instead of gpg's prompt. |
+| `--key-passphrase-fd <n>` | With `--from`: the passphrase of the export's own key, if one was set on it when it was exported, from the first line of file descriptor `<n>`. |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
 Only a folder can be listed. A secret's own name is refused, because `pass ls <name>` would
 print the secret (use `folio show secret` once it exists). The same goes for `pass`'s other
-options, such as `-c`. It needs a ready store (`folio init`).
+options, such as `-c`. It needs a ready store (`folio init`), unless it lists an export.
 
 ### List every secret
 
@@ -739,18 +778,21 @@ Decrypts a secret and prints it, or copies it to the clipboard. It is `pass show
 ask for the key's passphrase.
 
 ```
-folio show secret [-c|--clip[=<line>]] [--store-passphrase-fd <n>] <name>
+folio show secret [-c|--clip[=<line>]] [--store-passphrase-fd <n>] [--from <export> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]] <name>
 ```
 
 | Option | Meaning |
 | --- | --- |
 | `-c`, `--clip[=<line>]` | Copy the first line, or line `<line>`, to the clipboard and print nothing. The clipboard is cleared after 45 seconds (`PASSWORD_STORE_CLIP_TIME`). Needs `pbcopy`, `wl-copy` or `xclip`. |
-| `--store-passphrase-fd <n>` | The store key's passphrase, from the first line of file descriptor `<n>`, instead of gpg's prompt. See [Passphrases without a prompt](#passphrases-without-a-prompt). |
+| `--store-passphrase-fd <n>` | Without `--from`: the store key's passphrase, from the first line of file descriptor `<n>`, instead of gpg's prompt. See [Passphrases without a prompt](#passphrases-without-a-prompt). |
+| `--from <export>` | Show the secret in a file made by `folio export`, not in the store: its path, ending in `.folio`, or its name in `FOLIO_FILE_DIR` (see [An export's path, or its name](#an-exports-path-or-its-name)). gpg asks for the file's passphrase, or uses your key the file is locked to. No store is needed, and none is made or touched; the file is opened in a private temporary folder, removed when `folio` is done. |
+| `--file-passphrase-fd <n>` | With `--from`: the file's passphrase, from the first line of file descriptor `<n>`, instead of gpg's prompt. |
+| `--key-passphrase-fd <n>` | With `--from`: the passphrase of the export's own key, if one was set on it when it was exported, from the first line of file descriptor `<n>`. |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
 Only a secret can be shown. A folder is refused, because `pass show <folder>` would list it
 (use `folio ls secret`). `pass`'s `-q`/`--qrcode` is not offered. It needs a ready store
-(`folio init`).
+(`folio init`), unless it shows a secret in an export.
 
 ### Print a secret
 
@@ -776,6 +818,16 @@ folio show secret --clip=2 note
 ```
 
 Copies only line 2 of `note`, e.g. the user name kept under a password.
+
+### Show a secret in an export file
+
+```bash
+folio show secret --from app2-prod gh/token
+folio show secret -c --from app2-prod gh/token
+```
+
+Prints (or copies) `gh/token` from the export, without importing it: it is decrypted with the
+export's own key, in the file. Your keyring and store are not used.
 
 ---
 
@@ -1807,8 +1859,8 @@ How it works:
 
 ### An export's path, or its name
 
-Every command that takes an export file — `export -o`, `import`, `exec --from` and
-`shell --from` — takes it the same way:
+Every command that takes an export file — `export -o`, `import`, and `--from` of `exec`, `shell`,
+`show` and `ls` — takes it the same way:
 
 | Given | The file |
 | --- | --- |
@@ -1820,6 +1872,7 @@ So keep your exports in one folder, set `FOLIO_FILE_DIR` to it, and name them:
 ```bash
 export FOLIO_FILE_DIR=~/.local/folio
 folio export --secrets server --use @app2/@prod -o app2-prod     # ~/.local/folio/app2-prod.folio
+folio ls --from app2-prod                                         # what is in it
 folio exec --from app2-prod --secrets --all -- ./deploy.sh
 ```
 

@@ -84,6 +84,7 @@ Main() {
         help)    Help    "$@" ;;
         store)   store-is-gone "$@" ;;
         find|grep|show|insert|edit|generate|rm|mv|cp)
+                 case " $* " in *" -h "*|*" --help "*) kinds-help "$category" ; return 0 ;; esac
                  die "$category: a text or a secret? \`folio $category text …\` or \`folio $category secret …\`." ;;
         check)   die "check: check what? \`folio check vars <file>…\`." ;;
         "")      echo    "Usage: folio <init|path|backup|restore|export|import|text|secret|vars|ls|exec|shell|completion|version|help> [args...]" >&2 ; return 1 ;;
@@ -131,8 +132,18 @@ Help() {
         "secret mv")       secret-mv-help       ;;
         "secret cp")       secret-cp-help       ;;
         "vars check")      vars-check-help      ;;
+        find|grep|show|insert|edit|generate|rm|mv|cp)
+                           kinds-help "$*"      ;;
         *)                 echo "folio help: no help for '$*' yet." >&2 ; return 1 ;;
     esac
+}
+
+# kinds-help <action>: the help of `<action> text`, then of `<action> secret` — for
+# `folio <action> --help` and `folio help <action>`, which name no kind.
+function kinds-help() {
+    "text-$1-help"
+    echo
+    "secret-$1-help"
 }
 
 function folio-help() {
@@ -1995,14 +2006,26 @@ function verify-text() {
 
 function text-ls-help() {
     cat <<'EOF'
-Usage: folio ls text [--flat] [--plain] [<subfolder>]
+Usage: folio ls text [--flat] [--plain]
+                    [--from <export> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]] [<subfolder>]
 
 List the texts in the EnvFolio store as a tree — names only. Give a subfolder to list only what is
-under it.
+under it. With --from, list the texts in an export file instead.
 
 Options:
       --flat          Full names, one per line, sorted, instead of a tree.
       --plain         No colour, even on a screen.
+  --from <export>     List the texts in a file made by `folio export`, not in the store, which is
+                      then not needed. gpg asks for the file's passphrase, or uses your key the
+                      file is locked to; it is opened in a private temporary folder, removed when
+                      folio is done. <export> is the file's path, ending in .folio, or a name in
+                      $FOLIO_FILE_DIR: test is $FOLIO_FILE_DIR/test.folio.
+  --file-passphrase-fd <n>
+                      With --from: the file's passphrase, from the first line of file descriptor
+                      <n>, instead of gpg's prompt.
+  --key-passphrase-fd <n>
+                      With --from: the passphrase of the export's own key, if one was set on it
+                      when it was exported, from the first line of file descriptor <n>.
   -h, --help          Show this help and stop.
 EOF
 }
@@ -2011,7 +2034,8 @@ EOF
 # As `ls secret`: `pass ls`, for the texts. Only a folder; a text is shown by `show text`.
 TextLs() {
     case ${1:-} in -h|--help) text-ls-help ; return 0 ;; esac
-    require-store
+    take-from-options "ls text" "$@" ; set -- ${ARGS[@]+"${ARGS[@]}"}
+    open-store-or-export "ls text"
     list-store txt "Text Store" "ls text" "$@"
 }
 
@@ -2083,24 +2107,38 @@ TextGrep() {
 
 function text-show-help() {
     cat <<'EOF'
-Usage: folio show text [-c|--clip[=<line>]] <name>
+Usage: folio show text [-c|--clip[=<line>]]
+                       [--from <export> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]] <name>
 
 Show a text: check its signature, then print it. A text whose signature is missing, does not
 match, or is not by the store's key is not shown — it was changed outside EnvFolio.
 With --clip, copy its first line to the clipboard instead. A text is not a secret, so the
-clipboard is not cleared afterwards.
+clipboard is not cleared afterwards. With --from, show a text in an export file instead: its
+signature is checked with the export's own key.
 
 Options:
   -c, --clip[=<line>] Copy the first line — or line <line> — to the clipboard; print nothing.
+  --from <export>     Show the text in a file made by `folio export`, not in the store, which is
+                      then not needed. gpg asks for the file's passphrase, or uses your key the
+                      file is locked to; it is opened in a private temporary folder, removed when
+                      folio is done. <export> is the file's path, ending in .folio, or a name in
+                      $FOLIO_FILE_DIR: test is $FOLIO_FILE_DIR/test.folio.
+  --file-passphrase-fd <n>
+                      With --from: the file's passphrase, from the first line of file descriptor
+                      <n>, instead of gpg's prompt.
+  --key-passphrase-fd <n>
+                      With --from: the passphrase of the export's own key, if one was set on it
+                      when it was exported, from the first line of file descriptor <n>.
   -h, --help          Show this help and stop.
 EOF
 }
 
-# folio show text [-c|--clip[=<line>]] <name>
-# Only a text that verifies is shown: signed (<name>.txt.sig) by the store's key, unchanged since.
-# --clip picks a line as `pass show --clip` does.
+# folio show text [-c|--clip[=<line>]] [--from <export> [...]] <name>
+# Only a text that verifies is shown: signed (<name>.txt.sig) by the store's key, unchanged since
+# — or, with --from, by the export's own key. --clip picks a line as `pass show --clip` does.
 TextShow() {
     local clip="" names=() arg
+    take-from-options "show text" "$@" ; set -- ${ARGS[@]+"${ARGS[@]}"}
     while (( $# > 0 )); do
         arg=$1 ; shift
         case $arg in
@@ -2113,13 +2151,15 @@ TextShow() {
             *)          names+=("$arg") ;;
         esac
     done
-    (( ${#names[@]} == 1 )) || die "Usage: folio show text [-c|--clip[=<line>]] <name>"
+    (( ${#names[@]} == 1 )) || die "Usage: folio show text [-c|--clip[=<line>]] [--from <export> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]] <name>"
     local name=${names[0]} line copy
     [[ $name != -* && /$name/ != */../* ]] || die "show text: '$name' is not a valid name."
     [[ -z $clip || $clip =~ ^[1-9][0-9]*$ ]] || die "show text: '$clip' is not a line number."
-    require-store
-    [[ -f $STORE_PATH/$name.txt ]] || die "show text: '$name' is not a text in the store."
-    verify-text "$name"
+    open-store-or-export "show text"
+    [[ -f $STORE_PATH/$name.txt ]] || die "show text: '$name' is not a text in $ENTRIES_IN."
+    if [[ -n $FROM_EXPORT ]]; then verify-export-text "show text" "$name"
+    else                         verify-text "$name"
+    fi
     [[ -n $clip ]] || { cat "$STORE_PATH/$name.txt" ; return ; }
 
     line=$(tail -n "+$clip" "$STORE_PATH/$name.txt" | head -n 1)
@@ -2462,10 +2502,14 @@ function text-copy-move() {
 
 Secret() {
     local category="${1:-}" ; (( $# > 0 )) && shift
-    # Every secret command needs a ready store — except asking for its help.
-    case " $* " in
-        *" -h "*|*" --help "*) ;;
-        *) [[ -z $category ]] || require-store ;;
+    # Every secret command needs a ready store — except asking for its help, and ls and show,
+    # which open it themselves, or with --from, an export instead.
+    case $category in
+        ls|show) ;;
+        *)  case " $* " in
+                *" -h "*|*" --help "*) ;;
+                *) [[ -z $category ]] || require-store ;;
+            esac ;;
     esac
     case "$category" in
         ls)       SecretLs        "$@" ;;
@@ -2487,14 +2531,27 @@ Secret() {
 
 function secret-ls-help() {
     cat <<'EOF'
-Usage: folio ls secret [--flat] [--plain] [<subfolder>]
+Usage: folio ls secret [--flat] [--plain]
+                      [--from <export> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]] [<subfolder>]
 
 List the secrets in the EnvFolio store as a tree — names only, never their values.
-Give a subfolder to list only what is under it.
+Give a subfolder to list only what is under it. With --from, list the secrets in an export file
+instead.
 
 Options:
       --flat          Full names, one per line, sorted, instead of a tree.
       --plain         No colour, even on a screen.
+  --from <export>     List the secrets in a file made by `folio export`, not in the store, which is
+                      then not needed. gpg asks for the file's passphrase, or uses your key the
+                      file is locked to; it is opened in a private temporary folder, removed when
+                      folio is done. <export> is the file's path, ending in .folio, or a name in
+                      $FOLIO_FILE_DIR: test is $FOLIO_FILE_DIR/test.folio.
+  --file-passphrase-fd <n>
+                      With --from: the file's passphrase, from the first line of file descriptor
+                      <n>, instead of gpg's prompt.
+  --key-passphrase-fd <n>
+                      With --from: the passphrase of the export's own key, if one was set on it
+                      when it was exported, from the first line of file descriptor <n>.
   -h, --help          Show this help and stop.
 EOF
 }
@@ -2503,6 +2560,8 @@ EOF
 # `pass ls`, minus the texts. Only a folder: given an entry, `pass ls` would print the secret.
 SecretLs() {
     case ${1:-} in -h|--help) secret-ls-help ; return 0 ;; esac
+    take-from-options "ls secret" "$@" ; set -- ${ARGS[@]+"${ARGS[@]}"}
+    open-store-or-export "ls secret"
     list-store gpg "Secret Store" "ls secret" "$@"
 }
 
@@ -2565,24 +2624,39 @@ SecretGrep() { call-pass secret-grep-help grep "$@" ; }
 
 function secret-show-help() {
     cat <<'EOF'
-Usage: folio show secret [-c|--clip[=<line>]] [--store-passphrase-fd <n>] <name>
+Usage: folio show secret [-c|--clip[=<line>]] [--store-passphrase-fd <n>]
+                         [--from <export> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]] <name>
 
 Show a secret: decrypt it and print it. With --clip, copy its first line to the clipboard
-instead; the clipboard is cleared after 45 seconds (PASSWORD_STORE_CLIP_TIME).
+instead; the clipboard is cleared after 45 seconds (PASSWORD_STORE_CLIP_TIME). With --from, show
+a secret in an export file instead, decrypted with the export's own key.
 
 Options:
   -c, --clip[=<line>] Copy the first line — or line <line> — to the clipboard; print nothing.
   --store-passphrase-fd <n>
-                      The store key's passphrase, from the first line of file descriptor <n>,
-                      instead of gpg's prompt.
+                      Without --from: the store key's passphrase, from the first line of file
+                      descriptor <n>, instead of gpg's prompt.
+  --from <export>     Show the secret in a file made by `folio export`, not in the store, which is
+                      then not needed. gpg asks for the file's passphrase, or uses your key the
+                      file is locked to; it is opened in a private temporary folder, removed when
+                      folio is done. <export> is the file's path, ending in .folio, or a name in
+                      $FOLIO_FILE_DIR: test is $FOLIO_FILE_DIR/test.folio.
+  --file-passphrase-fd <n>
+                      With --from: the file's passphrase, from the first line of file descriptor
+                      <n>, instead of gpg's prompt.
+  --key-passphrase-fd <n>
+                      With --from: the passphrase of the export's own key, if one was set on it
+                      when it was exported, from the first line of file descriptor <n>.
   -h, --help          Show this help and stop.
 EOF
 }
 
-# folio show secret [-c|--clip[=<line>]] <name>
-# Only an entry goes through: given a folder, `pass show` would list it.
+# folio show secret [-c|--clip[=<line>]] [--from <export> [...]] <name>
+# Only an entry goes through: given a folder, `pass show` would list it. With --from, `pass show`
+# reads the unpacked export, with the export's own GnuPG home.
 SecretShow() {
     local clip=() names=() arg
+    take-from-options "show secret" "$@" ; set -- ${ARGS[@]+"${ARGS[@]}"}
     while (( $# > 0 )); do
         arg=$1 ; shift
         case $arg in
@@ -2594,9 +2668,14 @@ SecretShow() {
             *)                           names+=("$arg") ;;
         esac
     done
-    (( ${#names[@]} == 1 ))              || die "Usage: folio show secret [-c|--clip[=<line>]] <name>"
-    [[ -f $STORE_PATH/${names[0]}.gpg ]] || die "show secret: '${names[0]}' is not a secret in the store."
-    pass show "${clip[@]}" -- "${names[0]}"
+    (( ${#names[@]} == 1 ))              || die "Usage: folio show secret [-c|--clip[=<line>]] [--store-passphrase-fd <n>] [--from <export> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]] <name>"
+    open-store-or-export "show secret"
+    [[ -f $STORE_PATH/${names[0]}.gpg ]] || die "show secret: '${names[0]}' is not a secret in $ENTRIES_IN."
+    if [[ -n $FROM_EXPORT ]]; then
+        PASSWORD_STORE_DIR=$STORE_PATH GNUPGHOME=$EXPORT_HOME pass show "${clip[@]}" -- "${names[0]}"
+    else
+        pass show "${clip[@]}" -- "${names[0]}"
+    fi
 }
 
 # --- secret insert ------------------------------------------------------------
@@ -2747,17 +2826,29 @@ SecretCp() { call-pass secret-cp-help cp "$@" ; }
 
 function list-help() {
     cat <<'EOF'
-Usage: folio ls [--flat] [--plain] [<subfolder>]
+Usage: folio ls [--flat] [--plain]
+                [--from <export> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]] [<subfolder>]
 
 List the texts and secrets in the EnvFolio store together as a tree — names only, never values.
 Each name is marked (S) for a secret or (T) for a text — on a screen that draws emoji, 🔑 and 📄;
 secrets yellow and texts green (no colour with NO_COLOR set). Give a subfolder to list only what
-is under it.
+is under it. With --from, list what is in an export file instead.
 `folio ls text` and `folio ls secret` list one kind; a top folder named so: `folio ls text/`.
 
 Options:
       --flat          Full names, one per line, sorted, instead of a tree.
       --plain         Mark secrets (S) and texts (T), with no colour, even on a screen.
+  --from <export>     List what is in a file made by `folio export`, not in the store, which is
+                      then not needed. gpg asks for the file's passphrase, or uses your key the
+                      file is locked to; it is opened in a private temporary folder, removed when
+                      folio is done. <export> is the file's path, ending in .folio, or a name in
+                      $FOLIO_FILE_DIR: test is $FOLIO_FILE_DIR/test.folio.
+  --file-passphrase-fd <n>
+                      With --from: the file's passphrase, from the first line of file descriptor
+                      <n>, instead of gpg's prompt.
+  --key-passphrase-fd <n>
+                      With --from: the passphrase of the export's own key, if one was set on it
+                      when it was exported, from the first line of file descriptor <n>.
   -h, --help          Show this help and stop.
 EOF
 }
@@ -2766,7 +2857,8 @@ EOF
 # `ls secret` and `ls text` in one tree. Only a folder, as they are.
 Ls() {
     case ${1:-} in -h|--help) list-help ; return 0 ;; esac
-    require-store
+    take-from-options "ls" "$@" ; set -- ${ARGS[@]+"${ARGS[@]}"}
+    open-store-or-export "ls"
     list-store all "EnvFolio Store" "ls" "$@"
 }
 
@@ -3054,7 +3146,51 @@ function open-export-for() {
     fi
     open-export "$file" "$passphrase" quiet "$key_passphrase"
     unset passphrase key_passphrase
-    STORE_PATH=$EXPORT_ROOT ENTRIES_IN="the export"
+    STORE_PATH=$EXPORT_ROOT ENTRIES_IN="the export" EXPORT_FILE=$file
+}
+
+# take-from-options <command> [<arg>...]: for show and ls, which read the store or an export the
+# same way — --from <export>, --file-passphrase-fd <n> and --key-passphrase-fd <n> taken out, into
+# FROM_FILE, FROM_FD and FROM_KEY_FD; everything else left in ARGS, in order. Not after a --.
+FROM_FILE="" FROM_FD="" FROM_KEY_FD="" EXPORT_FILE=""
+function take-from-options() {
+    local command=$1 arg ; shift
+    ARGS=()
+    while (( $# > 0 )); do
+        arg=$1 ; shift
+        case $arg in
+            --)        ARGS+=(-- "$@") ; break ;;
+            --from|--file-passphrase-fd|--key-passphrase-fd)
+                       [[ $# -gt 0 && -n $1 ]] || die "$command: $arg needs a value."
+                       case $arg in
+                           --from)              FROM_FILE=$1   ;;
+                           --file-passphrase-fd) FROM_FD=$1     ;;
+                           *)                   FROM_KEY_FD=$1 ;;
+                       esac
+                       shift ;;
+            --from=*)               FROM_FILE=${arg#*=}   ;;
+            --file-passphrase-fd=*) FROM_FD=${arg#*=}     ;;
+            --key-passphrase-fd=*)  FROM_KEY_FD=${arg#*=} ;;
+            *)                      ARGS+=("$arg") ;;
+        esac
+    done
+}
+
+# open-store-or-export <command>: with --from (take-from-options), open that export and read from
+# it from here on, as exec --from does; the store is then not needed. Without, the store, ready.
+function open-store-or-export() {
+    local command=$1
+    if [[ -n $FROM_FILE ]]; then
+        [[ -z $STORE_PASSPHRASE_FD ]] || die "$command: --store-passphrase-fd is for the store; --from does not use it."
+        # Nor FOLIO_STORE_PASSPHRASE_FILE: the store is not opened.
+        STORE_PASSPHRASE_FILE=""
+        open-export-for "$command" "$FROM_FILE" "$FROM_FD" "$FROM_KEY_FD"
+        FROM_EXPORT=1
+    else
+        [[ -z $FROM_FD ]]     || die "$command: --file-passphrase-fd is for opening a --from file."
+        [[ -z $FROM_KEY_FD ]] || die "$command: --key-passphrase-fd is for opening a --from file."
+        require-store
+    fi
 }
 
 # export-and-exec <var>=<value>... -- <command> [<arg>...]
@@ -4501,10 +4637,12 @@ function list-store() {
         esac
     done
     set -- "${args[@]}"
-    (( $# <= 1 )) || die "Usage: folio $command [--flat] [--plain] [<subfolder>]"
+    (( $# <= 1 )) || die "Usage: folio $command [--flat] [--plain] [--from <export>] [<subfolder>]"
     [[ $# -eq 0 || ( $1 != -* && /$1/ != */../* && -d $STORE_PATH/$1 ) ]] \
-        || die "$command: '$1' is not a folder in the store."
+        || die "$command: '$1' is not a folder in $ENTRIES_IN."
     if (( flat )); then store-flat "$kind" "$STORE_PATH${1:+/${1%/}}" ; return ; fi
+    # From an export: "Text Export: ~/.local/folio/basic.folio".
+    [[ -z $FROM_EXPORT ]] || title="${title% Store} Export: $(tilde-path "$EXPORT_FILE")"
     echo "$title"
     [[ $# -eq 0 ]] || echo "${1%/}"
     store-tree "$kind" "$STORE_PATH/${1:-}"

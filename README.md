@@ -299,8 +299,8 @@ Texts are not `pass` entries: they are the `.txt` files next to the secrets.
 
 - `FOLIO_STORE_DIR` — the store's folder. Defaults to `$HOME/.folio`.
 - `FOLIO_FILE_DIR` — a folder of `.folio` export files, so one is named without its path:
-  `--from app2-prod` is `$FOLIO_FILE_DIR/app2-prod.folio`, for `exec`, `shell`, `import` and
-  `export -o`. A name ending in `.folio` is always a path. See
+  `--from app2-prod` is `$FOLIO_FILE_DIR/app2-prod.folio`, for `exec`, `shell`, `show`, `ls`,
+  `import` and `export -o`. A name ending in `.folio` is always a path. See
   [An export's path, or its name](MANUAL.md#an-exports-path-or-its-name).
 - `FOLIO_STORE_PASSPHRASE_FILE` — a file of yours only (`chmod 600`) whose first line is the store
   key's passphrase, so it is never asked — for a machine you trust. See
