@@ -67,7 +67,7 @@ make-files() {
     gpg-in "$NEW_GPG" "$FOLIO" insert text -t "https://example.com" web/home < /dev/null >/dev/null
     gpg-in "$NEW_GPG" "$FOLIO" insert secret web/github < <(printf 's3cr3t\ns3cr3t\n') >/dev/null
     gpg-in "$NEW_GPG" "$FOLIO" backup "$SANDBOX/out" < /dev/null >/dev/null 2>&1
-    gpg-in "$NEW_GPG" "$FOLIO" export -o "$SANDBOX/out/items" --secrets --to test@example.com web < /dev/null >/dev/null 2>&1
+    gpg-in "$NEW_GPG" "$FOLIO" export -o "$SANDBOX/out/items.folio" --secrets --to test@example.com web < /dev/null >/dev/null 2>&1
     gpg-in "$NEW_GPG" gpg --armor --export test@example.com > "$SANDBOX/test.asc"
     GNUPGHOME="$SANDBOX/new-gnupg" gpg-in "$NEW_GPG" gpgconf --kill all
     BACKUP=$(find "$SANDBOX/out" -name '*--folio.tar.gz')

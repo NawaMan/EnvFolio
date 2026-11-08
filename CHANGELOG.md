@@ -21,6 +21,10 @@ User-visible changes to EnvFolio. Newest first.
   use one yet), and reminds that opening the file then needs gpg 2.5.21 or later. `folio import`
   and `exec`/`shell --from` on an older gpg say so, instead of "has no secret key".
 
+- `FOLIO_FILE_DIR`: a folder for your `.folio` exports, so you can name one instead of giving its
+  path. `folio exec --from app2-prod` (and `shell --from`, `import`, `export -o`) is
+  `$FOLIO_FILE_DIR/app2-prod.folio`; a subfolder works too (`app2/prod`). Tab completes the names.
+
 ### Changed
 
 - A classical export's own key is now one RSA-3072 key that signs and encrypts, not Ed25519 with
@@ -29,6 +33,13 @@ User-visible changes to EnvFolio. Newest first.
 
 - The temporary keyring an export's key is used in now asks with your own pinentry (the
   `pinentry-program` in your `gpg-agent.conf`, a window one too).
+
+- **Every command that takes an export file reads it the same way:** one ending in `.folio` is a
+  path, as written; anything else is a name in `FOLIO_FILE_DIR`, and refused when that is not set.
+  For `folio export -o` this means `.folio` is no longer added to a path (`-o out/items` is now the
+  name `out/items`: write `-o out/items.folio`), and `-o <folder>` is gone (write
+  `-o <folder>/<name>.folio`). With no `-o`, the file offered is `store-<date>` in `FOLIO_FILE_DIR`
+  when it is set.
 
 - The README shows the latest release, and links to the website's videos and articles; the
   website links back to the README, and every episode's last slide shows the install script. The

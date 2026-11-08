@@ -116,21 +116,21 @@ old-gpg-meets-pqc() {
 @test "export: --to a post-quantum key — the summary says opening needs gpg 2.5.21 or later" {
     make-store
     key-kind() { echo "post-quantum (ky768_bp256)"; }
-    run Export --secrets --to test@example.com -o "$SANDBOX/out/to-me" web/github < /dev/null
+    run Export --secrets --to test@example.com -o "$SANDBOX/out/to-me.folio" web/github < /dev/null
     [ "$status" -eq 0 ]
     [[ $output == *"That needs the secret key of Test User <test@example.com>, and gpg 2.5.21 or later (the key is post-quantum)."* ]] || false
 }
 
 @test "export: --to a classical key — no word of it" {
     make-store
-    run Export --secrets --to test@example.com -o "$SANDBOX/out/to-me" web/github < /dev/null
+    run Export --secrets --to test@example.com -o "$SANDBOX/out/to-me.folio" web/github < /dev/null
     [ "$status" -eq 0 ]
     [[ $output == *"That needs the secret key of Test User <test@example.com>."* ]] || false
 }
 
 @test "import and --from: a file locked to a post-quantum key on a gpg that cannot use it — refused" {
     make-store
-    run Export --secrets --to test@example.com -o "$SANDBOX/out/to-me" web/github < /dev/null
+    run Export --secrets --to test@example.com -o "$SANDBOX/out/to-me.folio" web/github < /dev/null
     [ "$status" -eq 0 ]
     old-gpg-meets-pqc
     run Import --all "$SANDBOX/out/to-me.folio" < /dev/null
@@ -143,7 +143,7 @@ old-gpg-meets-pqc() {
 
 @test "import and --from: a gpg that cannot use the export's key (T8469) — refused, nothing changed" {
     make-store
-    run Export --secrets --file-passphrase-fd 3 -o "$SANDBOX/out/items" web/github < /dev/null 3< <(printf 'x\n')
+    run Export --secrets --file-passphrase-fd 3 -o "$SANDBOX/out/items.folio" web/github < /dev/null 3< <(printf 'x\n')
     [ "$status" -eq 0 ]
     # Fake: this gpg imports the export's key, then cannot decrypt with it.
     # shellcheck disable=SC2317  # called by the command under test
@@ -163,7 +163,7 @@ old-gpg-meets-pqc() {
 
 @test "export: the export's own key is one RSA key that signs and encrypts, not cv25519 (some gpg builds cannot use one just imported)" {
     make-store
-    run Export --secrets --file-passphrase-fd 3 -o "$SANDBOX/out/items" web/github < /dev/null 3< <(printf 'x\n')
+    run Export --secrets --file-passphrase-fd 3 -o "$SANDBOX/out/items.folio" web/github < /dev/null 3< <(printf 'x\n')
     [ "$status" -eq 0 ]
     mkdir "$SANDBOX/x"
     gpg --batch --pinentry-mode loopback --passphrase x --decrypt "$SANDBOX/out/items.folio" 2>/dev/null | tar -xzf - -C "$SANDBOX/x"
@@ -174,7 +174,7 @@ old-gpg-meets-pqc() {
 
 @test "can-use-imported-key: yes for a key this gpg imported and can use" {
     make-store
-    run Export --secrets --file-passphrase-fd 3 -o "$SANDBOX/out/items" web/github < /dev/null 3< <(printf 'x\n')
+    run Export --secrets --file-passphrase-fd 3 -o "$SANDBOX/out/items.folio" web/github < /dev/null 3< <(printf 'x\n')
     [ "$status" -eq 0 ]
     # open-export runs it on the export's key; it gets this far only when it says yes.
     run Exec --secrets --from "$SANDBOX/out/items.folio" --file-passphrase-fd 3 web/github -- true 3< <(printf 'x\n')
@@ -185,14 +185,14 @@ old-gpg-meets-pqc() {
     make-store
     # shellcheck disable=SC2317  # called by Export
     gpg-has-pqc() { return 1; }
-    run Export --secrets --file-passphrase-fd 3 web/github < <(printf '%s\n' "$SANDBOX/out/items" "") 3< <(printf 'x\n')
+    run Export --secrets --file-passphrase-fd 3 web/github < <(printf '%s\n' "$SANDBOX/out/items.folio" "") 3< <(printf 'x\n')
     [ "$status" -eq 0 ]
     [[ $output != *"Which kind of key"* && $output == *"Key type: Classical — RSA-3072"* ]] || false
 }
 
 @test "import and --from: an export whose own key is post-quantum, on a gpg that cannot use it — refused" {
     make-store
-    run Export --secrets --file-passphrase-fd 3 -o "$SANDBOX/out/items" web/github < /dev/null 3< <(printf 'x\n')
+    run Export --secrets --file-passphrase-fd 3 -o "$SANDBOX/out/items.folio" web/github < /dev/null 3< <(printf 'x\n')
     [ "$status" -eq 0 ]
     # Fake: only the export's key.asc is post-quantum (the file is locked with a passphrase).
     # shellcheck disable=SC2317  # called by the command under test

@@ -72,7 +72,7 @@ make-store() {
     make-pqc-key "Server <server@example.com>"
     gpg --armor --export server@example.com > "$SANDBOX/server.asc"
     GNUPGHOME="$SANDBOX/gnupg"
-    run "$FOLIO" export -o "$SANDBOX/out/to-server" --secrets --to "$SANDBOX/server.asc" web < /dev/null
+    run "$FOLIO" export -o "$SANDBOX/out/to-server.folio" --secrets --to "$SANDBOX/server.asc" web < /dev/null
     [ "$status" -eq 0 ]
     [[ $output == *"gpg 2.5.21 or later (the key is post-quantum)"* ]] || false
 
@@ -96,7 +96,7 @@ unpack-key() {
 @test "real gpg: export — the key's kind is asked; Enter takes classical" {
     make-store
     run "$FOLIO" export --secrets --file-passphrase-fd 5 web \
-        < <(printf '%s\n' "$SANDBOX/out/items" "" "") 5< <(printf 'fp\n')
+        < <(printf '%s\n' "$SANDBOX/out/items.folio" "" "") 5< <(printf 'fp\n')
     [ "$status" -eq 0 ]
     [[ $output == *"Which kind of key for the export's own key?"*"opening the file needs gpg 2.5.21 or later, there too"* ]] || false
     [[ $output == *"Key type: Classical — RSA-3072"* && $output != *"export's own key is post-quantum"* ]] || false
@@ -108,7 +108,7 @@ unpack-key() {
 @test "real gpg: export — a post-quantum key picked, said what it needs there; imported there" {
     make-store
     run "$FOLIO" export --secrets --file-passphrase-fd 5 web \
-        < <(printf '%s\n' "$SANDBOX/out/items" 2 "") 5< <(printf 'fp\n')
+        < <(printf '%s\n' "$SANDBOX/out/items.folio" 2 "") 5< <(printf 'fp\n')
     [ "$status" -eq 0 ]
     [[ $output == *"Key type: Post-quantum"* && $output == *"gpg must be 2.5.21 or later: check there first"* ]] || false
     [[ $output == *"and gpg 2.5.21 or later (the export's own key is post-quantum)."* ]] || false
@@ -127,7 +127,7 @@ unpack-key() {
 
 @test "real gpg: export --key-type pqc — not asked; the key is post-quantum" {
     make-store
-    run "$FOLIO" export --key-type pqc --secrets -o "$SANDBOX/out/items" --file-passphrase-fd 5 web \
+    run "$FOLIO" export --key-type pqc --secrets -o "$SANDBOX/out/items.folio" --file-passphrase-fd 5 web \
         < /dev/null 5< <(printf 'fp\n')
     [ "$status" -eq 0 ]
     [[ $output != *"Which kind of key"* ]] || false

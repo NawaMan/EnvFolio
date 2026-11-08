@@ -64,7 +64,7 @@ shows-nothing-secret() {
 }
 
 @test "x-ray: an export with a passphrase — locked, not opened without --open" {
-    "$FOLIO" export -o "$SANDBOX/out/pw" --file-passphrase-stdin web < <(printf 'p\n') >/dev/null 2>&1
+    "$FOLIO" export -o "$SANDBOX/out/pw.folio" --file-passphrase-stdin web < <(printf 'p\n') >/dev/null 2>&1
     run "$XRAY" "$SANDBOX/out/pw.folio"
     [ "$status" -eq 0 ]
     [[ $output == *"locked with a passphrase (AES256)"* && $output == *"--open to unlock it"* ]] || false
@@ -76,7 +76,7 @@ shows-nothing-secret() {
     GNUPGHOME="$SANDBOX/there" gpg --batch --passphrase '' \
         --quick-generate-key "Server <server@example.com>" default default never 2>/dev/null
     GNUPGHOME="$SANDBOX/there" gpg --armor --export server@example.com > "$SANDBOX/server.asc"
-    "$FOLIO" export -o "$SANDBOX/out/to" --secrets --to "$SANDBOX/server.asc" web < /dev/null >/dev/null 2>&1
+    "$FOLIO" export -o "$SANDBOX/out/to.folio" --secrets --to "$SANDBOX/server.asc" web < /dev/null >/dev/null 2>&1
     GNUPGHOME="$SANDBOX/there" run "$XRAY" --open "$SANDBOX/out/to.folio"
     [ "$status" -eq 0 ]
     [[ $output == *"encrypted to "*"Server <server@example.com>"* && $output == *"folio-export 1"* ]] || false
