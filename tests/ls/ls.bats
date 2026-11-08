@@ -81,7 +81,7 @@ web
     [[ $output != *"s3cr3t"* && $output != *".sig"* && $output != *".gpg-id"* && $output != *".git"* ]] || false
     run "$FOLIO" ls --flat web extra
     [ "$status" -eq 1 ]
-    [[ $output == *"Usage: folio ls [--flat] [--plain] [<subfolder>]"* ]] || false
+    [[ $output == *"Usage: folio ls [--flat] [--plain] [--from <export>] [<subfolder>]"* ]] || false
 }
 
 @test "ls: a top folder named text is ls text/; ls text lists the texts" {
@@ -222,5 +222,5 @@ ${g}(T)web/home$off" ]
     TERM=linux LC_ALL=C.UTF-8 run on-screen ls --flat web
     [ "$output" = $'\e[33m(S)web/github\e[0m\n\e[32m(T)web/github\e[0m\n\e[32m(T)web/home\e[0m' ]
     run "$FOLIO" ls --plain web extra
-    [[ $output == *"Usage: folio ls [--flat] [--plain] [<subfolder>]"* ]] || false
+    [[ $output == *"Usage: folio ls [--flat] [--plain] [--from <export>] [<subfolder>]"* ]] || false
 }
