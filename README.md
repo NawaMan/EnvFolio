@@ -139,7 +139,9 @@ accident.
 | `folio help [command]`, `folio version` | Help and version |
 
 The kind can come first too: `folio secret show` is `folio show secret`. Every command takes
-`--fresh-passphrase` to have gpg-agent forget the store key's passphrase when it starts and ends.
+`--fresh-passphrase` to have gpg-agent forget the store key's passphrase when it starts and ends,
+and `-q` (`--quiet`) to leave out the notes on what happens next: only the output, on stdout (the
+notes go to stderr either way).
 Details: [MANUAL.md](MANUAL.md).
 
 ## Naming the variables
@@ -308,6 +310,8 @@ Texts are not `pass` entries: they are the `.txt` files next to the secrets.
 - `FOLIO_FRESH_PASSPHRASE` — set to `1` to have gpg-agent forget the store key's passphrase when
   each command starts and ends, as `--fresh-passphrase` does. See
   [Leave no passphrase behind](MANUAL.md#leave-no-passphrase-behind).
+- `FOLIO_QUIET` — set to `1` to leave out the notes on what happens next (the picture of an
+  export's locks, `Copied …`), as `-q` does. See [Just the output](MANUAL.md#just-the-output).
 - `FOLIO_SHELL` — set to `1` inside `folio shell`, for your prompt to show.
 - `pass`'s own settings apply too, such as `PASSWORD_STORE_CLIP_TIME` (how long a copied secret
   stays) and `PASSWORD_STORE_GENERATED_LENGTH` (the length of `generate`).

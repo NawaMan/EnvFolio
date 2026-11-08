@@ -44,9 +44,12 @@ export PASSWORD_STORE_DIR="$STORE_PATH"
 Main() {
     # Asked at every Tab press, by the scripts of `folio completion`: quick, and quiet.
     if [[ ${1:-} == __complete ]]; then shift ; complete-words "$@" ; return 0 ; fi
-    # --fresh-passphrase (or FOLIO_FRESH_PASSPHRASE=1) goes with every command, so it is taken here.
+    # --fresh-passphrase (or FOLIO_FRESH_PASSPHRASE=1) and -q/--quiet (or FOLIO_QUIET=1) go with
+    # every command, so they are taken here.
     take-fresh-passphrase "$@"
     set -- "${ARGS[@]}"
+    take-quiet "$@"
+    set -- ${ARGS[@]+"${ARGS[@]}"}
     # `folio show text …` is run as `folio text show …`, the order the code below takes.
     if is-action-first "${1:-}" "${2:-}"; then set -- "$2" "$1" "${@:3}" ; fi
     # Quiet when all is there; otherwise show the table and stop.
@@ -188,6 +191,10 @@ Commands:
 Options for every command:
   --fresh-passphrase  Have gpg-agent forget the store key's passphrase at the start and the end
                       (also FOLIO_FRESH_PASSPHRASE=1)
+  -q, --quiet         Leave out the notes on what happens next (the picture of an export's
+                      locks, "Copied …"); errors, warnings and questions are still said. All of
+                      it goes to stderr either way. (Also FOLIO_QUIET=1.) Not for grep, where
+                      -q is grep's own.
 
 The kind can also come first: `folio text show` is `folio show text`.
 The store is $FOLIO_STORE_DIR, default ~/.folio. EnvFolio warns when that folder is someone
@@ -1351,7 +1358,7 @@ EOF
         fi
         if (( ask_key )); then
             show-locks key-again "$lock1" "$lock2" "$file"
-            info "gpg asks for Lock 2 once more: the same passphrase, to pack the key into the file." >&2
+            note "gpg asks for Lock 2 once more: the same passphrase, to pack the key into the file."
         fi
     fi
     GNUPGHOME=$home "${with_key[@]}" --armor --export-secret-keys "$key" > "$pack/key.asc" 2>/dev/null \
@@ -1758,7 +1765,7 @@ function open-export() {
     if is-protected-key "$stage/unpack/key.asc"; then
         if [[ -z $key_passphrase ]]; then
             show-locks key "$(file-lock-label "$file")" yes "$file"
-            info "gpg asks for the passphrase of the export's own key: the one set on it when it was exported." >&2
+            note "gpg asks for the passphrase of the export's own key: the one set on it when it was exported."
         fi
         unlock-export-key "$home" "$key" "$key_passphrase" \
             || die "Cannot unlock the key in $file: its passphrase (set when it was exported) is not right," \
@@ -2173,7 +2180,7 @@ TextShow() {
     # stdout away: a clipboard tool that stays to serve the copy must not hold `$(folio ...)`
     # open.
     printf '%s' "$line" | "${copy[@]}" >/dev/null || die "show text: could not copy to the clipboard."
-    echo "Copied $name to clipboard. A text is not a secret: the clipboard is not cleared."
+    note "Copied $name to clipboard. A text is not a secret: the clipboard is not cleared."
 }
 
 # --- text insert --------------------------------------------------------------
@@ -2671,10 +2678,12 @@ SecretShow() {
     (( ${#names[@]} == 1 ))              || die "Usage: folio show secret [-c|--clip[=<line>]] [--store-passphrase-fd <n>] [--from <export> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]] <name>"
     open-store-or-export "show secret"
     [[ -f $STORE_PATH/${names[0]}.gpg ]] || die "show secret: '${names[0]}' is not a secret in $ENTRIES_IN."
-    if [[ -n $FROM_EXPORT ]]; then
-        PASSWORD_STORE_DIR=$STORE_PATH GNUPGHOME=$EXPORT_HOME pass show "${clip[@]}" -- "${names[0]}"
-    else
-        pass show "${clip[@]}" -- "${names[0]}"
+    # With --clip, all pass says on stdout is "Copied …": a note, so to stderr, where the notes go.
+    local show=(pass show)
+    [[ -z $FROM_EXPORT ]] || show=(env PASSWORD_STORE_DIR="$STORE_PATH" GNUPGHOME="$EXPORT_HOME" pass show)
+    if (( ${#clip[@]} == 0 )); then "${show[@]}" -- "${names[0]}"
+    elif (( QUIET ));         then "${show[@]}" "${clip[@]}" -- "${names[0]}" >/dev/null
+    else                           "${show[@]}" "${clip[@]}" -- "${names[0]}" >&2
     fi
 }
 
@@ -3105,8 +3114,8 @@ function exec-with-entries() {
         local names
         names=$(printf ', %s' "${EXEC_VARS[@]}")
         local others="" ; (( values == 0 )) || others=", from vars files: $values"
-        printf "folio shell: loaded %s (texts: %d, secrets: %d%s). Type 'exit' to leave.\n" \
-            "${names#, }" "$texts" $(( ${#EXEC_VARS[@]} - texts - values )) "$others" >&2
+        note "$(printf "folio shell: loaded %s (texts: %d, secrets: %d%s). Type 'exit' to leave." \
+            "${names#, }" "$texts" $(( ${#EXEC_VARS[@]} - texts - values )) "$others")"
         export FOLIO_SHELL=1
     fi
     if [[ -n $CALLER_STORE_DIR_SET ]]; then export PASSWORD_STORE_DIR=$CALLER_STORE_DIR
@@ -3142,7 +3151,7 @@ function open-export-for() {
         unset PASSPHRASE
     elif is-passphrase-locked "$file"; then
         show-locks file "$(file-lock-label "$file")" maybe "$file"
-        info "folio $how: gpg asks for the passphrase of $(tilde-path "$file")." >&2
+        note "folio $how: gpg asks for the passphrase of $(tilde-path "$file")."
     fi
     open-export "$file" "$passphrase" quiet "$key_passphrase"
     unset passphrase key_passphrase
@@ -4083,6 +4092,7 @@ function complete-words() {
     # --fresh-passphrase goes with every command, anywhere: the words before the last are taken without it.
     for (( i = ${#words[@]} - 2; i >= 0; i-- )); do
         [[ ${words[i]} == --fresh-passphrase ]] && words=("${words[@]:0:i}" "${words[@]:i+1}")
+        [[ ${words[i]} == --quiet ]] && words=("${words[@]:0:i}" "${words[@]:i+1}")
     done
     cur=${words[${#words[@]}-1]}
     if (( ${#words[@]} == 1 )); then complete-commands "" "$cur" ; return 0 ; fi
@@ -4309,6 +4319,7 @@ function help-options() {
     done < <(Help "$@" 2>/dev/null)
     [[ -z $row ]] || help-option-lines "$row" ""
     printf '%s\t-\t%s\n' --fresh-passphrase "Have gpg-agent forget the store key's passphrase at the start and the end"
+    printf '%s\t-\t%s\n' --quiet "Leave out the notes on what happens next; errors and questions are still said"
 }
 
 # help-option-lines <row> <next line>: help-options' lines for one row of Options:, e.g.
@@ -4546,6 +4557,35 @@ function take-fresh-passphrase() {
         esac
     done
 }
+
+# With -q/--quiet (or FOLIO_QUIET=1), EnvFolio leaves out what it says only to tell you what
+# happens next: the picture of an export's locks, the notes before gpg asks for a passphrase,
+# "Copied … to clipboard" and shell's "loaded …". Errors, warnings and questions are still said.
+QUIET=0
+
+# take-quiet [args...]: take -q/--quiet out of the args (up to a --) into QUIET, also set by
+# FOLIO_QUIET=1; the rest go into ARGS. Not for grep text|secret, where they are grep's own.
+function take-quiet() {
+    local arg grep=0
+    case ${FOLIO_QUIET:-} in
+        ""|0) ;;
+        1)    QUIET=1 ;;
+        *)    die "FOLIO_QUIET is 1 (on) or 0 (off), not '$FOLIO_QUIET'." ;;
+    esac
+    [[ ${1:-} == grep || ${2:-} == grep ]] && grep=1
+    ARGS=()
+    while (( $# > 0 )); do
+        arg=$1 ; shift
+        case $arg in
+            --)         ARGS+=("$arg" "$@") ; break ;;
+            -q|--quiet) if (( grep )); then ARGS+=("$arg") ; else QUIET=1 ; fi ;;
+            *)          ARGS+=("$arg") ;;
+        esac
+    done
+}
+
+# note <text>...: say <text> on stderr — a note on what happens next, left out with --quiet.
+function note() { (( QUIET )) || printf '%s\n' "$*" >&2 ; }
 
 # start-fresh-passphrase: with --fresh-passphrase, have gpg-agent forget the store key's passphrase
 # now, and once more when EnvFolio exits. The store is kept by its path now: STORE_PATH points at an
@@ -4997,6 +5037,7 @@ function show-box() {
 # passphrase of the export's own key inside it: yes, no, or maybe (not known before the file is
 # open). The lock asked for is marked with an arrow, and in colour on a screen that shows it.
 function show-locks() {
+    (( ! QUIET )) || return 0
     local asked=$1 lock1="Lock 1  $2" name=${4##*/} key_row on="" off="" arrow
     case $3 in
         yes) key_row="Lock 2  the passphrase of the export's own key" ;;

@@ -77,7 +77,7 @@ make-store() {
 @test "generate text: bad arguments are refused" {
     make-store
     local args
-    for args in "" "-i -f x" "x 0" "x abc" "x 5 6" "-c x" "-q x"; do
+    for args in "" "-i -f x" "x 0" "x abc" "x 5 6" "-c x" "-z x"; do
         # shellcheck disable=SC2086  # split the arguments
         run "$FOLIO" generate text $args < /dev/null
         [ "$status" -eq 1 ]
@@ -87,8 +87,8 @@ make-store() {
         run "$FOLIO" generate text $args < /dev/null
         [[ $output == *"the length must be a number above 0."* ]] || false
     done
-    run "$FOLIO" generate text -q x < /dev/null
-    [[ $output == *"generate text: unknown option: -q"* ]] || false
+    run "$FOLIO" generate text -z x < /dev/null
+    [[ $output == *"generate text: unknown option: -z"* ]] || false
     run "$FOLIO" generate text ../out < /dev/null
     [ "$status" -eq 1 ]
     [[ $output == *"is not a valid name"* ]] || false

@@ -5,6 +5,7 @@
 # Also `folio show --help` and `folio help show`, which name no kind.
 
 bats_require_minimum_version 1.5.0    # run --separate-stderr
+load ../store/fake-pinentry
 
 setup() {
     SANDBOX=$(mktemp -d)
@@ -135,15 +136,23 @@ EOF
 @test "show --from --clip: a secret's line to the clipboard (cleared after), a text's too" {
     make-export ; go-there
     fake-clipboard
-    run "$FOLIO" show secret --clip=2 --from "$FILE" --file-passphrase-fd 3 note 3< <(printf 'export pass\n')
+    # "Copied …" is a note: on stderr, so stdout has nothing; with -q, not said at all.
+    run --separate-stderr "$FOLIO" show secret --clip=2 --from "$FILE" --file-passphrase-fd 3 note 3< <(printf 'export pass\n')
     [ "$status" -eq 0 ]
-    [[ $output == *"Copied note to clipboard"*"clear in 60 seconds"* ]] || false
-    [[ $output != *"line"* ]] || false
+    [ -z "$output" ]
+    [[ $stderr == *"Copied note to clipboard"*"clear in 60 seconds"* ]] || false
+    [[ $stderr != *"line"* ]] || false
     [ "$(cat "$CLIPBOARD")" = "line two" ]
-    run "$FOLIO" show text -c --from "$FILE" --file-passphrase-fd 3 gh/user 3< <(printf 'export pass\n')
+    run --separate-stderr "$FOLIO" show text -c --from "$FILE" --file-passphrase-fd 3 gh/user 3< <(printf 'export pass\n')
     [ "$status" -eq 0 ]
-    [[ $output == *"Copied gh/user to clipboard"* ]] || false
+    [ -z "$output" ]
+    [[ $stderr == *"Copied gh/user to clipboard"* ]] || false
     [ "$(cat "$CLIPBOARD")" = "shared-user" ]
+    run --separate-stderr "$FOLIO" -q show secret -c --from "$FILE" --file-passphrase-fd 3 gh/token 3< <(printf 'export pass\n')
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+    [ -z "$stderr" ]
+    [ "$(cat "$CLIPBOARD")" = "shared-token" ]
 }
 
 @test "show and ls --from: what the export does not have is refused, and says the export" {
@@ -196,6 +205,40 @@ EOF
     [ "$status" -eq 1 ]
     [[ $output == *"show text: the signature of 'gh/user' in the export does not verify."* ]] || false
     [[ $output != *"changed"* ]] || false
+    left-clean
+}
+
+@test "-q, --quiet, FOLIO_QUIET=1: no picture of the locks, no notes; the value on stdout, errors still said" {
+    make-export
+    # grep's own -q is left to grep: the line found is not printed.
+    run "$FOLIO" grep text -q shared
+    [ "$status" -eq 0 ]
+    [[ $output != *"shared-user"* ]] || false
+    go-there
+    use-pinentry 'export pass'
+    # Without: the picture and the note, on stderr only.
+    run --separate-stderr "$FOLIO" show text --from "$FILE" gh/user
+    [ "$status" -eq 0 ]
+    [ "$output" = "shared-user" ]
+    [[ $stderr == *"Lock 1  the file's passphrase"*"gpg asks for this one now"* ]] || false
+    [[ $stderr == *"folio show text: gpg asks for the passphrase of"* ]] || false
+    for quiet in "-q" "--quiet" "FOLIO_QUIET=1"; do
+        gpgconf --kill gpg-agent    # so gpg asks again
+        if [[ $quiet == FOLIO_QUIET=1 ]]; then
+            run --separate-stderr env FOLIO_QUIET=1 "$FOLIO" ls --flat --plain --from "$FILE"
+        else
+            run --separate-stderr "$FOLIO" ls --flat --plain "$quiet" --from "$FILE"
+        fi
+        [ "$status" -eq 0 ]
+        [ "$output" = $'(S)gh/token\n(T)gh/user\n(T)git/email\n(S)note' ]
+        [ -z "$stderr" ]
+    done
+    run --separate-stderr "$FOLIO" -q show text --from "$FILE" gh/nope
+    [ "$status" -eq 1 ]
+    [[ $stderr == *"'gh/nope' is not a text in the export."* ]] || false
+    run env FOLIO_QUIET=yes "$FOLIO" ls --from "$FILE"
+    [ "$status" -eq 1 ]
+    [[ $output == *"FOLIO_QUIET is 1 (on) or 0 (off), not 'yes'."* ]] || false
     left-clean
 }
 
