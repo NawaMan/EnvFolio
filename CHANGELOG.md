@@ -42,6 +42,16 @@ User-visible changes to EnvFolio. Newest first.
 
 ### Changed
 
+- An entry's variable name turns `-` and `.` into `_` too, as it did `/`: `gh/api-key` is
+  `GH_API_KEY` and `db/host.name` is `DB_HOST_NAME`, for `exec`, `shell` and vars files — no longer
+  left out with a warning. `api-key` beside `api_key` in one folder is refused, as `a/b` beside
+  `a_b` is. A name still not valid (one starting with a digit, or with `+` or a space) is still
+  left out with the warning.
+
+- `exec` with a command that is not there says `there is no command '…' to run.` (exit 127), not
+  bash's `line …: exec: …: not found`; typed in quotes as for a shell (`-- 'echo $GH_USER'`), it says
+  the command runs without one, and how: `sh -c '…'`.
+
 - A classical export's own key is now one RSA-3072 key that signs and encrypts, not Ed25519 with
   an RSA-3072 subkey: with a passphrase on it, gpg asks you to choose it once, not for each part.
   Exports made before still open.
