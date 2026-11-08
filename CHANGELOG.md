@@ -42,6 +42,12 @@ User-visible changes to EnvFolio. Newest first.
 
 ### Changed
 
+- **Breaking** (why this is 2.0.0): `folio export -o` takes an export the way every command now
+  does — `-o out/items` is a name in `FOLIO_FILE_DIR`, not `out/items.folio`, and `-o <folder>` is
+  gone (both below). And `-` and `.` in an entry's name now give a variable (`gh/api-key` is
+  `GH_API_KEY`): a folder holding both `api-key` and `api_key` is refused as a clash, where
+  `api_key` loaded before.
+
 - An entry's variable name turns `-` and `.` into `_` too, as it did `/`: `gh/api-key` is
   `GH_API_KEY` and `db/host.name` is `DB_HOST_NAME`, for `exec`, `shell` and vars files — no longer
   left out with a warning. `api-key` beside `api_key` in one folder is refused, as `a/b` beside

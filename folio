@@ -2881,11 +2881,13 @@ Usage: folio exec [-s|--secrets] [-a|--all] [-n|--names|--debug|--confirm] [--pl
                   <entry>... -- <command> [<arg>...]
 
 Run a command with entries from the store as environment variables. Texts load by default;
-secrets only with --secrets. Values are never printed.
+secrets only with --secrets. Values are never printed. The command runs as typed, without a
+shell: for $VAR, pipes or &&, run one — `folio exec gh -- sh -c 'echo "$GH_USER"'`.
 
 An <entry> is a text or secret name, a folder (every entry under it), or VAR=<name> to pick
 the variable's name. Otherwise the name comes from the entry's path: a top folder starting with @
-(a namespace) is removed, / turns into _, and it is uppercased (@nawa/gh/token -> GH_TOKEN).
+(a namespace) is removed, / - and . turn into _, and it is uppercased (@nawa/gh/token -> GH_TOKEN,
+gh/api-key -> GH_API_KEY).
 --use @prod takes every entry under @prod as if @prod/ were not in its path: @prod/server/user
 is server/user, everywhere, also to a vars file. Only namespaces peel, from the front:
 --use @app2/@prod. The entries, --all and --use are taken in the order typed, and the last one
