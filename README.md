@@ -130,7 +130,7 @@ accident.
 | `folio path` | Print the store's folder |
 | `folio backup` / `restore` | The whole store and its key, in one file and back |
 | `folio export` / `import` | Some items, in one locked file and into another store |
-| `folio ls [text\|secret]` | List items, as a tree or flat |
+| `folio ls [text\|secret]` | List items, as a tree or flat — of the store, or with `--from`, of an export file |
 | `folio <action> text\|secret` | `show`, `insert`, `edit`, `generate`, `rm`, `mv`, `cp`, `find` (by name), `grep` (by value) |
 | `folio exec` | Run a command with items as environment variables |
 | `folio shell` | Start a shell with items as environment variables |
@@ -150,14 +150,15 @@ An item's variable name comes from its path:
 
 1. a top folder whose name starts with `@` — a *namespace* — is dropped, or with `--use`, the
    namespaces it names;
-2. `/` turns into `_`;
+2. `/`, `-` and `.` turn into `_`;
 3. it is uppercased.
 
 | Item | Variable |
 | --- | --- |
 | `gh/token` | `GH_TOKEN` |
 | `@me/gh/token` | `GH_TOKEN` |
-| `gh/api-key` | none — not a valid name; left out with a warning |
+| `gh/api-key` | `GH_API_KEY` |
+| `gh/api+key` | none — not a valid name; left out with a warning |
 
 Namespaces can nest from the front of the path — `@app1/@prod/db/user` — but naming drops only the
 top one: items under a nested namespace are left out, with a note to add `--use @app1/@prod`,
