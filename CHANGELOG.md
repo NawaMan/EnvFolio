@@ -25,6 +25,16 @@ User-visible changes to EnvFolio. Newest first.
   path. `folio exec --from app2-prod` (and `shell --from`, `import`, `export -o`) is
   `$FOLIO_FILE_DIR/app2-prod.folio`; a subfolder works too (`app2/prod`). Tab completes the names.
 
+- `folio show text|secret --from <export>` and `folio ls [text|secret] --from <export>`: show an
+  entry, or list what is in an export file, without importing it and with no store, as
+  `exec --from` reads it (a path ending in `.folio`, or a name in `FOLIO_FILE_DIR`; with
+  `--file-passphrase-fd` and `--key-passphrase-fd`). `--clip` works too. A text is checked with the
+  export's own key.
+
+- `folio show --help` and `folio help show` — and so for `find`, `grep`, `insert`, `edit`,
+  `generate`, `rm`, `mv` and `cp` — show the help of both kinds, text and secret, instead of
+  asking which one.
+
 ### Changed
 
 - A classical export's own key is now one RSA-3072 key that signs and encrypts, not Ed25519 with
