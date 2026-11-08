@@ -19,11 +19,12 @@ setup() {
 
 teardown() {
     # pass's clear-the-clipboard sleeper: on Linux named after our own fake display only; on macOS
-    # named per user, so it is stopped and given a moment to restore into the fake clipboard.
+    # named per user. Either way it is stopped and given a moment to restore into the fake
+    # clipboard, which is in $SANDBOX: removing it meanwhile fails ("Directory not empty").
     if [[ -n ${CLIPBOARD:-} && $(uname -s) == Darwin ]]; then
         pkill -f "^password store sleep for user $(id -u)" 2>/dev/null && sleep 1 || true
     elif [[ -n ${CLIPBOARD:-} ]]; then
-        pkill -f "^password store sleep on display $DISPLAY" 2>/dev/null || true
+        pkill -f "^password store sleep on display $DISPLAY" 2>/dev/null && sleep 1 || true
     fi
     gpgconf --kill all 2>/dev/null || true
     rm -rf "$SANDBOX"
