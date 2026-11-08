@@ -244,7 +244,9 @@ What EnvFolio does:
   other users can get into it.
 - **The clipboard** is cleared after 45 seconds for a secret (`PASSWORD_STORE_CLIP_TIME`).
 - **An export is always locked**, with a passphrase or to a public key (`--to`), and carries a
-  key made for it alone — your store's key never leaves your machine.
+  key made for it alone — your store's key never leaves your machine. That key can have a
+  passphrase of its own too, if you say so when you export, and be post-quantum (`--key-type
+  pqc`; classical by default, so any gpg opens the file).
 - **A backup holds the store's secret key** (still protected by its passphrase), the texts and the
   names of the secrets. `--encrypt` locks the whole file with a passphrase of its own. Keep it
   somewhere safe and offline.

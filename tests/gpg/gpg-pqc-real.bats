@@ -84,3 +84,53 @@ make-store() {
     [ "$("$FOLIO" show text web/home)" = "https://example.com" ]
     [ "$("$FOLIO" show secret web/github)" = "s3cr3t" ]
 }
+
+# unpack-key <file>: the key.asc of export <file>, locked with passphrase "fp", into $SANDBOX/x.
+unpack-key() {
+    mkdir -p "$SANDBOX/x"
+    gpg --batch --quiet --no-symkey-cache --pinentry-mode loopback --passphrase fp \
+        --decrypt "$1" 2>/dev/null | tar -xzf - -C "$SANDBOX/x" key.asc
+    [ -s "$SANDBOX/x/key.asc" ]
+}
+
+@test "real gpg: export — the key's kind is asked; Enter takes classical" {
+    make-store
+    run "$FOLIO" export --secrets --file-passphrase-fd 5 web \
+        < <(printf '%s\n' "$SANDBOX/out/items" "" "") 5< <(printf 'fp\n')
+    [ "$status" -eq 0 ]
+    [[ $output == *"Which kind of key for the export's own key?"*"opening the file needs gpg 2.5.21 or later, there too"* ]] || false
+    [[ $output == *"Key type: Classical — RSA-3072"* && $output != *"export's own key is post-quantum"* ]] || false
+    unpack-key "$SANDBOX/out/items.folio"
+    run bash -c 'source "$1" && has-pqc-key "$2"' _ "$FOLIO" "$SANDBOX/x/key.asc"
+    [ "$status" -ne 0 ]
+}
+
+@test "real gpg: export — a post-quantum key picked, said what it needs there; imported there" {
+    make-store
+    run "$FOLIO" export --secrets --file-passphrase-fd 5 web \
+        < <(printf '%s\n' "$SANDBOX/out/items" 2 "") 5< <(printf 'fp\n')
+    [ "$status" -eq 0 ]
+    [[ $output == *"Key type: Post-quantum"* && $output == *"gpg must be 2.5.21 or later: check there first"* ]] || false
+    [[ $output == *"and gpg 2.5.21 or later (the export's own key is post-quantum)."* ]] || false
+    unpack-key "$SANDBOX/out/items.folio"
+    bash -c 'source "$1" && has-pqc-key "$2"' _ "$FOLIO" "$SANDBOX/x/key.asc"
+
+    gpgconf --kill all 2>/dev/null || true
+    export GNUPGHOME="$SANDBOX/there-gnupg" FOLIO_STORE_DIR="$SANDBOX/there" PASSWORD_STORE_DIR="$SANDBOX/there"
+    mkdir -m 700 "$GNUPGHOME"
+    make-pqc-key "Server <server@example.com>"
+    run "$FOLIO" import --all --key server@example.com --file-passphrase-stdin "$SANDBOX/out/items.folio" < <(printf 'fp\n')
+    echo "$output"
+    [ "$status" -eq 0 ]
+    [ "$("$FOLIO" show secret web/github)" = "s3cr3t" ]
+}
+
+@test "real gpg: export --key-type pqc — not asked; the key is post-quantum" {
+    make-store
+    run "$FOLIO" export --key-type pqc --secrets -o "$SANDBOX/out/items" --file-passphrase-fd 5 web \
+        < /dev/null 5< <(printf 'fp\n')
+    [ "$status" -eq 0 ]
+    [[ $output != *"Which kind of key"* ]] || false
+    unpack-key "$SANDBOX/out/items.folio"
+    bash -c 'source "$1" && has-pqc-key "$2"' _ "$FOLIO" "$SANDBOX/x/key.asc"
+}
