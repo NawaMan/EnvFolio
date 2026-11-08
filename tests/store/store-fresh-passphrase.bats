@@ -148,7 +148,7 @@ remember() {
 }
 
 @test "fresh passphrase: exec --from — the key the file is locked to is forgotten too" {
-    "$FOLIO" export --to other@example.com -o "$SANDBOX/out/items" web/home < /dev/null >/dev/null 2>&1
+    "$FOLIO" export --to other@example.com -o "$SANDBOX/out/items.folio" web/home < /dev/null >/dev/null 2>&1
     forgotten other@example.com
     use-pinentry pw2
     run --separate-stderr "$FOLIO" exec --fresh-passphrase --from "$SANDBOX/out/items.folio" web/home -- \

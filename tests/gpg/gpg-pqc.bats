@@ -161,10 +161,10 @@ init-new-key() {
 
 @test "export --key-type: pqc refused on a gpg that cannot make one; anything else refused" {
     fake-gpg 2.4.4 'RSA;ELG;DSA;ECDH;ECDSA;EDDSA'
-    run Export --key-type pqc -o "$SANDBOX/out" web < /dev/null
+    run Export --key-type pqc -o "$SANDBOX/out/items.folio" web < /dev/null
     [ "$status" -eq 1 ]
     [[ $output == *"--key-type pqc needs gpg 2.5.21 or later (this one is 2.4.4)."*"#updating-gpg-for-post-quantum-keys"* ]] || false
-    run Export --key-type kyber -o "$SANDBOX/out" web < /dev/null
+    run Export --key-type kyber -o "$SANDBOX/out/items.folio" web < /dev/null
     [ "$status" -eq 1 ]
     [[ $output == *"--key-type is pqc or classical, not 'kyber'."* ]] || false
 }

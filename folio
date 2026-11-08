@@ -183,6 +183,8 @@ The store is $FOLIO_STORE_DIR, default ~/.folio. EnvFolio warns when that folder
 else's or open to other users.
 On a machine you trust: FOLIO_STORE_PASSPHRASE_FILE=<file> (yours only, chmod 600) gives the store
 key's passphrase from its first line, so it is never asked.
+FOLIO_FILE_DIR=<folder> lets export -o, import and --from name a .folio file there: test is
+<folder>/test.folio. One ending in .folio is a path.
 Details and examples: MANUAL.md
 EOF
 }
@@ -956,7 +958,7 @@ function store-export-usage() {
     cat <<'EOF'
 Usage: folio export [-s|--secrets] [--to <key>|--file-passphrase-stdin|--file-passphrase-fd <n>]
                     [--key-type <pqc|classical>] [--key-passphrase-fd <n>] [--store-passphrase-fd <n>]
-                    [--use <@namespace>]... [--vars <file>]... [-o|--output <file>|<folder>] [<name>...]
+                    [--use <@namespace>]... [--vars <file>]... [-o|--output <export>] [<name>...]
 EOF
 }
 
@@ -984,9 +986,10 @@ in the order typed, and the last one wins where two give the same item. With --v
 vars file names are taken too. With no <name>, --use or --vars, EnvFolio lists every item and
 asks which ones.
 
-The file is <file> (.folio added when missing), or store-<date>.folio in <folder> —
-never inside the store. An existing file is never replaced. With no -o, EnvFolio asks, offering
-store-<date>.folio in the current folder (taken as it is with --file-passphrase-stdin).
+<export> is the file's path, ending in .folio, or a name in $FOLIO_FILE_DIR: test is
+$FOLIO_FILE_DIR/test.folio. It is never inside the store, and an existing file is never replaced.
+With no -o, EnvFolio asks, offering store-<date> in $FOLIO_FILE_DIR when it is set, else
+./store-<date>.folio (taken as it is with --file-passphrase-stdin).
 
 Options:
   -s, --secrets       Take the secrets in a folder, or under a --use, too. A secret named on its
@@ -1020,15 +1023,16 @@ Options:
                       run the same command with `folio exec --from`: every @{…} in it, also one
                       in a fallback (left out, with a note, when it is not there). Any secret in
                       it needs --secrets. Can be given more than once.
-  -o, --output <file>|<folder>
-                      Where to write the file.
+  -o, --output <export>
+                      Where to write the file: a path ending in .folio, or a name in
+                      $FOLIO_FILE_DIR.
   -h, --help          Show this help.
 EOF
 }
 
 # folio export [-s|--secrets] [--to <key>|--file-passphrase-stdin|--file-passphrase-fd <n>]
 #              [--key-type <pqc|classical>] [--key-passphrase-fd <n>] [--store-passphrase-fd <n>]
-#              [-o|--output <file>|<folder>] [<name>...]
+#              [-o|--output <export>] [<name>...]
 # Anything not given is asked for: the items, the file, how to lock it, and about the export's key.
 Export() {
     # Process the command-line options
@@ -1080,6 +1084,8 @@ Export() {
         pqc) gpg-has-pqc || die "--key-type pqc needs gpg 2.5.21 or later (this one is $(gpg-version))."$'\n'"$PQC_GPG_HELP" ;;
         *)   die "--key-type is pqc or classical, not '$key_type'." ;;
     esac
+    # -o, checked now, before anything is asked.
+    if [[ -n $target ]]; then target=$(resolve-export-file "$target") || exit 1 ; fi
     require-store
 
     section "Overview"
@@ -1138,17 +1144,19 @@ EOF
     show-answer "Items" "${#SELECTED[@]} (texts: $texts, secrets: $(( ${#SELECTED[@]} - texts )))"
     for item in "${SELECTED[@]}"; do printf '    %s\n' "$(item-label "$item")" >&2 ; done
 
-    # Input: the file — -o <file>|<folder>; otherwise asked, offering a new file in the current
-    # folder (taken as it is when stdin carries the passphrase, so cannot answer).
+    # Input: the file — -o <export>; otherwise asked, offering a new one: store-<date> in
+    # FOLIO_FILE_DIR when it is set, else in the current folder (taken as it is when stdin carries
+    # the passphrase, so cannot answer). A path ends in .folio; anything else is a name in
+    # FOLIO_FILE_DIR (resolve-export-file).
     local file=$target
     if [[ -z $file ]]; then
-        file=./store-$(date +%Y%m%d)$EXPORT_SUFFIX
+        file=store-$(date +%Y%m%d)
+        [[ -n ${FOLIO_FILE_DIR:-} ]] || file=./$file$EXPORT_SUFFIX
         if (( ! passphrase_stdin )); then
-            file=$(ask-path "File (or a folder)" "" "$file") || exit 1
+            file=$(ask-path "File" "" "$file") || exit 1
         fi
     fi
-    [[ -d $file ]] && file=${file%/}/store-$(date +%Y%m%d)$EXPORT_SUFFIX
-    [[ $file == *"$EXPORT_SUFFIX" ]] || file+=$EXPORT_SUFFIX
+    file=$(resolve-export-file "$file") || exit 1
     [[ ! -e $file ]]            || die "$file already exists."
     [[ -d $(dirname "$file") ]] || die "There is no folder $(dirname "$file")."
     [[ $(cd "$(dirname "$file")" && pwd -P)/ != "$(cd "${VIEW_SOURCE:-$STORE_PATH}" && pwd -P)"/* ]] \
@@ -1411,7 +1419,7 @@ function store-import-usage() {
     cat <<'EOF'
 Usage: folio import [-a|--all] [--overwrite|--skip-existing] [--key <id>]
                     [--file-passphrase-stdin|--file-passphrase-fd <n>] [--key-passphrase-fd <n>]
-                    [--store-passphrase-fd <n>] [--allow-unsafe-folder] [<file> [<name>...]]
+                    [--store-passphrase-fd <n>] [--allow-unsafe-folder] [<export> [<name>...]]
 EOF
 }
 
@@ -1426,9 +1434,12 @@ as `folio init` does: its key is asked for here, before anything is made. The ex
 is used here only, never added to your keyring. If a passphrase was set on it when it was
 exported, gpg asks for that too (or give it with --key-passphrase-fd).
 
-With no <file>, EnvFolio asks for it. A <name> is an item in the export, or a folder: every item
-under it. With neither <name> nor --all, EnvFolio lists the export's items and asks which ones. An
-item already in the store is overwritten or skipped, as the options say; otherwise EnvFolio asks.
+<export> is the file's path, ending in .folio, or a name in $FOLIO_FILE_DIR: test is
+$FOLIO_FILE_DIR/test.folio. With no <export>, EnvFolio asks for it (the same way).
+
+A <name> is an item in the export, or a folder: every item under it. With neither <name> nor
+--all, EnvFolio lists the export's items and asks which ones. An item already in the store is
+overwritten or skipped, as the options say; otherwise EnvFolio asks.
 
 Options:
   -a, --all           Take every item in the export.
@@ -1437,7 +1448,7 @@ Options:
   --key <id>          With no store yet: make it with this key, as `folio init --key`.
   --file-passphrase-stdin
                       Read the file's passphrase (or your key's, for a file locked to it) from the
-                      first line of stdin. Needs <file>, and --all or a <name>; with no store
+                      first line of stdin. Needs <export>, and --all or a <name>; with no store
                       yet, --key too.
   --file-passphrase-fd <n>
                       The same, from the first line of file descriptor <n>, e.g.
@@ -1460,7 +1471,7 @@ EOF
 
 # folio import [-a|--all] [--overwrite|--skip-existing] [--key <id>]
 #              [--file-passphrase-stdin|--file-passphrase-fd <n>] [--key-passphrase-fd <n>]
-#              [--store-passphrase-fd <n>] [--allow-unsafe-folder] [<file> [<name>...]]
+#              [--store-passphrase-fd <n>] [--allow-unsafe-folder] [<export> [<name>...]]
 # Anything not given is asked for: the file, a new store's key, the items, what to do with clashes.
 Import() {
     # Process the command-line options
@@ -1501,7 +1512,10 @@ Import() {
     fi
     [[ -z $passphrase_fd ]] || check-passphrase-fd --file-passphrase-fd "$passphrase_fd"
     [[ -z $key_passphrase_fd ]] || check-passphrase-fd --key-passphrase-fd "$key_passphrase_fd"
-    [[ -z $file ]] || check-export-file "$file"
+    if [[ -n $file ]]; then
+        file=$(resolve-export-file "$file") || exit 1
+        check-export-file "$file"
+    fi
     # The store's folder: one there is, or none yet (missing, or an empty folder) to make one in.
     local status=0 new_store=0
     store-exists || status=$?
@@ -1529,9 +1543,14 @@ EOF
 
     section "Parameters"
 
-    # Input: the export file — <file>, or asked.
-    [[ -n $file ]] || file=$(ask-path "Export file" "a .folio file") || exit 1
-    [[ -n $file ]] || die "An export file is needed."
+    # Input: the export file — <export>, or asked.
+    if [[ -z $file ]]; then
+        local hint="a $EXPORT_SUFFIX file"
+        [[ -z ${FOLIO_FILE_DIR:-} ]] || hint+=", or a name in $(tilde-path "$FOLIO_FILE_DIR")"
+        file=$(ask-path "Export file" "$hint") || exit 1
+        [[ -n $file ]] || die "An export file is needed."
+        file=$(resolve-export-file "$file") || exit 1
+    fi
     check-export-file "$file"
     show-answer "File" "$(tilde-path "$file")"
 
@@ -1778,6 +1797,28 @@ function verify-export-text() {
     signer=$(GNUPGHOME=$EXPORT_HOME gpg --status-fd 1 --verify "$item.sig" "$item" 2>/dev/null \
                 | awk '$2 == "VALIDSIG" { print $NF }')
     [[ $signer == "$EXPORT_KEY" ]] || die "$1: the signature of '$2' in the export does not verify."
+}
+
+# resolve-export-file <file>: the path of an export, the same for every command that takes one
+# (export -o, import, exec and shell --from). One ending in .folio is that path, as written. Any
+# other is a name in $FOLIO_FILE_DIR — app2/prod is $FOLIO_FILE_DIR/app2/prod.folio — so it dies
+# when FOLIO_FILE_DIR is not set, or is not a folder. Prints the path; run it in $(…) || exit 1.
+function resolve-export-file() {
+    local file=$1 dir=${FOLIO_FILE_DIR:-}
+    if [[ $file == *"$EXPORT_SUFFIX" ]]; then
+        printf '%s\n' "$file"
+        return 0
+    fi
+    [[ -n $dir ]] \
+        || die "'$file' does not end in $EXPORT_SUFFIX: give the file's path ($file$EXPORT_SUFFIX), or set" \
+               "FOLIO_FILE_DIR to the folder of your $EXPORT_SUFFIX files to name one without it."
+    case /$file/ in
+        //|*/./*|*/../*|*//*|"/~"*)
+            die "'$file' does not end in $EXPORT_SUFFIX, so it is a name in FOLIO_FILE_DIR — and it is not" \
+                "one (test, app2/prod). For a file elsewhere, give its path, ending in $EXPORT_SUFFIX." ;;
+    esac
+    [[ -d $dir ]] || die "FOLIO_FILE_DIR: there is no folder $dir."
+    printf '%s\n' "${dir%/}/$file$EXPORT_SUFFIX"
 }
 
 # check-export-file <file>: die unless <file> is there and named as an export.
@@ -2735,7 +2776,7 @@ function run-exec-help() {
     cat <<'HELP'
 Usage: folio exec [-s|--secrets] [-a|--all] [-n|--names|--debug|--confirm] [--plain]
                   [--use <@namespace>]... [--vars <file>]... [--store-passphrase-fd <n>]
-                  [--from <file> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]]
+                  [--from <export> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]]
                   <entry>... -- <command> [<arg>...]
 
 Run a command with entries from the store as environment variables. Texts load by default;
@@ -2779,10 +2820,12 @@ Options:
                       Experimental: it may change in a later version.
   --vars <file>       Set the variables a vars file says (e.g. prod-deploy.vars); can be given
                       more than once. <entry> is then optional.
-  --from <file>       Take the entries from a file made by `folio export`, not from the store,
+  --from <export>     Take the entries from a file made by `folio export`, not from the store,
                       which is then not needed. gpg asks for the file's passphrase, or uses your
                       key the file is locked to. Nothing is kept: the file is opened in a private
-                      temporary folder, removed before the command starts.
+                      temporary folder, removed before the command starts. <export> is the
+                      file's path, ending in .folio, or a name in $FOLIO_FILE_DIR: test is
+                      $FOLIO_FILE_DIR/test.folio.
   --file-passphrase-fd <n>
                       With --from: the file's passphrase, from the first line of file descriptor
                       <n>, e.g. --file-passphrase-fd 3 3< pass.txt.
@@ -2801,7 +2844,7 @@ function run-shell-help() {
     cat <<'HELP'
 Usage: folio shell [-s|--secrets] [-a|--all] [-n|--names|--debug|--confirm] [--plain]
                    [--use <@namespace>]... [--vars <file>]... [--store-passphrase-fd <n>]
-                   [--from <file> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]] <entry>...
+                   [--from <export> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]] <entry>...
 
 Start your shell ($SHELL) with entries from the store as environment variables, and say which
 names were loaded (never their values). FOLIO_SHELL=1 is set. Type `exit` to leave.
@@ -2824,7 +2867,8 @@ Options:
                       Experimental: it may change in a later version.
   --vars <file>       Set the variables a vars file says, as in `folio exec`; can be given more
                       than once. <entry> is then optional.
-  --from <file>       Take the entries from a file made by `folio export`, as in `folio exec`.
+  --from <export>     Take the entries from a file made by `folio export`, as in `folio exec`:
+                      a path ending in .folio, or a name in $FOLIO_FILE_DIR.
   --file-passphrase-fd <n>
                       With --from: the file's passphrase, from the first line of file descriptor <n>.
   --key-passphrase-fd <n>
@@ -2843,7 +2887,7 @@ VAR_NAME_PATTERN='^[A-Za-z_][A-Za-z0-9_]*$'
 ENTRIES_IN="the store"
 
 # exec-with-entries <exec|shell> [-s|--secrets] [--use <@namespace>]... [--vars <file>]...
-#                   [--from <file> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]]
+#                   [--from <export> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]]
 #                   <entry>... [-- <command> [<arg>...]]
 # Read every entry first, then export them all at once and exec: no `pass` or `gpg` call made
 # while reading ever sees a value already loaded. With --from, the entries come from an export
@@ -2881,7 +2925,7 @@ function exec-with-entries() {
             *)            entries+=("$arg") ;;
         esac
     done
-    local from_usage="[--use <@namespace>]... [--vars <file>]... [--store-passphrase-fd <n>] [--from <file> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]]"
+    local from_usage="[--use <@namespace>]... [--vars <file>]... [--store-passphrase-fd <n>] [--from <export> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]]"
     (( ! (only_names && debug) )) \
         || die "$how: --names only shows the names; --debug and --confirm show them and go on."
     # --debug and --confirm show the names on stderr: marked for that screen, not stdout's.
@@ -2991,6 +3035,7 @@ function exec-with-entries() {
 # was set on it, from fd <key-passphrase-fd>.
 function open-export-for() {
     local how=$1 file=$2 fd=$3 key_fd=${4:-} passphrase="" key_passphrase=""
+    file=$(resolve-export-file "$file") || exit 1
     check-export-file "$file"
     if [[ -n $key_fd ]]; then
         check-passphrase-fd --key-passphrase-fd "$key_fd"
@@ -3862,18 +3907,19 @@ _folio() {
         files)    _files ;;
         dirs)     _files -/ ;;
         commands) _command_names -e ;;
-        words)
-            for line in "${(@)lines[2,-1]}"; do
-                word=${line%%$'\t'*} desc=${line#*$'\t'}
-                [[ $line == *$'\t'* ]] || desc=
-                word=${word//:/\\:}
-                if [[ $word == */ ]]; then folders+=( "$word${desc:+:$desc}" )
-                else                      plain+=( "$word${desc:+:$desc}" ) ; fi
-            done
-            (( ${#plain} ))   && _describe -t values 'folio' plain
-            (( ${#folders} )) && _describe -t folders 'folder' folders -S ''
-            ;;
     esac
+    # The words: for words, and for files too (an export's name in FOLIO_FILE_DIR, beside the files).
+    if [[ $how == (words|files) ]]; then
+        for line in "${(@)lines[2,-1]}"; do
+            word=${line%%$'\t'*} desc=${line#*$'\t'}
+            [[ $line == *$'\t'* ]] || desc=
+            word=${word//:/\\:}
+            if [[ $word == */ ]]; then folders+=( "$word${desc:+:$desc}" )
+            else                      plain+=( "$word${desc:+:$desc}" ) ; fi
+        done
+        (( ${#plain} ))   && _describe -t values 'folio' plain
+        (( ${#folders} )) && _describe -t folders 'folder' folders -S ''
+    fi
     return 0
 }
 if [[ ${funcstack[1]-} == _folio ]]; then
@@ -3891,6 +3937,7 @@ EOF
 # after `folio` before it. Asked by the scripts of `folio completion`, not by a person. The first
 # line says how: words, files, dirs, commands or none. For words, each follows on a line of its
 # own as <word><tab><description>; a word ending in / is a folder, so no space goes after it.
+# For files, words can follow too, offered beside the files (the names of exports).
 # Options come from each command's help (its Options:), so one completes once it is documented;
 # what a command's other arguments are is in completion-args.
 function complete-words() {
@@ -3933,6 +3980,7 @@ function complete-words() {
         esac
     done
     if [[ $value == namespaces ]]; then complete-namespaces "$cur" ; return 0 ; fi
+    if [[ $value == exports ]]; then complete-exports "$cur" ; return 0 ; fi
     if [[ -n $value ]]; then echo "$value" ; return 0 ; fi
     if (( dashes >= 0 )); then
         # After `--`: exec's command and its arguments; for the others, more of the same arguments.
@@ -3950,6 +3998,7 @@ function complete-words() {
     else kind=${kinds[${#kinds[@]}-1]} ; [[ $kind == *... ]] || kind=none ; fi
     case ${kind%...} in
         none|files|dirs) echo "${kind%...}" ;;
+        exports)         complete-exports "$cur" ;;
         text)            complete-entries txt "$cur" ;;
         secret)          complete-entries gpg "$cur" ;;
         entry)
@@ -3967,6 +4016,39 @@ function complete-words() {
             else echo none ; fi ;;
         *)               echo none ;;
     esac
+}
+
+# complete-exports <cur>: what an <export> can be (resolve-export-file) — files, for a path ending
+# in .folio, and the names in $FOLIO_FILE_DIR that start with <cur>, a level at a time: the .folio
+# files there named without .folio, what is deeper as its folder ("app2/"). A folder that is the
+# only choice is opened, as in complete-entries. No names for what is a path (/…, ./…, ~…).
+function complete-exports() {
+    local cur=$1 dir=${FOLIO_FILE_DIR:-} found more
+    echo files
+    [[ -n $dir && -d $dir ]] || return 0
+    case $cur in /*|.*|"~"*) return 0 ;; esac
+    found=$(export-names-at "${dir%/}" "$cur")
+    while [[ -n $found && $found != *$'\n'* && ${found%%$'\t'*} == */ ]]; do
+        more=$(export-names-at "${dir%/}" "${found%%$'\t'*}")
+        [[ -n $more ]] || break
+        found=$more
+    done
+    [[ -z $found ]] || printf '%s\n' "$found"
+}
+
+# export-names-at <dir> <cur>: complete-exports' lines for one level, sorted.
+function export-names-at() {
+    local dir=$1 cur=$2 file name rest
+    find -L "$dir" -mindepth 1 -name '.*' -prune -o -type f -name "*$EXPORT_SUFFIX" -print \
+        | while IFS= read -r file; do
+            name=${file#"$dir"/} name=${name%"$EXPORT_SUFFIX"}
+            [[ -n $name && $name == "$cur"* ]] || continue
+            rest=${name#"$cur"}
+            if [[ $rest == */* ]]; then printf '%s\t%s\n' "$cur${rest%%/*}/" folder
+            else                        printf '%s\t%s\n' "$name" export
+            fi
+        done \
+        | LC_ALL=C sort -u
 }
 
 # complete-namespaces <cur>: as complete-entries does for folders, but only the namespaces (@…),
@@ -3994,7 +4076,7 @@ function completion-args() {
     case $command in
         init|path|version)            echo none ;;
         backup|restore)               echo files ;;
-        import)                       echo "files none..." ;;
+        import)                       echo "exports none..." ;;
         export|exec|shell)            echo "entry..." ;;
         ls)                           echo entry-folder ;;
         completion)                   echo shell ;;
@@ -4105,6 +4187,7 @@ function help-option-lines() {
         case $token in
             -*)                   names+=("${token%%\[*}") ;;     # --clip[=<line>]: its value is optional
             "<file>"*|"<key>"*)   value=files ;;
+            "<export>"*)          value=exports ;;
             "<folder>"*)          value=dirs ;;
             "<@namespace>"*)      value=namespaces ;;
             "<"*)                 value=none ;;
@@ -4116,7 +4199,8 @@ function help-option-lines() {
     for token in "${names[@]}"; do printf '%s\t%s\t%s\n' "$token" "$value" "$desc" ; done
 }
 
-# option-value <word> <options>: how to complete the value <word> takes (files, dirs or none), or
+# option-value <word> <options>: how to complete the value <word> takes (files, dirs, exports,
+# namespaces or none), or
 # nothing when it takes none — or has it already, after =.
 function option-value() {
     local name value rest

@@ -160,7 +160,7 @@ gpg-uses-key() {
 }
 
 @test "store passphrase: exec --from does not take it" {
-    "$FOLIO" export -o "$SANDBOX/out/items" --file-passphrase-fd 3 --store-passphrase-fd 4 web/home \
+    "$FOLIO" export -o "$SANDBOX/out/items.folio" --file-passphrase-fd 3 --store-passphrase-fd 4 web/home \
         3< <(printf 'x\n') 4< <(printf 'pw\n') >/dev/null 2>&1
     run "$FOLIO" exec --from "$SANDBOX/out/items.folio" --store-passphrase-fd 5 web/home -- true \
         5< <(printf 'pw\n')
@@ -194,7 +194,7 @@ gpg-uses-key() {
 
 @test "MANUAL: passphrases without a prompt — export with both passphrases, each from its own fd" {
     forget
-    run "$FOLIO" export --secrets -o "$SANDBOX/out/items" --file-passphrase-fd 3 --store-passphrase-fd 4 web \
+    run "$FOLIO" export --secrets -o "$SANDBOX/out/items.folio" --file-passphrase-fd 3 --store-passphrase-fd 4 web \
         3< <(printf 'file-pw\n') 4< <(printf 'pw\n') < /dev/null
     [ "$status" -eq 0 ]
     run --separate-stderr "$FOLIO" exec --secrets --from "$SANDBOX/out/items.folio" --file-passphrase-fd 3 web -- \
@@ -203,7 +203,7 @@ gpg-uses-key() {
 }
 
 @test "import into a store: the texts are signed with the store's passphrase" {
-    "$FOLIO" export -o "$SANDBOX/out/items" --file-passphrase-fd 3 --store-passphrase-fd 4 web/home \
+    "$FOLIO" export -o "$SANDBOX/out/items.folio" --file-passphrase-fd 3 --store-passphrase-fd 4 web/home \
         3< <(printf 'file-pw\n') 4< <(printf 'pw\n') >/dev/null 2>&1
     "$FOLIO" rm text -f web/home >/dev/null
     forget
@@ -214,7 +214,7 @@ gpg-uses-key() {
 }
 
 @test "import with no store, a new key: --store-passphrase-fd is that key's passphrase" {
-    "$FOLIO" export -o "$SANDBOX/out/items" --file-passphrase-fd 3 --store-passphrase-fd 4 web/home \
+    "$FOLIO" export -o "$SANDBOX/out/items.folio" --file-passphrase-fd 3 --store-passphrase-fd 4 web/home \
         3< <(printf 'file-pw\n') 4< <(printf 'pw\n') >/dev/null 2>&1
     export FOLIO_STORE_DIR="$SANDBOX/there"
     # Key picker: 1) Test User 2) Create a new key; then name and email.

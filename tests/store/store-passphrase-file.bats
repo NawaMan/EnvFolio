@@ -79,7 +79,7 @@ forget() { gpgconf --kill gpg-agent ; }
 }
 
 @test "passphrase file: exec --from does not use it — the store is not opened" {
-    "$FOLIO" export -o "$SANDBOX/out/items" --file-passphrase-fd 3 --store-passphrase-fd 4 web/home \
+    "$FOLIO" export -o "$SANDBOX/out/items.folio" --file-passphrase-fd 3 --store-passphrase-fd 4 web/home \
         3< <(printf 'file-pw\n') 4< <(printf 'pw\n') < /dev/null >/dev/null 2>&1
     export FOLIO_STORE_PASSPHRASE_FILE=$PASS_FILE
     run --separate-stderr "$FOLIO" exec --from "$SANDBOX/out/items.folio" --file-passphrase-fd 3 web/home -- \

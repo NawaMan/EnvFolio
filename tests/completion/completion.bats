@@ -179,6 +179,41 @@ EOF
     words import x.folio "" >/dev/null ;  [ "$how" = none ]
 }
 
+@test "completion: an export — files, and the names in FOLIO_FILE_DIR, a level at a time" {
+    mkdir -p "$SANDBOX/exports/app2/deep" "$SANDBOX/exports/.hidden"
+    touch "$SANDBOX/exports/test.folio" "$SANDBOX/exports/team.folio" "$SANDBOX/exports/notes.txt" \
+          "$SANDBOX/exports/app2/deep/prod.folio" "$SANDBOX/exports/.hidden/x.folio"
+    # No FOLIO_FILE_DIR: files only.
+    words exec --from "" >/dev/null
+    [ "$how" = files ]
+    [ "${#lines[@]}" -eq 1 ]
+    export FOLIO_FILE_DIR="$SANDBOX/exports"
+    words exec --from "" >/dev/null ; [ "$how" = files ]
+    [ "$(words exec --from "")" = "app2/,team,test" ]
+    [ "$(words shell --from te)" = "team,test" ]
+    words import "" >/dev/null ; [ "$how" = files ]
+    [ "$(words import "")" = "app2/,team,test" ]
+    [ "$(words export -o t)" = "team,test" ]
+    # A folder that is the only choice is opened.
+    [ "$(words exec --from app2/)" = "app2/deep/prod" ]
+    # A path gets files only.
+    [ -z "$(words exec --from ./)" ]
+    [ -z "$(words exec --from /)" ]
+    run "$FOLIO" __complete import te
+    [ "${lines[1]}" = $'team\texport' ]
+}
+
+@test "completion: bash and zsh — an export's name beside the files" {
+    mkdir -p "$SANDBOX/exports" "$SANDBOX/here"
+    touch "$SANDBOX/exports/test.folio" "$SANDBOX/here/tea.folio"
+    export FOLIO_FILE_DIR="$SANDBOX/exports"
+    [ "$(cd "$SANDBOX/here" && bash-tab "folio exec --from tes")" = "test" ]
+    [ "$(cd "$SANDBOX/here" && bash-tab "folio exec --from te" | tr , '\n' | sort | paste -sd, -)" = "tea.folio,test" ]
+    cd "$SANDBOX/here"
+    run zsh-tab 'eval "$(folio completion zsh)"' "folio import tes"
+    [[ $output == *"BUF:[folio import test ]"* ]] || false
+}
+
 @test "completion: help topics, completion shells, nothing for an unknown command" {
     [ "$(words help in)" = "init,insert" ]
     [ "$(words help show s)" = "secret" ]
