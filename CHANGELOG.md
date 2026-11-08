@@ -4,7 +4,31 @@ User-visible changes to EnvFolio. Newest first.
 
 ## Unreleased
 
+### Added
+
+- `folio export` asks whether to set a passphrase on the export's own key too (no by default;
+  not asked with `--file-passphrase-stdin`), before it asks how to lock the file. On yes, gpg asks
+  you to choose it, after the items are copied, then once more to pack the key; or give it with the
+  new `--key-passphrase-fd <n>`. `folio import` and `exec`/`shell --from` then ask for it, or take
+  it with `--key-passphrase-fd <n>`.
+
+- Before each passphrase gpg asks for — when exporting, importing, and with `exec`/`shell --from` —
+  EnvFolio shows the export file and its two locks (the file's, and the passphrase of the key
+  inside), and marks the one gpg asks for next.
+
+- `folio export --key-type <pqc|classical>`: the export's own key can be post-quantum. When this
+  gpg can make one, EnvFolio asks (classical by default, as the file may be opened where gpg cannot
+  use one yet), and reminds that opening the file then needs gpg 2.5.21 or later. `folio import`
+  and `exec`/`shell --from` on an older gpg say so, instead of "has no secret key".
+
 ### Changed
+
+- A classical export's own key is now one RSA-3072 key that signs and encrypts, not Ed25519 with
+  an RSA-3072 subkey: with a passphrase on it, gpg asks you to choose it once, not for each part.
+  Exports made before still open.
+
+- The temporary keyring an export's key is used in now asks with your own pinentry (the
+  `pinentry-program` in your `gpg-agent.conf`, a window one too).
 
 - The README shows the latest release, and links to the website's videos and articles; the
   website links back to the README, and every episode's last slide shows the install script. The
