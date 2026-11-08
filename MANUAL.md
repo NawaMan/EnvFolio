@@ -1056,7 +1056,7 @@ on a command line, into a file, or on the screen.
 ```
 folio exec [-s|--secrets] [-a|--all] [-n|--names|--debug|--confirm] [--plain]
            [--use <@namespace>]... [--vars <file>]... [--store-passphrase-fd <n>]
-           [--from <file> [--file-passphrase-fd <n>]] <entry>... -- <command> [<arg>...]
+           [--from <file> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]] <entry>... -- <command> [<arg>...]
 ```
 
 | Option | Meaning |
@@ -1071,6 +1071,7 @@ folio exec [-s|--secrets] [-a|--all] [-n|--names|--debug|--confirm] [--plain]
 | `--vars <file>` | Set the variables a vars file says: constants, values from your environment, entries, with fallbacks. Can be given more than once. With it, `<entry>` is optional, and the entries only feed it. See [From a vars file](#from-a-vars-file). |
 | `--from <file>` | Take the entries from a file made by `folio export`, not from the store. No store is needed, and none is made or touched. See [From an export file](#from-an-export-file). |
 | `--file-passphrase-fd <n>` | With `--from`: the file's passphrase, from the first line of file descriptor `<n>`, e.g. `--file-passphrase-fd 3 3< pass.txt`. stdin stays the command's. |
+| `--key-passphrase-fd <n>` | With `--from`: the passphrase of the export's own key, if one was set on it when it was exported, from the first line of file descriptor `<n>`, instead of gpg's prompt. |
 | `--store-passphrase-fd <n>` | Without `--from`: the store key's passphrase (to read the secrets), from the first line of file descriptor `<n>`, instead of gpg's prompt. See [Passphrases without a prompt](#passphrases-without-a-prompt). |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
@@ -1443,7 +1444,7 @@ Starts your shell (`$SHELL`, or `/bin/sh`) with entries from the EnvFolio store 
 variables. It is `folio exec <entry>... -- "$SHELL"`, plus a line saying what was loaded.
 
 ```
-folio shell [-s|--secrets] [-a|--all] [-n|--names|--debug|--confirm] [--plain] [--use <@namespace>]... [--vars <file>]... [--store-passphrase-fd <n>] [--from <file> [--file-passphrase-fd <n>]] <entry>...
+folio shell [-s|--secrets] [-a|--all] [-n|--names|--debug|--confirm] [--plain] [--use <@namespace>]... [--vars <file>]... [--store-passphrase-fd <n>] [--from <file> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]] <entry>...
 ```
 
 | Option | Meaning |
@@ -1458,6 +1459,7 @@ folio shell [-s|--secrets] [-a|--all] [-n|--names|--debug|--confirm] [--plain] [
 | `--vars <file>` | Set the variables a vars file says, as in `folio exec`; can be given more than once. |
 | `--from <file>` | Take the entries from a file made by `folio export`, as in `folio exec`. |
 | `--file-passphrase-fd <n>` | With `--from`: the file's passphrase, from file descriptor `<n>`, as in `folio exec`. |
+| `--key-passphrase-fd <n>` | With `--from`: the passphrase of the export's own key, from file descriptor `<n>`, as in `folio exec`. |
 | `--store-passphrase-fd <n>` | Without `--from`: the store key's passphrase, as in `folio exec`. |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
@@ -1723,7 +1725,7 @@ Copies some items into one file, to bring them into another store with `folio im
 a server, in a booth, or on another machine. Your store's key never leaves this machine.
 
 ```
-folio export [-s|--secrets] [--to <key>|--file-passphrase-stdin|--file-passphrase-fd <n>] [--store-passphrase-fd <n>] [--use <@namespace>]... [--vars <file>]... [-o|--output <file>|<folder>] [<name>...]
+folio export [-s|--secrets] [--to <key>|--file-passphrase-stdin|--file-passphrase-fd <n>] [--key-type <pqc|classical>] [--key-passphrase-fd <n>] [--store-passphrase-fd <n>] [--use <@namespace>]... [--vars <file>]... [-o|--output <file>|<folder>] [<name>...]
 ```
 
 | Option | Meaning |
@@ -1732,6 +1734,8 @@ folio export [-s|--secrets] [--to <key>|--file-passphrase-stdin|--file-passphras
 | `--to <key>` | Lock the file to this public key — a key file (`.asc`) or a key in your keyring (fingerprint, key id or email) — instead of a passphrase. Only its secret key can open the file. A key file is never added to your keyring. |
 | `--file-passphrase-stdin` | Read the file's passphrase from the first line of stdin instead of gpg's prompt. Not with `--to`. Needs a `<name>`, `--use` or `--vars`. An empty passphrase is refused. |
 | `--file-passphrase-fd <n>` | Read the file's passphrase from the first line of file descriptor `<n>`. Not with `--to`. stdin stays free, so the items can still be picked. An empty passphrase is refused. |
+| `--key-type <pqc\|classical>` | The export's own key: `classical` (one RSA-3072 key that signs and encrypts; any gpg opens the file) or `pqc` (post-quantum, ML-KEM-768 + ECC; opening the file needs gpg 2.5.21 or later, there too). Not given: classical, and asked when this gpg can make a post-quantum key and something else is asked too. |
+| `--key-passphrase-fd <n>` | Set a passphrase on the export's own key, from the first line of file descriptor `<n>`, instead of asking and gpg's prompt. Opening the file then needs it too. |
 | `--store-passphrase-fd <n>` | The store key's passphrase (to read the secrets), from the first line of file descriptor `<n>`, instead of gpg's prompt. See [Passphrases without a prompt](#passphrases-without-a-prompt). |
 | `--use <@namespace>` | Take every item under `<@namespace>` (e.g. `@app2`, or `@app2/@prod`), named without it. Can be given more than once. See [One environment, with --use](#one-environment-with---use). Experimental: it may change. |
 | `--vars <file>` | Take the items a [vars file](#from-a-vars-file) names. Can be given more than once. See [The items a vars file names](#the-items-a-vars-file-names). |
@@ -1744,9 +1748,42 @@ A `<name>` is a text or a secret, or a folder: every text under it, and its secr
 are taken too. With no `<name>`, `--use` or `--vars`, EnvFolio lists every item, numbered, and asks
 which ones (`1 3 5-7`, or `all`).
 
-With neither `--to` nor a passphrase option, EnvFolio asks how to lock the file: with a passphrase
-(gpg asks for it, after EnvFolio says so and waits for Enter), or with a public key — picked from the
-usable keys in your keyring, or given as a key file.
+When this gpg can make a post-quantum key (2.5.21 or later), EnvFolio asks which kind the export's
+own key is: **classical** by default (Enter), as the file may be opened where gpg cannot use a
+post-quantum key yet, or **post-quantum** — then EnvFolio reminds you that gpg must be 2.5.21 or
+later wherever the file is opened, and the summary says so. A run where nothing else is asked does
+not ask this either: it is classical unless `--key-type pqc`.
+
+Then EnvFolio asks whether to set a passphrase on the export's own key too (`[y/N]`: no by
+default; never asked with `--file-passphrase-stdin`, and `--key-passphrase-fd` sets one without
+asking). The lock on the file already protects that key; with a passphrase on it as well, a folder
+unpacked from the file and left behind opens nothing, and whoever opens the file needs both.
+
+With neither `--to` nor a passphrase option, EnvFolio then asks how to lock the file: with a
+passphrase (gpg asks for it, after EnvFolio says so and waits for Enter), or with a public key —
+picked from the usable keys in your keyring, or given as a key file.
+
+So a run that asks everything asks, in order: the items, the file, the key's kind (when gpg can make
+a post-quantum key), the key's passphrase (yes or no), and the lock. Then gpg asks, in order: your
+store key's passphrase, to read the secrets (when it is not kept); the export key's passphrase, if
+you said yes; and the file's passphrase, for a file locked with one. Before each passphrase gpg
+asks for, EnvFolio shows the file and its two locks, and marks the one asked next:
+
+```
+┌─ store-20261107.folio ─────────────────────────────────┐
+│ Lock 1  the file's passphrase                          │
+│ ┌─ inside ───────────────────────────────────────────┐ │
+│ │ Lock 2  the passphrase of the export's own key     │ │  ◀ gpg asks for this one now
+│ │ key.asc the export's own key: it opens the secrets │ │
+│ │ texts   signed with that key                       │ │
+│ └────────────────────────────────────────────────────┘ │
+└────────────────────────────────────────────────────────┘
+```
+
+For the export key's passphrase, gpg asks you to choose it (and type it again), then once more to
+pack the key into the file — gpg asks there whatever it keeps. A post-quantum key gets its
+passphrase when it is made, before the store key's passphrase is asked, and gpg also asks for it
+once to sign the texts.
 
 The file is `<file>` (`.folio` added when missing), or `store-<date>.folio` in `<folder>` —
 never inside the store. With no `-o`, EnvFolio asks, offering `store-<date>.folio` in the current
@@ -1760,7 +1797,9 @@ How it works:
   the value never touches the disk. gpg may ask for your store key's passphrase. Each text is
   checked and signed again with the new key.
 - The file holds `folio-export.txt` (when it was made, the new key's fingerprint), `key.asc` (the
-  new key, with no passphrase of its own) and `store/` — a `pass` store of the chosen items.
+  new key — classical unless you pick post-quantum, with no passphrase of its own unless you set
+  one) and `store/` — a `pass` store of
+  the chosen items.
 - The whole file is **always locked**: with a passphrase, or with `--to`, to the public key of
   where it is going. Whoever opens the file can read every item in it, so it is never written
   unlocked.
@@ -1851,7 +1890,7 @@ given, so what they brought feeds the `${NAME}`s there too.
 Brings items from a file made by `folio export` into the EnvFolio store.
 
 ```
-folio import [-a|--all] [--overwrite|--skip-existing] [--key <id>] [--file-passphrase-stdin|--file-passphrase-fd <n>] [--store-passphrase-fd <n>] [--allow-unsafe-folder] [<file> [<name>...]]
+folio import [-a|--all] [--overwrite|--skip-existing] [--key <id>] [--file-passphrase-stdin|--file-passphrase-fd <n>] [--key-passphrase-fd <n>] [--store-passphrase-fd <n>] [--allow-unsafe-folder] [<file> [<name>...]]
 ```
 
 | Option | Meaning |
@@ -1862,6 +1901,7 @@ folio import [-a|--all] [--overwrite|--skip-existing] [--key <id>] [--file-passp
 | `--key <id>` | With no store yet: make it with this key, as `folio init --key`. |
 | `--file-passphrase-stdin` | Read the file's passphrase (or your key's, for a file locked to it) from the first line of stdin. Needs `<file>`, and `--all` or a `<name>`; with no store yet, `--key` too. |
 | `--file-passphrase-fd <n>` | The same, from the first line of file descriptor `<n>`. stdin stays free, so anything not given is still asked for. |
+| `--key-passphrase-fd <n>` | The passphrase of the export's own key, if one was set on it when it was exported, from the first line of file descriptor `<n>`, instead of gpg's prompt. |
 | `--store-passphrase-fd <n>` | The store key's passphrase (to sign the texts), from the first line of file descriptor `<n>`, instead of gpg's prompt. With no store yet and a new key made for it, that new key's passphrase. See [Passphrases without a prompt](#passphrases-without-a-prompt). |
 | `--allow-unsafe-folder` | Import into a store folder that is someone else's or open to other users without asking. The warning still shows. |
 | `-h`, `--help` | Show the options and stop. |
@@ -1869,7 +1909,11 @@ folio import [-a|--all] [--overwrite|--skip-existing] [--key <id>] [--file-passp
 With no `<file>`, EnvFolio asks for it (Tab completes names). A `<name>` is an item in the export,
 or a folder: every item under it. With neither `<name>` nor `--all`, EnvFolio lists the export's
 items and asks which ones. Before gpg asks for the passphrase of a file locked with one, EnvFolio
-says so and waits for Enter.
+says so, shows the file and its locks (as [`folio export`](#folio-export) does), and waits for
+Enter. If a passphrase was set on the export's own key, gpg asks for that too, once, after the file
+is opened, again after the picture of the locks (or give it with `--key-passphrase-fd`; with no terminal to
+ask on, it is needed). An export whose own key is post-quantum needs gpg 2.5.21 or later here; an
+older one is refused before anything is made, with how to update it.
 
 Every text is checked against the export's signature first; one that does not verify stops the
 import before anything is written. Then each secret is encrypted to the store's key (by
@@ -1971,7 +2015,7 @@ The window should open and ask for your key's passphrase. Then any EnvFolio comm
 
 ## Passphrases without a prompt
 
-EnvFolio deals with two kinds of passphrase, and each has its own options:
+EnvFolio deals with three kinds of passphrase, and each has its own options:
 
 | Option | Gives | Taken by |
 | --- | --- | --- |
@@ -1979,6 +2023,7 @@ EnvFolio deals with two kinds of passphrase, and each has its own options:
 | `--store-passphrase-stdin` | The same, from stdin. | `init` only |
 | `--file-passphrase-fd <n>` | A file's own passphrase: an encrypted backup, or an export. | `backup --encrypt`, `restore`, `export`, `import`, `exec --from`, `shell --from` |
 | `--file-passphrase-stdin` | The same, from stdin. | `backup --encrypt`, `restore`, `export`, `import` |
+| `--key-passphrase-fd <n>` | The passphrase of an export's own key: to set one at `folio export`, and to open the file. | `export`, `import`, `exec --from`, `shell --from` |
 
 Each reads the **first line** of file descriptor `<n>` (or stdin) and refuses an empty one. The
 shell opens the file on `<n>`; the option takes the number, not a path:
