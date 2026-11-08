@@ -34,7 +34,10 @@ jobs:
 
   test-macos-bash32:
     runs-on: macos-latest
-    timeout-minutes: 20
+    # The limit is there to stop a hang (see test-linux-bash5). macOS runners are slower, and vary:
+    # the whole suite took 11 to 18 minutes there in October 2026, and about 30 in November with
+    # no test slower on Linux, so 20 stopped the 2.0.0 release run while every test was passing.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
       # coreutils for `timeout` only (some tests use it), linked alone so the tests still run
@@ -94,7 +97,10 @@ jobs:
   # (2.5.24 without the T8469 fix, where Homebrew has 2.5.24_1), which then fails every import.
   test-macos-homebrew-gpg:
     runs-on: macos-latest
-    timeout-minutes: 20
+    # The limit is there to stop a hang (see test-linux-bash5). macOS runners are slower, and vary:
+    # the whole suite took 11 to 18 minutes there in October 2026, and about 30 in November with
+    # no test slower on Linux, so 20 stopped the 2.0.0 release run while every test was passing.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
       - name: Install dependencies
