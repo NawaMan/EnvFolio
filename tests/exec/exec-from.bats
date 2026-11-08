@@ -156,6 +156,49 @@ left-clean() {
     left-clean
 }
 
+@test "exec and shell --from <name>: the export of that name in FOLIO_FILE_DIR, subfolders too" {
+    make-export ; go-there
+    mkdir -p "$SANDBOX/exports/app2"
+    cp "$FILE" "$SANDBOX/exports/app2/prod.folio"
+    cp "$FILE" "$SANDBOX/exports/test.folio"
+    export FOLIO_FILE_DIR="$SANDBOX/exports"
+    run --separate-stderr "$FOLIO" exec --from test --file-passphrase-fd 3 gh -- sh -c 'echo "$GH_USER"' \
+        3< <(printf 'export pass\n')
+    [ "$status" -eq 0 ]
+    [ "$output" = "shared-user" ]
+    SHELL=/bin/sh run --separate-stderr "$FOLIO" shell --from app2/prod --file-passphrase-fd 3 @nawa \
+        3< <(printf 'export pass\n') < <(printf 'echo "$GH_USER"\n')
+    [ "$status" -eq 0 ]
+    [ "$output" = "nawa-user" ]
+    # A path ends in .folio, and is taken as written.
+    cd "$SANDBOX"
+    run --separate-stderr "$FOLIO" exec --from items.folio --file-passphrase-fd 3 gh -- sh -c 'echo "$GH_USER"' \
+        3< <(printf 'export pass\n')
+    [ "$status" -eq 0 ]
+    [ "$output" = "shared-user" ]
+    left-clean
+}
+
+@test "exec --from <name>: refused with no FOLIO_FILE_DIR, a missing one, or one not there" {
+    make-export ; go-there
+    run "$FOLIO" exec --from items gh -- sh -c 'echo ran'
+    [ "$status" -eq 1 ]
+    [[ $output == *"'items' does not end in .folio: give the file's path (items.folio), or set FOLIO_FILE_DIR"* ]] || false
+    FOLIO_FILE_DIR="$SANDBOX/nowhere" run "$FOLIO" exec --from items gh -- sh -c 'echo ran'
+    [ "$status" -eq 1 ]
+    [[ $output == *"FOLIO_FILE_DIR: there is no folder $SANDBOX/nowhere."* ]] || false
+    mkdir "$SANDBOX/exports"
+    FOLIO_FILE_DIR="$SANDBOX/exports" run "$FOLIO" exec --from items gh -- sh -c 'echo ran'
+    [ "$status" -eq 1 ]
+    [[ $output == *"There is no file $SANDBOX/exports/items.folio."* ]] || false
+    # A path with no .folio is not a name.
+    FOLIO_FILE_DIR="$SANDBOX/exports" run "$FOLIO" exec --from "$SANDBOX/items" gh -- sh -c 'echo ran'
+    [ "$status" -eq 1 ]
+    [[ $output == *"so it is a name in FOLIO_FILE_DIR — and it is not one"* ]] || false
+    [[ $output != *ran* ]] || false
+    left-clean
+}
+
 @test "MANUAL: shell — from an export file" {
     make-export ; go-there
     SHELL=/bin/sh run --separate-stderr "$FOLIO" shell --from "$FILE" --file-passphrase-fd 3 --secrets gh @nawa \

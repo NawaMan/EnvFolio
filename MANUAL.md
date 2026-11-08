@@ -1056,7 +1056,7 @@ on a command line, into a file, or on the screen.
 ```
 folio exec [-s|--secrets] [-a|--all] [-n|--names|--debug|--confirm] [--plain]
            [--use <@namespace>]... [--vars <file>]... [--store-passphrase-fd <n>]
-           [--from <file> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]] <entry>... -- <command> [<arg>...]
+           [--from <export> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]] <entry>... -- <command> [<arg>...]
 ```
 
 | Option | Meaning |
@@ -1069,7 +1069,7 @@ folio exec [-s|--secrets] [-a|--all] [-n|--names|--debug|--confirm] [--plain]
 | `--plain` | With `--names`, `--debug` or `--confirm`: mark secrets (S) and texts (T), with no colour, even on a screen. |
 | `--use <@namespace>` | Take every entry under `<@namespace>` as if it were not in the path: `@prod/server/user` is `server/user`. Only namespaces, from the front (`@app2/@prod`). Where it is typed among the entries; can be given more than once. With it, `<entry>` is optional. See [Peel a namespace with --use](#peel-a-namespace-with---use). Experimental: it may change. |
 | `--vars <file>` | Set the variables a vars file says: constants, values from your environment, entries, with fallbacks. Can be given more than once. With it, `<entry>` is optional, and the entries only feed it. See [From a vars file](#from-a-vars-file). |
-| `--from <file>` | Take the entries from a file made by `folio export`, not from the store. No store is needed, and none is made or touched. See [From an export file](#from-an-export-file). |
+| `--from <export>` | Take the entries from a file made by `folio export`, not from the store: its path, ending in `.folio`, or its name in `FOLIO_FILE_DIR` (see [An export's path, or its name](#an-exports-path-or-its-name)). No store is needed, and none is made or touched. See [From an export file](#from-an-export-file). |
 | `--file-passphrase-fd <n>` | With `--from`: the file's passphrase, from the first line of file descriptor `<n>`, e.g. `--file-passphrase-fd 3 3< pass.txt`. stdin stays the command's. |
 | `--key-passphrase-fd <n>` | With `--from`: the passphrase of the export's own key, if one was set on it when it was exported, from the first line of file descriptor `<n>`, instead of gpg's prompt. |
 | `--store-passphrase-fd <n>` | Without `--from`: the store key's passphrase (to read the secrets), from the first line of file descriptor `<n>`, instead of gpg's prompt. See [Passphrases without a prompt](#passphrases-without-a-prompt). |
@@ -1444,7 +1444,7 @@ Starts your shell (`$SHELL`, or `/bin/sh`) with entries from the EnvFolio store 
 variables. It is `folio exec <entry>... -- "$SHELL"`, plus a line saying what was loaded.
 
 ```
-folio shell [-s|--secrets] [-a|--all] [-n|--names|--debug|--confirm] [--plain] [--use <@namespace>]... [--vars <file>]... [--store-passphrase-fd <n>] [--from <file> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]] <entry>...
+folio shell [-s|--secrets] [-a|--all] [-n|--names|--debug|--confirm] [--plain] [--use <@namespace>]... [--vars <file>]... [--store-passphrase-fd <n>] [--from <export> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]] <entry>...
 ```
 
 | Option | Meaning |
@@ -1457,7 +1457,7 @@ folio shell [-s|--secrets] [-a|--all] [-n|--names|--debug|--confirm] [--plain] [
 | `--plain` | With `--names`, `--debug` or `--confirm`: mark secrets (S) and texts (T), with no colour, even on a screen. |
 | `--use <@namespace>` | Take every entry under `<@namespace>`, named without it, as in `folio exec`; can be given more than once. Experimental: it may change. |
 | `--vars <file>` | Set the variables a vars file says, as in `folio exec`; can be given more than once. |
-| `--from <file>` | Take the entries from a file made by `folio export`, as in `folio exec`. |
+| `--from <export>` | Take the entries from a file made by `folio export`, as in `folio exec`: a path ending in `.folio`, or a name in `FOLIO_FILE_DIR`. |
 | `--file-passphrase-fd <n>` | With `--from`: the file's passphrase, from file descriptor `<n>`, as in `folio exec`. |
 | `--key-passphrase-fd <n>` | With `--from`: the passphrase of the export's own key, from file descriptor `<n>`, as in `folio exec`. |
 | `--store-passphrase-fd <n>` | Without `--from`: the store key's passphrase, as in `folio exec`. |
@@ -1551,7 +1551,8 @@ What Tab offers:
 - text names after `… text`, secret names after `… secret`, both after `export`, `exec` and
   `shell` (also after `VAR=`), folders only after `ls`. A level at a time: `web/` first, then what
   is in it; a folder that is the only choice opens at once;
-- file names where a file goes (`restore`, `import`, `backup`, `--from`, `-o`, `--to`), and after
+- file names where a file goes (`restore`, `import`, `backup`, `--from`, `-o`, `--to`) — for an
+  export (`import`, `--from`, `export -o`), also the names in `FOLIO_FILE_DIR` — and after
   `exec … --` the command to run;
 - topics after `folio help`.
 
@@ -1725,7 +1726,7 @@ Copies some items into one file, to bring them into another store with `folio im
 a server, in a booth, or on another machine. Your store's key never leaves this machine.
 
 ```
-folio export [-s|--secrets] [--to <key>|--file-passphrase-stdin|--file-passphrase-fd <n>] [--key-type <pqc|classical>] [--key-passphrase-fd <n>] [--store-passphrase-fd <n>] [--use <@namespace>]... [--vars <file>]... [-o|--output <file>|<folder>] [<name>...]
+folio export [-s|--secrets] [--to <key>|--file-passphrase-stdin|--file-passphrase-fd <n>] [--key-type <pqc|classical>] [--key-passphrase-fd <n>] [--store-passphrase-fd <n>] [--use <@namespace>]... [--vars <file>]... [-o|--output <export>] [<name>...]
 ```
 
 | Option | Meaning |
@@ -1739,7 +1740,7 @@ folio export [-s|--secrets] [--to <key>|--file-passphrase-stdin|--file-passphras
 | `--store-passphrase-fd <n>` | The store key's passphrase (to read the secrets), from the first line of file descriptor `<n>`, instead of gpg's prompt. See [Passphrases without a prompt](#passphrases-without-a-prompt). |
 | `--use <@namespace>` | Take every item under `<@namespace>` (e.g. `@app2`, or `@app2/@prod`), named without it. Can be given more than once. See [One environment, with --use](#one-environment-with---use). Experimental: it may change. |
 | `--vars <file>` | Take the items a [vars file](#from-a-vars-file) names. Can be given more than once. See [The items a vars file names](#the-items-a-vars-file-names). |
-| `-o`, `--output <file>\|<folder>` | Where to write the file. With no `-o`, EnvFolio asks. |
+| `-o`, `--output <export>` | Where to write the file: a path ending in `.folio`, or a name in `FOLIO_FILE_DIR` (see [An export's path, or its name](#an-exports-path-or-its-name)). With no `-o`, EnvFolio asks. |
 | `-h`, `--help` | Show the options and stop. |
 
 A `<name>` is a text or a secret, or a folder: every text under it, and its secrets with
@@ -1785,10 +1786,10 @@ pack the key into the file — gpg asks there whatever it keeps. A post-quantum 
 passphrase when it is made, before the store key's passphrase is asked, and gpg also asks for it
 once to sign the texts.
 
-The file is `<file>` (`.folio` added when missing), or `store-<date>.folio` in `<folder>` —
-never inside the store. With no `-o`, EnvFolio asks, offering `store-<date>.folio` in the current
-folder (Tab completes names). An existing file is never replaced. The file
-is readable by you only.
+The file is `<export>` — a path ending in `.folio`, or a name in `FOLIO_FILE_DIR`, as
+[below](#an-exports-path-or-its-name) — never inside the store. With no `-o`, EnvFolio asks,
+offering `store-<date>` in `FOLIO_FILE_DIR` when it is set, else `./store-<date>.folio` (Tab
+completes names). An existing file is never replaced. The file is readable by you only.
 
 How it works:
 
@@ -1803,6 +1804,29 @@ How it works:
 - The whole file is **always locked**: with a passphrase, or with `--to`, to the public key of
   where it is going. Whoever opens the file can read every item in it, so it is never written
   unlocked.
+
+### An export's path, or its name
+
+Every command that takes an export file — `export -o`, `import`, `exec --from` and
+`shell --from` — takes it the same way:
+
+| Given | The file |
+| --- | --- |
+| a path ending in `.folio` (`test.folio`, `./x.folio`, `/media/usb/prod.folio`) | that path, as written |
+| anything else (`test`, `app2/prod`) | `$FOLIO_FILE_DIR/test.folio`, `$FOLIO_FILE_DIR/app2/prod.folio` |
+
+So keep your exports in one folder, set `FOLIO_FILE_DIR` to it, and name them:
+
+```bash
+export FOLIO_FILE_DIR=~/.local/folio
+folio export --secrets server --use @app2/@prod -o app2-prod     # ~/.local/folio/app2-prod.folio
+folio exec --from app2-prod --secrets --all -- ./deploy.sh
+```
+
+A name with no `FOLIO_FILE_DIR` set is refused, and says to give the path or set it; so is a
+`FOLIO_FILE_DIR` that is not a folder (it is never made), and a name that is a path with no
+`.folio` (`/media/usb`, `./x`, `out/`). A folder under it (`app2/`) is not made either. Tab
+completes the names in `FOLIO_FILE_DIR` beside the files.
 
 ### Export with a passphrase
 
@@ -1890,7 +1914,7 @@ given, so what they brought feeds the `${NAME}`s there too.
 Brings items from a file made by `folio export` into the EnvFolio store.
 
 ```
-folio import [-a|--all] [--overwrite|--skip-existing] [--key <id>] [--file-passphrase-stdin|--file-passphrase-fd <n>] [--key-passphrase-fd <n>] [--store-passphrase-fd <n>] [--allow-unsafe-folder] [<file> [<name>...]]
+folio import [-a|--all] [--overwrite|--skip-existing] [--key <id>] [--file-passphrase-stdin|--file-passphrase-fd <n>] [--key-passphrase-fd <n>] [--store-passphrase-fd <n>] [--allow-unsafe-folder] [<export> [<name>...]]
 ```
 
 | Option | Meaning |
@@ -1906,7 +1930,9 @@ folio import [-a|--all] [--overwrite|--skip-existing] [--key <id>] [--file-passp
 | `--allow-unsafe-folder` | Import into a store folder that is someone else's or open to other users without asking. The warning still shows. |
 | `-h`, `--help` | Show the options and stop. |
 
-With no `<file>`, EnvFolio asks for it (Tab completes names). A `<name>` is an item in the export,
+`<export>` is the file's path, ending in `.folio`, or its name in `FOLIO_FILE_DIR` (see
+[An export's path, or its name](#an-exports-path-or-its-name)). With no `<export>`, EnvFolio asks
+for it, the same way (Tab completes names). A `<name>` is an item in the export,
 or a folder: every item under it. With neither `<name>` nor `--all`, EnvFolio lists the export's
 items and asks which ones. Before gpg asks for the passphrase of a file locked with one, EnvFolio
 says so, shows the file and its locks (as [`folio export`](#folio-export) does), and waits for
