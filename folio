@@ -8,7 +8,7 @@
 #   folio init | path | backup | restore | export | import
 #   folio ls | find | grep | show | insert | edit | generate | rm | mv | cp   text|secret
 #   folio check vars
-#   folio ls | exec | shell | completion | version | help [command]
+#   folio ls | info | exec | shell | completion | version | help [command]
 #   (The kind can also come first: `folio text show` is `folio show text`.)
 #
 # Environment:
@@ -80,6 +80,7 @@ Main() {
         secret)  Secret  "$@" ;;
         vars)    Vars    "$@" ;;
         ls)      Ls      "$@" ;;
+        info)    Info    "$@" ;;
         exec)    Exec    "$@" ;;
         shell)   Shell   "$@" ;;
         completion) Completion "$@" ;;
@@ -90,7 +91,7 @@ Main() {
                  case " $* " in *" -h "*|*" --help "*) kinds-help "$category" ; return 0 ;; esac
                  die "$category: a text or a secret? \`folio $category text …\` or \`folio $category secret …\`." ;;
         check)   die "check: check what? \`folio check vars <file>…\`." ;;
-        "")      echo    "Usage: folio <init|path|backup|restore|export|import|text|secret|vars|ls|exec|shell|completion|version|help> [args...]" >&2 ; return 1 ;;
+        "")      echo    "Usage: folio <init|path|backup|restore|export|import|text|secret|vars|ls|info|exec|shell|completion|version|help> [args...]" >&2 ; return 1 ;;
         *)       echo    "folio: unknown command: $category" >&2 ; return 1 ;;
     esac
 }
@@ -111,6 +112,7 @@ Help() {
         "export")          export-help          ;;
         "import")          import-help          ;;
         "ls")              list-help            ;;
+        "info")            info-help            ;;
         "exec")            run-exec-help        ;;
         "shell")           run-shell-help       ;;
         "completion")      completion-help      ;;
@@ -163,6 +165,7 @@ Commands:
   ls                List texts and secrets together
   ls text           List texts
   ls secret         List secrets
+  info              Show what is known about one text or secret — never its value
   find text         Find texts by name
   find secret       Find secrets by name
   grep text         Find texts by value
@@ -2871,6 +2874,210 @@ Ls() {
     list-store all "EnvFolio Store" "ls" "$@"
 }
 
+#== Command: Info ==============================================================
+
+function info-help() {
+    cat <<'EOF'
+Usage: folio info <name>
+
+Show what is known about one text or secret, never its value: its file and size, the variable
+exec and shell give it, when it was made and last changed (from the store's git history, which
+also gives its earlier names after an mv), whether it has changes not yet committed — and, for a
+text, who signed it and whether the signature verifies; for a secret, the keys it is encrypted to,
+each marked when it is not (or no longer) a key of the store. Nothing is decrypted and no
+passphrase is asked. A name that is both a text and a secret shows both.
+
+Options:
+  -h, --help          Show this help and stop.
+EOF
+}
+
+# folio info <name>
+# Metadata only, from the files, gpg's packet list and git: never a value, never a passphrase.
+Info() {
+    local names=() arg
+    while (( $# > 0 )); do
+        arg=$1 ; shift
+        case $arg in
+            -h|--help) info-help ; return 0 ;;
+            --)        names+=("$@") ; break ;;
+            -*)        die "info: unknown option: $arg" ;;
+            *)         names+=("$arg") ;;
+        esac
+    done
+    (( ${#names[@]} == 1 )) || die "Usage: folio info <name>"
+    local name=${names[0]}
+    [[ -n ${name%/} && $name != -* && /$name/ != */../* && /$name/ != */./* ]] \
+        || die "info: '$name' is not a valid name."
+    name=${name%/}
+    check-store
+    local found=0
+    if [[ -f $STORE_PATH/$name.txt ]]; then
+        info-text "$name"
+        found=1
+    fi
+    if [[ -f $STORE_PATH/$name.gpg ]]; then
+        (( found )) && echo
+        info-secret "$name"
+        found=1
+    fi
+    (( found )) || die "info: '$name' is not a text or a secret in the store."
+}
+
+# info-text <name>: the block for the text <name>.
+function info-text() {
+    local name=$1 file=$STORE_PATH/$1.txt bytes lines
+    bytes=$(wc -c < "$file") ; bytes=${bytes//[!0-9]/}
+    lines=$(awk 'END { print NR }' "$file")
+    echo "$name  (text)"
+    info-line "File:"      "$(tilde-path "$file")"
+    info-line "Size:"      "$bytes bytes, $lines line$(plural "$lines")"
+    info-var-line "$name"
+    info-history-lines "$name.txt" "$name.txt" "$name.txt.sig"
+    info-line "Signed by:" "$(text-signature "$name")"
+}
+
+# info-secret <name>: the block for the secret <name>.
+function info-secret() {
+    local name=$1 file=$STORE_PATH/$1.gpg bytes recipients line label="Encrypted to:"
+    bytes=$(wc -c < "$file") ; bytes=${bytes//[!0-9]/}
+    echo "$name  (secret)"
+    info-line "File:"      "$(tilde-path "$file")   ($bytes bytes, encrypted)"
+    info-var-line "$name"
+    info-history-lines "$name.gpg" "$name.gpg"
+    recipients=$(secret-recipients "$name")
+    [[ -n $recipients ]] || recipients="no key found in the file"
+    while IFS= read -r line; do
+        info-line "$label" "$line"
+        label=""
+    done <<< "$recipients"
+}
+
+# info-line <label> <value>: one line of a block, the values lined up.
+function info-line() { printf '  %-14s%s\n' "$1" "$2" ; }
+
+# plural <count>: "s" unless <count> is 1.
+function plural() { [[ $1 == 1 ]] || printf s ; }
+
+# info-var-line <name>: the variable exec and shell give the entry <name>, or why it gets none.
+function info-var-line() {
+    local name=$1 var
+    var=$(entry-var-name "$name")
+    if [[ $var =~ $VAR_NAME_PATTERN ]]; then
+        info-line "Variable:" "$var"
+    elif [[ $name == @*/@?*/* ]]; then
+        info-line "Variable:" "none: under a namespace inside a namespace; load it with --use"
+    else
+        info-line "Variable:" "none: $var is not a valid variable name; use VAR=$name"
+    fi
+}
+
+# info-history-lines <file> <file>...: Created, Modified, Changes and Uncommitted of the entry whose
+# file in the store is the first <file>; all of them (a text and its signature) are checked for
+# uncommitted changes.
+function info-history-lines() {
+    local file=$1 changes
+    entry-history "$file"
+    if (( HISTORY_COUNT == 0 )); then
+        info-line "Created:"  "not committed yet"
+    else
+        info-line "Created:"  "$HISTORY_FIRST"
+        info-line "Modified:" "$HISTORY_LAST"
+        changes="$HISTORY_COUNT commit$(plural "$HISTORY_COUNT")"
+        [[ -z $HISTORY_NAMES ]] || changes+=";  was named: $HISTORY_NAMES"
+        info-line "Changes:"  "$changes"
+    fi
+    changes=$(git -C "$STORE_PATH" status --porcelain -- "$@" 2>/dev/null)
+    if [[ -n $changes ]]; then info-line "Uncommitted:" "yes (git -C $(tilde-path "$STORE_PATH") status)"
+    else                       info-line "Uncommitted:" "no"
+    fi
+}
+
+# entry-history <file>: the git history of <file> (<name>.txt or <name>.gpg) in the store, across
+# renames, in one `git log --follow`: HISTORY_COUNT commits, HISTORY_FIRST and HISTORY_LAST
+# ("<date> <time>  (<hash>  <subject>)", local time), and HISTORY_NAMES — its earlier names, newest
+# first, comma-separated ("" when none). File times are not used: restore and import reset them.
+function entry-history() {
+    local file=$1 line hash when subject path seen=" "
+    HISTORY_COUNT=0 HISTORY_FIRST="" HISTORY_LAST="" HISTORY_NAMES=""
+    while IFS= read -r line; do
+        if [[ $line == $'\x01'* ]]; then
+            IFS=$'\t' read -r hash when subject <<< "${line#$'\x01'}"
+            HISTORY_FIRST="$when  ($hash  $subject)"
+            [[ -n $HISTORY_LAST ]] || HISTORY_LAST=$HISTORY_FIRST
+            HISTORY_COUNT=$(( HISTORY_COUNT + 1 ))
+        elif [[ -n $line && $line != "$file" ]]; then
+            path=${line%.*}
+            [[ $seen != *" $path "* ]] || continue
+            seen+="$path "
+            HISTORY_NAMES+=${HISTORY_NAMES:+, }$path
+        fi
+    done < <(git -C "$STORE_PATH" -c core.quotePath=false log --follow --name-only \
+                 --date='format-local:%Y-%m-%d %H:%M' --format='%x01%h%x09%ad%x09%s' -- "$file" 2>/dev/null)
+}
+
+# text-signature <name>: who signed the text <name>, when, and whether it verifies with the store's
+# key — as verify-text checks, but said rather than stopping folio. Needs no passphrase.
+function text-signature() {
+    local name=$1 file=$STORE_PATH/$1.txt store_key status signer epoch uid when
+    [[ -f $file.sig ]] || { echo "no signature — changed outside EnvFolio?" ; return 0 ; }
+    store_key=$(gpg --list-keys --with-colons "$(head -n 1 "$STORE_PATH/.gpg-id")" 2>/dev/null \
+        | awk -F: '$1 == "fpr" { print $10; exit }')
+    # VALIDSIG <fpr> <date> <epoch> … <primary-fpr>: printed for a good signature only.
+    status=$(gpg --status-fd 1 --verify "$file.sig" "$file" 2>/dev/null | awk '$2 == "VALIDSIG" { print $5, $NF }')
+    if [[ -z $status ]]; then
+        echo "the signature does NOT verify — changed outside EnvFolio?"
+        return 0
+    fi
+    epoch=${status%% *} signer=${status##* }
+    uid=$(key-uid "$signer") ; [[ -n $uid ]] || uid=$signer
+    when=$(local-time "$epoch")
+    if [[ $signer == "$store_key" ]]; then echo "$uid, $when — valid"
+    else                                   echo "$uid, $when — valid, but NOT by the store's key"
+    fi
+}
+
+# local-time <epoch>: it as "YYYY-MM-DD HH:MM", local time. GNU date takes -d @<epoch>; BSD
+# (macOS) date takes -r <epoch>.
+function local-time() {
+    date -d "@$1" '+%Y-%m-%d %H:%M' 2>/dev/null || date -r "$1" '+%Y-%m-%d %H:%M'
+}
+
+# secret-recipients <name>: one line per key the secret <name> is encrypted to — "<key id> <uid>
+# (the store's key; expires …)", or STALE when the key is not in the .gpg-id that covers <name>
+# (pass's: the nearest one up from its folder). The key ids come from the file's packets: with
+# --list-only nothing is decrypted, and nothing asked.
+function secret-recipients() {
+    local name=$1 dir id_file keyid primary uid expiry note store_keys=" " line
+    dir=$STORE_PATH/$name ; dir=${dir%/*}
+    while [[ ! -f $dir/.gpg-id && $dir == "$STORE_PATH"/* ]]; do dir=${dir%/*} ; done
+    id_file=$dir/.gpg-id
+    while IFS= read -r line; do
+        [[ -n $line ]] || continue
+        store_keys+="$(primary-fpr "$line") "
+    done < "$id_file"
+    while IFS= read -r keyid; do
+        primary=$(primary-fpr "$keyid")
+        if [[ -z $primary ]]; then
+            echo "$keyid  (a key not in your keyring; not the store's key)"
+            continue
+        fi
+        uid=$(key-uid "$primary") expiry=$(key-expiry "$primary")
+        if [[ $store_keys == *" $primary "* ]]; then note="the store's key"
+        else                                         note="STALE, not in $(tilde-path "$id_file")"
+        fi
+        note+="; ${expiry:+expires $expiry}" ; [[ -n $expiry ]] || note+="never expires"
+        echo "$keyid $uid   ($note)"
+    done < <(gpg --batch --list-only --list-packets "$STORE_PATH/$name.gpg" 2>/dev/null \
+                 | awk '/^:pubkey enc packet:/ { sub(/.*keyid /, ""); print $1 }')
+}
+
+# primary-fpr <key>: the primary fingerprint of <key> (a key id, a subkey's, a fingerprint or an
+# email) in your keyring; nothing when it is not there.
+function primary-fpr() {
+    gpg --list-keys --with-colons -- "$1" 2>/dev/null | awk -F: '$1 == "fpr" { print $10; exit }'
+}
+
 #== Command: Exec ==============================================================
 
 function run-exec-help() {
@@ -3534,10 +3741,7 @@ function note-skipped-secrets() {
 # warn and leave it out. Only a top @folder is a namespace.
 function add-derived() {
     local how=$1 name=${2%.*} var
-    var=${name}
-    [[ $var == @*/* ]] && var=${var#*/}
-    var=${var//\//_} ; var=${var//-/_} ; var=${var//./_}
-    var=$(printf '%s' "$var" | LC_ALL=C tr '[:lower:]' '[:upper:]')
+    var=$(entry-var-name "$name")
     if [[ $var =~ $VAR_NAME_PATTERN ]]; then
         check-selection-var "$how" "$var" "$name"
         set-entry-var "$var" "$2"
@@ -3547,6 +3751,15 @@ function add-derived() {
         printf "folio %s: warning: '%s' would be %s, not a valid variable name; left out. Use VAR=%s.\n" \
             "$how" "$name" "$var" "$name" >&2
     fi
+}
+
+# entry-var-name <name>: the variable the entry <name> is by its path, for add-derived and info —
+# its top @namespace/ left off, / - and . turned into _, upper case. Not checked to be valid.
+function entry-var-name() {
+    local var=$1
+    [[ $var == @*/* ]] && var=${var#*/}
+    var=${var//\//_} ; var=${var//-/_} ; var=${var//./_}
+    printf '%s\n' "$var" | LC_ALL=C tr '[:lower:]' '[:upper:]'
 }
 
 # One selection — an entry, a folder, --all, a --use, a vars file's @{…} line — at a time: what it
@@ -4244,6 +4457,7 @@ function completion-args() {
         import)                       echo "exports none..." ;;
         export|exec|shell)            echo "entry..." ;;
         ls)                           echo entry-folder ;;
+        info)                         echo entry ;;
         completion)                   echo shell ;;
         help)                         echo "help..." ;;
         "text ls")                    echo text-folder ;;

@@ -4,6 +4,16 @@ User-visible changes to EnvFolio. Newest first.
 
 ## Unreleased
 
+### Added
+
+- `folio info <name>`: what is known about one text or secret, never its value — its file and
+  size, the variable `exec` and `shell` give it, when it was created and last modified and how
+  many commits changed it (from the store's git history, which also gives its earlier names after
+  an `mv`), and whether it has uncommitted changes. A text also shows who signed it, when, and
+  whether the signature verifies (reported, not refused); a secret, the keys it is encrypted to,
+  each the store's key or STALE, and their expiry. Nothing is decrypted and no passphrase asked. A
+  name that is both kinds shows both. Tab completes the name.
+
 ## 2.0.0 — 2026-11-08
 
 ### Added
