@@ -121,6 +121,65 @@ field() { printf '%s\n' "$output" | awk -v l="$1" 'index($0, "  " l " ") == 1 { 
     [[ $(field "Encrypted to:") == *"Test User <test@example.com>   (STALE, not in "*"/.gpg-id; never expires)" ]] || false
 }
 
+# The primary fingerprint of the key <email> (the first, when several match).
+fpr-of() { gpg --list-keys --with-colons "$1" | awk -F: '$1 == "fpr" { print $10 ; exit }' ; }
+
+@test "info: a store key that has expired, or is revoked, says so" {
+    make-store
+    local fpr ; fpr=$(fpr-of test@example.com)
+    gpg --batch --passphrase '' --pinentry-mode loopback --quick-set-expire "$fpr" seconds=1 2>/dev/null
+    gpg --batch --passphrase '' --pinentry-mode loopback --quick-set-expire "$fpr" seconds=1 '*' 2>/dev/null
+    sleep 2
+    run "$FOLIO" info gh/token
+    [ "$status" -eq 0 ]
+    [[ $(field "Encrypted to:") == *"(the store's key; expired $(date -u +%F))" ]] || false
+    # gpg made a revocation certificate with the key; its lines start with ':' so it is not imported by
+    # mistake.
+    sed 's/^://' "$GNUPGHOME/openpgp-revocs.d/$fpr.rev" | gpg --batch --import 2>/dev/null
+    run "$FOLIO" info gh/token
+    [[ $(field "Encrypted to:") == *"(the store's key; revoked)" ]] || false
+}
+
+@test "info: a recipient not in your keyring is not called STALE" {
+    make-store
+    local fpr keyid ; fpr=$(fpr-of test@example.com)
+    gpg --batch --yes --delete-secret-and-public-key "$fpr" 2>/dev/null
+    run "$FOLIO" info gh/token
+    [ "$status" -eq 0 ]
+    [[ $(field "Encrypted to:") == *"(not in your keyring, so not known to be the store's key)" ]] || false
+    [[ $output != *STALE* ]] || false
+    # When .gpg-id names that very key id, it is the store's key even without the key.
+    keyid=$(field "Encrypted to:") ; keyid=${keyid%% *}
+    echo "$keyid" > "$FOLIO_STORE_DIR/.gpg-id"
+    run "$FOLIO" info gh/token
+    [[ $(field "Encrypted to:") == "$keyid  (the store's key, but not in your keyring)" ]] || false
+}
+
+@test "info: an email in .gpg-id stands for every key it matches" {
+    make-store
+    # --yes: gpg will not make a second key for a user id it has otherwise.
+    gpg --batch --yes --passphrase '' --quick-generate-key "Test User <test@example.com>" default default never 2>/dev/null
+    # The second key with that email: the one made just now.
+    local new ; new=$(gpg --list-keys --with-colons test@example.com | awk -F: '$1 == "pub" { n++ ; want = (n == 2) } $1 == "fpr" && want { print $10 ; want = 0 }')
+    [ "$new" != "$(fpr-of test@example.com)" ]
+    printf 'other\n' | gpg --batch --trust-model always --encrypt --recipient "$new" --output "$FOLIO_STORE_DIR/gh/other.gpg"
+    # init writes the key's fingerprint; a .gpg-id written by hand may name the email instead.
+    echo test@example.com > "$FOLIO_STORE_DIR/.gpg-id"
+    run "$FOLIO" info gh/other
+    [ "$status" -eq 0 ]
+    [[ $(field "Encrypted to:") == *"(the store's key; never expires)" ]] || false
+}
+
+@test "info: .gpg-id read as pass does — no final newline, a comment, spaces" {
+    make-store
+    printf 'test@example.com' > "$FOLIO_STORE_DIR/.gpg-id"
+    run "$FOLIO" info gh/token
+    [[ $(field "Encrypted to:") == *"(the store's key; never expires)" ]] || false
+    printf '  test@example.com   # the store key\n' > "$FOLIO_STORE_DIR/.gpg-id"
+    run "$FOLIO" info gh/token
+    [[ $(field "Encrypted to:") == *"(the store's key; never expires)" ]] || false
+}
+
 @test "info: the variable of a namespaced entry, and of one that has none" {
     make-store
     "$FOLIO" insert text -t x @app/db-host.name < /dev/null

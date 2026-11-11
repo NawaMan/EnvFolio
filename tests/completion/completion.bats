@@ -249,6 +249,12 @@ EOF
     [ "$(words exec -s GH=web/g)" = "GH=web/github" ]
 }
 
+@test "completion: info takes a name of either kind, never VAR=<name>" {
+    make-names
+    [ "$(words info web/g)" = "web/github" ]
+    [ "$(words info GH=web/g)" = "" ]
+}
+
 @test "completion: --use takes only namespaces, deeper ones too" {
     make-names
     mkdir -p "$FOLIO_STORE_DIR/@app2/@prod" "$FOLIO_STORE_DIR/@app2/server" "$FOLIO_STORE_DIR/@nawa"
