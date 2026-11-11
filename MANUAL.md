@@ -331,7 +331,9 @@ change is a commit), in local time, not from the file: `restore` and `import` ma
 A text also shows who signed it and when, and whether the signature verifies with the store's key
 — a text changed outside EnvFolio is reported, not refused as `show text` does. A secret shows the
 keys it is encrypted to, each the store's key or **STALE** (not in the `.gpg-id` that covers it,
-e.g. after the store's key was changed by hand), and when each expires.
+e.g. after the store's key was changed by hand), and when each expires — or that it has expired,
+or was revoked. A key not in your keyring is shown by its id, without being called STALE: whether
+it is the store's key can then only be told when `.gpg-id` names that id.
 A name that is both a text and a secret shows both, the text first. It needs a ready store
 (`folio init`).
 

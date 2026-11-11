@@ -2004,12 +2004,36 @@ function verify-text() {
     check+="Its history:         git -C $STORE_PATH log -p -- $name.txt${EXTRA_LINE}"
     check+="If the text is right, sign it again:  folio insert text -f -m $name < $file"
     [[ -f $file.sig ]] || die "'$name' has no signature.${EXTRA_LINE}$check"
-    # VALIDSIG's last field is the signing key's primary fingerprint; gpg prints it for a good one only.
-    store_key=$(gpg --list-keys --with-colons "$(head -n 1 "$STORE_PATH/.gpg-id")" 2>/dev/null \
-        | awk -F: '$1 == "fpr" { print $10; exit }')
-    signer=$(gpg --status-fd 1 --verify "$file.sig" "$file" 2>/dev/null | awk '$2 == "VALIDSIG" { print $NF }')
+    store_key=$(store-key-fpr)
+    signer=$(text-signer "$file") ; signer=${signer#* }
     [[ -n $signer && $signer == "$store_key" ]] \
         || die "the signature of '$name' does not verify with the store's key.${EXTRA_LINE}$check"
+}
+
+# store-key-fpr: the primary fingerprint of the store's key — the first in .gpg-id, the one texts
+# are signed with — or nothing when it is not in the keyring.
+function store-key-fpr() {
+    primary-fpr "$(head -n 1 "$STORE_PATH/.gpg-id")"
+}
+
+# text-signer <file>: "<epoch> <primary fingerprint>" of the good signature <file>.sig on <file>;
+# nothing when it does not verify. gpg prints VALIDSIG (<fpr> <date> <epoch> … <primary-fpr>) for a
+# good signature only. Needs no passphrase.
+function text-signer() {
+    gpg --status-fd 1 --verify "$1.sig" "$1" 2>/dev/null | awk '$2 == "VALIDSIG" { print $5, $NF ; exit }'
+}
+
+# primary-fpr <key>: the primary fingerprint of <key> (a key id, a subkey's, a fingerprint or an
+# email) in your keyring; nothing when it is not there. The first, when <key> matches several.
+function primary-fpr() {
+    primary-fprs "$1" | head -n 1
+}
+
+# primary-fprs <key>: the primary fingerprint of every key in your keyring that <key> matches — an
+# email can match an old key and its replacement — one per line.
+function primary-fprs() {
+    gpg --list-keys --with-colons -- "$1" 2>/dev/null \
+        | awk -F: '$1 == "pub" { want = 1 } $1 == "fpr" && want { print $10 ; want = 0 }'
 }
 
 # --- text ls ------------------------------------------------------------------
@@ -2961,15 +2985,13 @@ function plural() { [[ $1 == 1 ]] || printf s ; }
 
 # info-var-line <name>: the variable exec and shell give the entry <name>, or why it gets none.
 function info-var-line() {
-    local name=$1 var
-    var=$(entry-var-name "$name")
-    if [[ $var =~ $VAR_NAME_PATTERN ]]; then
-        info-line "Variable:" "$var"
-    elif [[ $name == @*/@?*/* ]]; then
-        info-line "Variable:" "none: under a namespace inside a namespace; load it with --use"
-    else
-        info-line "Variable:" "none: $var is not a valid variable name; use VAR=$name"
-    fi
+    local name=$1
+    entry-var "$name"
+    case $? in
+        0) info-line "Variable:" "$ENTRY_VAR" ;;
+        1) info-line "Variable:" "none: under a namespace inside a namespace; load it with --use" ;;
+        *) info-line "Variable:" "none: $ENTRY_VAR is not a valid variable name; use VAR=$name" ;;
+    esac
 }
 
 # info-history-lines <file> <file>...: Created, Modified, Changes and Uncommitted of the entry whose
@@ -3021,10 +3043,8 @@ function entry-history() {
 function text-signature() {
     local name=$1 file=$STORE_PATH/$1.txt store_key status signer epoch uid when
     [[ -f $file.sig ]] || { echo "no signature — changed outside EnvFolio?" ; return 0 ; }
-    store_key=$(gpg --list-keys --with-colons "$(head -n 1 "$STORE_PATH/.gpg-id")" 2>/dev/null \
-        | awk -F: '$1 == "fpr" { print $10; exit }')
-    # VALIDSIG <fpr> <date> <epoch> … <primary-fpr>: printed for a good signature only.
-    status=$(gpg --status-fd 1 --verify "$file.sig" "$file" 2>/dev/null | awk '$2 == "VALIDSIG" { print $5, $NF }')
+    store_key=$(store-key-fpr)
+    status=$(text-signer "$file")
     if [[ -z $status ]]; then
         echo "the signature does NOT verify — changed outside EnvFolio?"
         return 0
@@ -3048,34 +3068,72 @@ function local-time() {
 # (pass's: the nearest one up from its folder). The key ids come from the file's packets: with
 # --list-only nothing is decrypted, and nothing asked.
 function secret-recipients() {
-    local name=$1 dir id_file keyid primary uid expiry note store_keys=" " line
+    local name=$1 dir id_file keyid primary uid lifetime note
     dir=$STORE_PATH/$name ; dir=${dir%/*}
     while [[ ! -f $dir/.gpg-id && $dir == "$STORE_PATH"/* ]]; do dir=${dir%/*} ; done
     id_file=$dir/.gpg-id
-    while IFS= read -r line; do
-        [[ -n $line ]] || continue
-        store_keys+="$(primary-fpr "$line") "
-    done < "$id_file"
+    gpg-id-keys "$id_file"
     while IFS= read -r keyid; do
-        primary=$(primary-fpr "$keyid")
-        if [[ -z $primary ]]; then
-            echo "$keyid  (a key not in your keyring; not the store's key)"
+        if [[ $keyid == 0000000000000000 ]]; then
+            echo "$keyid  (a hidden recipient: the file does not say which key)"
             continue
         fi
-        uid=$(key-uid "$primary") expiry=$(key-expiry "$primary")
-        if [[ $store_keys == *" $primary "* ]]; then note="the store's key"
-        else                                         note="STALE, not in $(tilde-path "$id_file")"
+        primary=$(primary-fpr "$keyid")
+        if [[ -z $primary ]]; then
+            if gpg-id-names "$keyid"; then note="the store's key, but not in your keyring"
+            else                           note="not in your keyring, so not known to be the store's key"
+            fi
+            echo "$keyid  ($note)"
+            continue
         fi
-        note+="; ${expiry:+expires $expiry}" ; [[ -n $expiry ]] || note+="never expires"
-        echo "$keyid $uid   ($note)"
+        uid=$(key-uid "$primary") lifetime=$(key-lifetime "$primary")
+        if [[ $GPG_ID_FPRS == *" $primary "* ]]; then note="the store's key"
+        else                                          note="STALE, not in $(tilde-path "$id_file")"
+        fi
+        echo "$keyid $uid   ($note; $lifetime)"
     done < <(gpg --batch --list-only --list-packets "$STORE_PATH/$name.gpg" 2>/dev/null \
                  | awk '/^:pubkey enc packet:/ { sub(/.*keyid /, ""); print $1 }')
 }
 
-# primary-fpr <key>: the primary fingerprint of <key> (a key id, a subkey's, a fingerprint or an
-# email) in your keyring; nothing when it is not there.
-function primary-fpr() {
-    gpg --list-keys --with-colons -- "$1" 2>/dev/null | awk -F: '$1 == "fpr" { print $10; exit }'
+# gpg-id-keys <file>: read the .gpg-id <file> as pass does — one key per line, a # comment and
+# spaces left out, the last line also without its newline — into GPG_ID_KEYS (the keys as written,
+# upper case) and GPG_ID_FPRS (the primary fingerprint of every key in your keyring each one
+# matches: an email can match an old key and its replacement), each " "-separated and padded.
+function gpg-id-keys() {
+    local line fpr
+    GPG_ID_KEYS=" " GPG_ID_FPRS=" "
+    while IFS= read -r line || [[ -n $line ]]; do
+        line=${line%%#*} ; line=${line//[[:space:]]/} ; line=${line%!}
+        [[ -n $line ]] || continue
+        GPG_ID_KEYS+="$(printf '%s' "${line#0x}" | LC_ALL=C tr '[:lower:]' '[:upper:]') "
+        while IFS= read -r fpr; do GPG_ID_FPRS+="$fpr " ; done < <(primary-fprs "$line")
+    done < "$1"
+}
+
+# gpg-id-names <key id>: whether a key in GPG_ID_KEYS (from gpg-id-keys) is <key id>, or a
+# fingerprint ending in it — for a key not in your keyring, the only way to tell.
+function gpg-id-names() {
+    local key
+    for key in $GPG_ID_KEYS; do
+        [[ $key == *"$1" ]] && return 0
+    done
+    return 1
+}
+
+# key-lifetime <fpr>: "expires <date>", "expired <date>", "revoked" or "never expires", for the key
+# with primary fingerprint <fpr> — gpg's own validity (pub field 2: e expired, r revoked).
+function key-lifetime() {
+    local line validity epoch day
+    line=$(gpg --list-keys --with-colons -- "$1" 2>/dev/null | awk -F: '$1 == "pub" { print $2 ":" $7 ; exit }')
+    validity=${line%%:*} epoch=${line#*:}
+    if   [[ $validity == r ]]; then echo "revoked" ; return 0
+    elif [[ -z $epoch ]];      then echo "never expires" ; return 0
+    fi
+    # GNU date takes -d @<epoch>; BSD (macOS) date takes -r <epoch>.
+    day=$(date -u -d "@$epoch" +%F 2>/dev/null || date -u -r "$epoch" +%F)
+    if [[ $validity == e ]]; then echo "expired $day"
+    else                          echo "expires $day"
+    fi
 }
 
 #== Command: Exec ==============================================================
@@ -3740,20 +3798,30 @@ function note-skipped-secrets() {
 # turned into _ (gh/api-key -> GH_API_KEY) — or, when that is still not a valid variable name,
 # warn and leave it out. Only a top @folder is a namespace.
 function add-derived() {
-    local how=$1 name=${2%.*} var
-    var=$(entry-var-name "$name")
-    if [[ $var =~ $VAR_NAME_PATTERN ]]; then
-        check-selection-var "$how" "$var" "$name"
-        set-entry-var "$var" "$2"
-    elif [[ $name == @*/@?*/* ]]; then
-        note-nested-namespace "$how" "$name"
-    else
-        printf "folio %s: warning: '%s' would be %s, not a valid variable name; left out. Use VAR=%s.\n" \
-            "$how" "$name" "$var" "$name" >&2
+    local how=$1 name=${2%.*}
+    entry-var "$name"
+    case $? in
+        0) check-selection-var "$how" "$ENTRY_VAR" "$name"
+           set-entry-var "$ENTRY_VAR" "$2" ;;
+        1) note-nested-namespace "$how" "$name" ;;
+        *) printf "folio %s: warning: '%s' would be %s, not a valid variable name; left out. Use VAR=%s.\n" \
+               "$how" "$name" "$ENTRY_VAR" "$name" >&2 ;;
+    esac
+}
+
+# entry-var <name>: ENTRY_VAR, the variable the entry <name> is by its path (entry-var-name), and
+# whether exec and shell give it one — for add-derived and info. Returns 0 when ENTRY_VAR is a valid
+# variable name, 1 when <name> is under a namespace inside a namespace (only --use reaches it), 2
+# when ENTRY_VAR is not a valid variable name.
+function entry-var() {
+    ENTRY_VAR=$(entry-var-name "$1")
+    if   [[ $ENTRY_VAR =~ $VAR_NAME_PATTERN ]]; then return 0
+    elif [[ $1 == @*/@?*/* ]];                    then return 1
+    else                                               return 2
     fi
 }
 
-# entry-var-name <name>: the variable the entry <name> is by its path, for add-derived and info —
+# entry-var-name <name>: the variable the entry <name> is by its path, for entry-var —
 # its top @namespace/ left off, / - and . turned into _, upper case. Not checked to be valid.
 function entry-var-name() {
     local var=$1
@@ -4386,6 +4454,7 @@ function complete-words() {
         text-folder)     complete-entries txt "$cur" folders ;;
         secret-folder)   complete-entries gpg "$cur" folders ;;
         entry-folder)    complete-entries all "$cur" folders ;;
+        name)            complete-entries all "$cur" ;;
         shell)           printf 'words\nbash\tFor bash\nzsh\tFor zsh\n' | complete-matching "$cur" ;;
         help)
             if (( count == 0 )); then complete-commands "" "$cur"
@@ -4445,7 +4514,8 @@ function complete-namespaces() {
 
 # completion-args <command>: the kinds of its arguments, in order; one marked ... stands for all
 # the rest. Fails for a command it does not know. Kinds: none, files, dirs, text, secret, entry
-# (either, or a folder of them), text-folder, secret-folder, entry-folder, shell, help.
+# (either, or a folder of them, or VAR=<name>), name (a text or a secret, no VAR=), text-folder,
+# secret-folder, entry-folder, shell, help.
 # A new command needs a line here: tests/completion/completion.bats fails until it has one.
 # <command> is the kind first (text show), as the code takes it; show text is taken as that too.
 function completion-args() {
@@ -4457,7 +4527,7 @@ function completion-args() {
         import)                       echo "exports none..." ;;
         export|exec|shell)            echo "entry..." ;;
         ls)                           echo entry-folder ;;
-        info)                         echo entry ;;
+        info)                         echo name ;;
         completion)                   echo shell ;;
         help)                         echo "help..." ;;
         "text ls")                    echo text-folder ;;
