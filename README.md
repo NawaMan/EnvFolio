@@ -131,6 +131,7 @@ accident.
 | `folio backup` / `restore` | The whole store and its key, in one file and back |
 | `folio export` / `import` | Some items, in one locked file and into another store |
 | `folio ls [text\|secret]` | List items, as a tree or flat — of the store, or with `--from`, of an export file |
+| `folio info <name>` | What is known about one item, never its value: size, variable, created/modified (from git), its signature or the keys it is encrypted to |
 | `folio <action> text\|secret` | `show`, `insert`, `edit`, `generate`, `rm`, `mv`, `cp`, `find` (by name), `grep` (by value) |
 | `folio exec` | Run a command with items as environment variables |
 | `folio shell` | Start a shell with items as environment variables |
