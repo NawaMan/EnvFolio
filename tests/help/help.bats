@@ -58,7 +58,7 @@ teardown() {
 @test "an unknown option is refused by every command that takes options" {
     local cmd
     # (secret …: a store comes first; secret-show.bats checks its unknown option with one.)
-    for cmd in restore import "show text" "generate text" "rm text" "insert text" backup export init; do
+    for cmd in restore import "show text" "generate text" "rm text" "insert text" backup export init info; do
         # shellcheck disable=SC2086  # the words of the command
         run "$FOLIO" $cmd --nope x < /dev/null
         [ "$status" -eq 1 ]

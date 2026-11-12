@@ -6,7 +6,7 @@ keyboard has a matching test in `tests/` named `MANUAL: <command> — <example>`
 ## Contents
 
 - **Start:** [`help`](#folio-help) · [`init`](#folio-init) · [`path`](#folio-path) ·
-  [`ls`](#folio-ls)
+  [`ls`](#folio-ls) · [`info`](#folio-info)
 - **Texts:** [`ls text`](#folio-ls-text) · [`find text`](#folio-find-text) ·
   [`grep text`](#folio-grep-text) · [`show text`](#folio-show-text) ·
   [`insert text`](#folio-insert-text) · [`edit text`](#folio-edit-text) ·
@@ -308,6 +308,69 @@ EnvFolio Export: ~/.local/folio/app2-prod.folio
 Lists what `folio export` put in the file, without importing it: `--from` takes the file's path or
 its name in `FOLIO_FILE_DIR`, as `folio exec --from` does. `ls text --from` and `ls secret --from`
 list one kind.
+
+---
+
+## `folio info`
+
+Shows what is known about one text or secret — never its value, a text's contents or a key, and
+nothing is decrypted or asked: no passphrase is needed.
+
+```
+folio info <name>
+```
+
+| Option | Meaning |
+| --- | --- |
+| `-h`, `--help` | Show the options and stop. Works without a store. |
+
+For either kind: the file and its size, the variable `exec` and `shell` give it, when it was
+created and last modified, how many commits changed it and the names it had before an `mv`, and
+whether it has changes not yet committed. The times come from the store's git history (every
+change is a commit), in local time, not from the file: `restore` and `import` make files anew.
+A text also shows who signed it and when, and whether the signature verifies with the store's key
+— a text changed outside EnvFolio is reported, not refused as `show text` does. A secret shows the
+keys it is encrypted to, each the store's key or **STALE** (not in the `.gpg-id` that covers it,
+e.g. after the store's key was changed by hand), and when each expires — or that it has expired,
+or was revoked. A key not in your keyring is shown by its id, without being called STALE: whether
+it is the store's key can then only be told when `.gpg-id` names that id.
+A name that is both a text and a secret shows both, the text first. It needs a ready store
+(`folio init`).
+
+### Show a secret's metadata
+
+```bash
+folio info gh/token
+```
+
+```
+gh/token  (secret)
+  File:         ~/.folio/gh/token.gpg   (412 bytes, encrypted)
+  Variable:     GH_TOKEN
+  Created:      2026-09-02 14:11  (a1b2c3d  Add given password for github/token to store.)
+  Modified:     2026-11-01 09:30  (d4e5f6a  Rename github/token to gh/token.)
+  Changes:      2 commits;  was named: github/token
+  Uncommitted:  no
+  Encrypted to: 3965E1B66F05078C Jane Doe <jane@example.com>   (the store's key; never expires)
+```
+
+### Show a text's metadata
+
+```bash
+folio info gh/user
+```
+
+```
+gh/user  (text)
+  File:         ~/.folio/gh/user.txt
+  Size:         5 bytes, 1 line
+  Variable:     GH_USER
+  Created:      2026-09-02 14:10  (b2c3d4e  Add given text for gh/user to store.)
+  Modified:     2026-09-02 14:10  (b2c3d4e  Add given text for gh/user to store.)
+  Changes:      1 commit
+  Uncommitted:  no
+  Signed by:    Jane Doe <jane@example.com>, 2026-09-02 14:10 — valid
+```
 
 ---
 

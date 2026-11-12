@@ -115,7 +115,7 @@ EOF
 # --- Commands and options --------------------------------------------------------
 
 @test "completion: commands, the action first, then the kinds it is for" {
-    [ "$(words "")" = "init,path,backup,restore,export,import,ls,find,grep,show,insert,edit,generate,rm,mv,cp,check,exec,shell,completion,version,help" ]
+    [ "$(words "")" = "init,path,backup,restore,export,import,ls,info,find,grep,show,insert,edit,generate,rm,mv,cp,check,exec,shell,completion,version,help" ]
     words "" >/dev/null ; [ "$how" = words ]
     [ "$(words sh)" = "show,shell" ]
     [ "$(words show "")" = "text,secret" ]
@@ -215,7 +215,7 @@ EOF
 }
 
 @test "completion: help topics, completion shells, nothing for an unknown command" {
-    [ "$(words help in)" = "init,insert" ]
+    [ "$(words help in)" = "init,info,insert" ]
     [ "$(words help show s)" = "secret" ]
     [ "$(words help secret sh)" = "show" ]
     [ "$(words completion "")" = "bash,zsh" ]
@@ -247,6 +247,12 @@ EOF
 @test "completion: exec's VAR=<name> completes the name after the =" {
     make-names
     [ "$(words exec -s GH=web/g)" = "GH=web/github" ]
+}
+
+@test "completion: info takes a name of either kind, never VAR=<name>" {
+    make-names
+    [ "$(words info web/g)" = "web/github" ]
+    [ "$(words info GH=web/g)" = "" ]
 }
 
 @test "completion: --use takes only namespaces, deeper ones too" {
