@@ -1,0 +1,1 @@
+function u(r){return r==="true"?!0:r==="false"?!1:null}function n(r){if(!r||!r.has("adjust"))return null;const t=(r.get("adjust")??"").trim().toLowerCase();return t!=="off"&&t!=="false"&&t!=="0"}function a(r,t,e){return t!==null?t:e===!0}export{a,n as b,u as r};
