@@ -82,7 +82,7 @@ fake-editor() {
     [ ! -e "$FOLIO_STORE_DIR/new/one.txt" ]
 }
 
-@test "edit text: a text changed outside EnvFolio is not opened or re-signed" {
+@test "edit text: a text changed outside Folio is not opened or re-signed" {
     make-store
     fake-editor "whatever"
     printf 'mallory\n' > "$FOLIO_STORE_DIR/web/user.txt"
@@ -121,7 +121,7 @@ fake-editor() {
     fake-editor "x"
     run "$FOLIO" edit text web/user
     [ "$status" -eq 1 ]
-    [[ $output == *"No ready EnvFolio store"*"folio init"* ]] || false
+    [[ $output == *"No ready Folio store"*"folio init"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 

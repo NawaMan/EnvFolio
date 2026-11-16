@@ -1,6 +1,6 @@
 # AGENTS.md — Working on this repository
 
-Guidance for an AI agent (Claude Code, or similar) helping develop **EnvFolio**, a command-line app with
+Guidance for an AI agent (Claude Code, or similar) helping develop **Folio**, a command-line app with
 interactive prompts, written in **bash**, for keeping texts and secrets.
 
 ---
@@ -117,7 +117,7 @@ green light** — it is a separate pre-edit check.
 
 
 ### Verification guidance
-- To see how a file EnvFolio wrote is locked and what it holds — a store's `.gpg`/`.txt.sig`, a
+- To see how a file Folio wrote is locked and what it holds — a store's `.gpg`/`.txt.sig`, a
   backup, a `.folio` export — use `tools/x-ray.sh [--open] <file|folder>`. It never shows a secret
   value, a text's contents or a key.
 - Prefer the smallest honest check: a `bats` test for a logic change, `shellcheck` always, a
@@ -282,7 +282,7 @@ Starting style, not law — deviate explicitly (say so and why) rather than sile
 
 - **Must run on both Linux and macOS.** Every change is written for both; anything that differs
   (package manager, clipboard tool, GNU vs BSD flags) is handled explicitly, not assumed.
-- `#!/usr/bin/env bash`. **Minimum bash: 3.2**, the version macOS still ships, so EnvFolio runs on a
+- `#!/usr/bin/env bash`. **Minimum bash: 3.2**, the version macOS still ships, so Folio runs on a
   stock Mac. No bash 4+ features: no associative arrays (`declare -A`), `mapfile`/`readarray`,
   case changes (`${var,,}`, `${var^^}`), namerefs (`local -n`), `${var@Q}`, `;&`/`;;&`, `|&`,
   `coproc`, `wait -n` or negative array indexes. Also avoid `"${arr[@]}"` on an empty array
@@ -355,7 +355,7 @@ Use a session name that is clearly yours, and never kill one you did not create.
 - **One exception, by the user's decision: `folio exec` and `folio shell`.** Their whole purpose is
   to hand entries to a child process as environment variables (like `op run` / `aws-vault exec`),
   so there — and only there — secrets go into a child's environment. Only with `--secrets`
-  (texts load by default). Everything else still holds: values never go on a command line (EnvFolio
+  (texts load by default). Everything else still holds: values never go on a command line (Folio
   `export`s them and `exec`s — never `env VAR=value cmd`), into a file, or on the screen (the
   shell lists variable names only).
 - **Texts are not secrets** — they're stored plain, so they may come from argv

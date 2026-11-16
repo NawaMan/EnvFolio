@@ -1,4 +1,4 @@
-# EnvFolio Manual
+# Folio Manual
 
 One section per command, one subsection per example. Every example that can run without a
 keyboard has a matching test in `tests/` named `MANUAL: <command> — <example>`.
@@ -62,7 +62,7 @@ A command on items names the action, then the kind: `folio show text web/user`,
 
 ## `folio init`
 
-Creates the EnvFolio store (`$FOLIO_STORE_DIR`, default `~/.folio`): picks or creates the GPG key that
+Creates the Folio store (`$FOLIO_STORE_DIR`, default `~/.folio`): picks or creates the GPG key that
 encrypts it, runs `pass init`, and starts the store's git history.
 
 ```
@@ -82,9 +82,9 @@ folio init [--new-key] [--name <name>] [--email <email>] [--key-type <pqc|classi
 | `--allow-unsafe-folder` | Use an existing empty folder that is someone else's or open to other users without asking. The warning still shows. See *The store folder is private*. |
 | `-h`, `--help` | Show the options and stop. Nothing is created. |
 
-`--opt=value` works as well as `--opt value`. EnvFolio first says what it needs, then confirms each
+`--opt=value` works as well as `--opt value`. Folio first says what it needs, then confirms each
 input given and asks for the ones that are not; only then is anything made. Before gpg asks you to
-choose a new key's passphrase, EnvFolio says so and waits for Enter. `--key` cannot be combined
+choose a new key's passphrase, Folio says so and waits for Enter. `--key` cannot be combined
 with the new-key options. It fails if `$FOLIO_STORE_DIR` is a folder with anything in it;
 an empty folder is fine.
 
@@ -167,8 +167,8 @@ is private*.
 
 Otherwise `folio init` refuses to run, and changes nothing:
 
-- **A ready EnvFolio store** (it has `.gpg-id` and a git history) — says the store already exists.
-- **Anything else** in the folder, even only hidden files — says it is not a ready EnvFolio store.
+- **A ready Folio store** (it has `.gpg-id` and a git history) — says the store already exists.
+- **Anything else** in the folder, even only hidden files — says it is not a ready Folio store.
   This is what an earlier `folio init` leaves if it stopped partway (an error, Ctrl-C, a
   closed terminal): remove the folder and run `folio init` again. A key created by the
   earlier run is kept, and shows up in the key menu.
@@ -180,8 +180,8 @@ into it (`700`): even encrypted, the names of your entries and the plain texts w
 users. An existing empty folder you point them at (a bind mount, say) is used as it is — that is
 your call.
 
-Like gpg for its home folder, EnvFolio checks whether the store's folder belongs to someone else,
-or other users can get into it (as they can into a store made by EnvFolio 0.1.0):
+Like gpg for its home folder, Folio checks whether the store's folder belongs to someone else,
+or other users can get into it (as they can into a store made by Folio 0.1.0):
 
 ```
 folio: warning: /home/you/.folio belongs to root, not to you: they can read and change your store.
@@ -202,7 +202,7 @@ every time. Fix the folder instead, or keep the store somewhere else.
 
 ## `folio path`
 
-Prints the EnvFolio store's folder: `$FOLIO_STORE_DIR`, default `~/.folio`, as an absolute path. It
+Prints the Folio store's folder: `$FOLIO_STORE_DIR`, default `~/.folio`, as an absolute path. It
 works whether or not the store exists yet.
 
 ```
@@ -227,7 +227,7 @@ folio path
 
 ## `folio ls`
 
-Lists the texts and secrets in the EnvFolio store together as one tree: names only, never values.
+Lists the texts and secrets in the Folio store together as one tree: names only, never values.
 Each name is marked **(S)** for a secret or **(T)** for a text. A name that is both shows twice.
 On a screen, secrets are yellow and texts green — the colours in `ls text`, `ls secret` and `find`
 too — and, when the terminal draws emoji, marked 🔑 and 📄 instead: `🔑github`. folio asks the
@@ -261,7 +261,7 @@ folio ls
 ```
 
 ```
-EnvFolio Store
+Folio Store
 ├── (T)note
 └── web
     ├── (S)github
@@ -299,7 +299,7 @@ folio ls --from app2-prod
 ```
 
 ```
-EnvFolio Export: ~/.local/folio/app2-prod.folio
+Folio Export: ~/.local/folio/app2-prod.folio
 └── gh
     ├── (S)token
     └── (T)user
@@ -329,7 +329,7 @@ created and last modified, how many commits changed it and the names it had befo
 whether it has changes not yet committed. The times come from the store's git history (every
 change is a commit), in local time, not from the file: `restore` and `import` make files anew.
 A text also shows who signed it and when, and whether the signature verifies with the store's key
-— a text changed outside EnvFolio is reported, not refused as `show text` does. A secret shows the
+— a text changed outside Folio is reported, not refused as `show text` does. A secret shows the
 keys it is encrypted to, each the store's key or **STALE** (not in the `.gpg-id` that covers it,
 e.g. after the store's key was changed by hand), and when each expires — or that it has expired,
 or was revoked. A key not in your keyring is shown by its id, without being called STALE: whether
@@ -376,7 +376,7 @@ gh/user  (text)
 
 ## `folio ls text`
 
-Lists the texts in the EnvFolio store as a tree: names only. It mirrors `folio ls secret`: the same
+Lists the texts in the Folio store as a tree: names only. It mirrors `folio ls secret`: the same
 tree as `pass ls`, but with the texts instead of the secrets. Signatures (`.txt.sig`) and folders
 holding no texts are left out.
 
@@ -463,7 +463,7 @@ folio grep text [<grep-option>...] <pattern>
 | Option | Meaning |
 | --- | --- |
 | `<grep-option>` | Any option of `grep`, e.g. `-i` to ignore case. |
-| `-h`, `--help` | Show the options and stop. Works without a store. In EnvFolio, `-h` is always help, never grep's `-h`. |
+| `-h`, `--help` | Show the options and stop. Works without a store. In Folio, `-h` is always help, never grep's `-h`. |
 
 It needs a ready store (`folio init`).
 
@@ -516,7 +516,7 @@ folio show text -c web/user
 
 Copies the text's first line, once its signature is checked. `--clip=2` copies line 2 instead.
 
-### A text changed outside EnvFolio is not shown
+### A text changed outside Folio is not shown
 
 If the signature is missing, does not match, or is by another key — even one you trust — the text
 is not printed and the command fails. The message says how to see what changed
@@ -540,7 +540,7 @@ not shown. `-c` works the same.
 
 ## `folio insert text`
 
-Adds a text to the EnvFolio store. A text is **not a secret**: it is kept plain, not encrypted, as
+Adds a text to the Folio store. A text is **not a secret**: it is kept plain, not encrypted, as
 `<name>.txt` in the same folders as the secrets, and signed with the store's key as
 `<name>.txt.sig`, so a changed text can be told. Both are committed to the store's git history.
 Signing uses the key's secret half, so gpg may ask for its passphrase.
@@ -611,7 +611,7 @@ folio edit text [--store-passphrase-fd <n>] <name>
 | `--store-passphrase-fd <n>` | The store key's passphrase (to sign), from the first line of file descriptor `<n>`, instead of gpg's prompt. See [Passphrases without a prompt](#passphrases-without-a-prompt). |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
-**The signature is checked first**, as `folio show text` does: a text changed outside EnvFolio is not
+**The signature is checked first**, as `folio show text` does: a text changed outside Folio is not
 opened, so editing never signs it by accident. If you save it unchanged, it fails with *Text
 unchanged.* and nothing is committed. It needs a ready store (`folio init`).
 
@@ -736,7 +736,7 @@ folio cp text web/user web/user-copy
 
 ## `folio ls secret`
 
-Lists the secrets in the EnvFolio store as a tree: names only, never their values. It is `pass ls`
+Lists the secrets in the Folio store as a tree: names only, never their values. It is `pass ls`
 without the texts: the same tree, minus `*.txt`/`*.txt.sig` files and folders holding only texts.
 
 ```
@@ -821,7 +821,7 @@ folio grep secret [--store-passphrase-fd <n>] [<grep-option>...] <pattern>
 | --- | --- |
 | `<grep-option>` | Any option of `grep`, e.g. `-i` to ignore case. |
 | `--store-passphrase-fd <n>` | The store key's passphrase, from the first line of file descriptor `<n>`, instead of gpg's prompt. See [Passphrases without a prompt](#passphrases-without-a-prompt). |
-| `-h`, `--help` | Show the options and stop. Works without a store. In EnvFolio, `-h` is always help, never grep's `-h`. |
+| `-h`, `--help` | Show the options and stop. Works without a store. In Folio, `-h` is always help, never grep's `-h`. |
 
 ### Find by value
 
@@ -897,7 +897,7 @@ export's own key, in the file. Your keyring and store are not used.
 
 ## `folio insert secret`
 
-Adds a secret to the EnvFolio store, encrypted with the store's key, and commits it to the store's git
+Adds a secret to the Folio store, encrypted with the store's key, and commits it to the store's git
 history. It is a plain `pass` entry, so `PASSWORD_STORE_DIR=~/.folio pass show <name>` reads it too.
 
 ```
@@ -1165,7 +1165,7 @@ to the contract. The same `server.vars` works in both places.
 
 ## `folio exec`
 
-Runs a command with entries from the EnvFolio store as environment variables, the way `op run` and
+Runs a command with entries from the Folio store as environment variables, the way `op run` and
 `aws-vault exec` do. Texts load by default; secrets load only with `--secrets`. Values never go
 on a command line, into a file, or on the screen.
 
@@ -1201,7 +1201,7 @@ An `<entry>` is one of:
 
 At least one `<entry>` is needed, unless `--all`, `--use` or `--vars` is given; the whole store is never loaded by
 default. The `--` is
-needed, and everything after it is the command, which EnvFolio never parses. It needs a ready store
+needed, and everything after it is the command, which Folio never parses. It needs a ready store
 (`folio init`), unless the entries come from a file with `--from`.
 
 **Variable names.** An entry's name comes from its full path in the store — with `--use`, its
@@ -1249,18 +1249,18 @@ that matches no entry is an error, and so is a run that would load nothing at al
 **Refused**, before anything runs: a path that is both a text and a secret
 (`gh/token.txt` and `gh/token.gpg`) when both would load, and a `VAR=<name>` pointing at such a
 path. Without `--secrets` only the text loads, so there is no conflict. Also refused: a name bash
-or EnvFolio keeps for itself, such as `RANDOM` or `UID` (an entry `random` would give it), since the
+or Folio keeps for itself, such as `RANDOM` or `UID` (an entry `random` would give it), since the
 command would not get the value; load it under another name with `VAR=<name>`.
 
 **Values.** An entry's whole content, with trailing newlines removed (as `$(pass show x)` gives
 it), so multi-line values such as keys come through whole. Each text's signature is checked as
 in `folio show text`; each secret is decrypted with `pass show`, so gpg may ask for the key's
 passphrase. **All or nothing:** every entry is checked and read before the command starts; if one
-fails, the command does not run and EnvFolio exits 1.
+fails, the command does not run and Folio exits 1.
 
-**The command** replaces EnvFolio (`exec`), so its exit status, signals and input/output are its own.
+**The command** replaces Folio (`exec`), so its exit status, signals and input/output are its own.
 It gets the caller's environment plus the loaded variables, which override any of the same name.
-EnvFolio's own `PASSWORD_STORE_DIR` is not passed on: the caller's value is put back, or it is unset.
+Folio's own `PASSWORD_STORE_DIR` is not passed on: the caller's value is put back, or it is unset.
 It runs as typed, **without a shell**: for `$VAR`, pipes or `&&`, run one —
 `folio exec gh -- sh -c 'echo "$GH_USER"'`. A command that is not there (on the `PATH` it gets,
 which a loaded `PATH` sets) is said plainly, with exit status 127, as a shell does; typed in
@@ -1457,7 +1457,7 @@ In a value:
 
 Blank lines, and comments — `#` at the start of a line, or after a blank (`#ff0000` is a value)
 — are left out, and so are the blanks around a value. Nothing in a vars file ever runs: it is read
-by EnvFolio a character at a time, never handed to a shell; `$(…)`, `` ` `` and any other use of `$`
+by Folio a character at a time, never handed to a shell; `$(…)`, `` ` `` and any other use of `$`
 are refused.
 
 A mistake stops everything before anything is read, saying the file and line:
@@ -1525,7 +1525,7 @@ real run would.
 folio exec --from items.folio --secrets --all -- ./deploy
 ```
 
-Loads the entries from `items.folio`, a file made by `folio export`, on a machine with no EnvFolio
+Loads the entries from `items.folio`, a file made by `folio export`, on a machine with no Folio
 store at all — a booth in the cloud, say. Entries, `--secrets`, `--all`, `--use`, namespaces,
 `VAR=<name>` and variable names are as from a store; the file's items are laid out as they were in
 the store they were exported from (with any `export --use` taken off).
@@ -1547,7 +1547,7 @@ GnuPG home of its own, never added to your keyring; once every value is read, th
 removed, before the command starts. The file itself is left as it is.
 
 To give the passphrase without typing it, open it on a file descriptor. Here the shell opens the
-file, removes its name at once, and hands EnvFolio the open descriptor:
+file, removes its name at once, and hands Folio the open descriptor:
 
 ```bash
 { rm /dev/shm/pass ; folio exec --from items.folio --file-passphrase-fd 3 -a -- ./deploy ; } 3< /dev/shm/pass
@@ -1562,7 +1562,7 @@ yours.
 
 ## `folio shell`
 
-Starts your shell (`$SHELL`, or `/bin/sh`) with entries from the EnvFolio store as environment
+Starts your shell (`$SHELL`, or `/bin/sh`) with entries from the Folio store as environment
 variables. It is `folio exec <entry>... -- "$SHELL"`, plus a line saying what was loaded.
 
 ```
@@ -1585,9 +1585,9 @@ folio shell [-s|--secrets] [-a|--all] [-n|--names|--debug|--confirm] [--plain] [
 | `--store-passphrase-fd <n>` | Without `--from`: the store key's passphrase, as in `folio exec`. |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
-Entries, `--use`, vars files, variable names, values and errors are as in `folio exec`. Before the shell starts, EnvFolio
+Entries, `--use`, vars files, variable names, values and errors are as in `folio exec`. Before the shell starts, Folio
 prints the loaded variable names, never their values, to stderr. It sets `FOLIO_SHELL=1`, so your
-own prompt can show it; EnvFolio does not change the prompt. `exit` leaves the shell. It needs a
+own prompt can show it; Folio does not change the prompt. `exit` leaves the shell. It needs a
 ready store (`folio init`), unless the entries come from a file with `--from`.
 
 ### Open a shell
@@ -1740,7 +1740,7 @@ loads nothing by mistake.
 
 ## `folio backup`
 
-Saves the whole EnvFolio store and its GPG key into one file, to get it all back with
+Saves the whole Folio store and its GPG key into one file, to get it all back with
 `folio restore` — on this machine or a new one.
 
 ```
@@ -1811,7 +1811,7 @@ a file or another secret tool, not with `echo`.
 
 ## `folio restore`
 
-Brings back an EnvFolio store from a file made by `folio backup`.
+Brings back a Folio store from a file made by `folio backup`.
 
 ```
 folio restore [--file-passphrase-stdin|--file-passphrase-fd <n>] [--allow-unsafe-folder] <file>
@@ -1835,7 +1835,7 @@ made by the restore is private (`700`) — see *The store folder is private* und
 
 It refuses when the folder has anything in it, and changes nothing: move that folder away first, or
 restore elsewhere with `FOLIO_STORE_DIR=<other-folder> folio restore <file>`.
-A file whose name ends in neither `--folio.tar.gz` nor `--folio.gpg`, or that is not an EnvFolio backup,
+A file whose name ends in neither `--folio.tar.gz` nor `--folio.gpg`, or that is not a Folio backup,
 is refused too. Nothing is left behind when it fails.
 
 Examples: see `folio backup` above.
@@ -1862,35 +1862,35 @@ folio export [-s|--secrets] [--to <key>|--file-passphrase-stdin|--file-passphras
 | `--store-passphrase-fd <n>` | The store key's passphrase (to read the secrets), from the first line of file descriptor `<n>`, instead of gpg's prompt. See [Passphrases without a prompt](#passphrases-without-a-prompt). |
 | `--use <@namespace>` | Take every item under `<@namespace>` (e.g. `@app2`, or `@app2/@prod`), named without it. Can be given more than once. See [One environment, with --use](#one-environment-with---use). Experimental: it may change. |
 | `--vars <file>` | Take the items a [vars file](#from-a-vars-file) names. Can be given more than once. See [The items a vars file names](#the-items-a-vars-file-names). |
-| `-o`, `--output <export>` | Where to write the file: a path ending in `.folio`, or a name in `FOLIO_FILE_DIR` (see [An export's path, or its name](#an-exports-path-or-its-name)). With no `-o`, EnvFolio asks. |
+| `-o`, `--output <export>` | Where to write the file: a path ending in `.folio`, or a name in `FOLIO_FILE_DIR` (see [An export's path, or its name](#an-exports-path-or-its-name)). With no `-o`, Folio asks. |
 | `-h`, `--help` | Show the options and stop. |
 
 A `<name>` is a text or a secret, or a folder: every text under it, and its secrets with
 `--secrets`. With `--use`, the items under a namespace are taken, named without it, as
 [`folio exec --use`](#peel-a-namespace-with---use) does. With `--vars`, the items a vars file names
-are taken too. With no `<name>`, `--use` or `--vars`, EnvFolio lists every item, numbered, and asks
+are taken too. With no `<name>`, `--use` or `--vars`, Folio lists every item, numbered, and asks
 which ones (`1 3 5-7`, or `all`).
 
-When this gpg can make a post-quantum key (2.5.21 or later), EnvFolio asks which kind the export's
+When this gpg can make a post-quantum key (2.5.21 or later), Folio asks which kind the export's
 own key is: **classical** by default (Enter), as the file may be opened where gpg cannot use a
-post-quantum key yet, or **post-quantum** — then EnvFolio reminds you that gpg must be 2.5.21 or
+post-quantum key yet, or **post-quantum** — then Folio reminds you that gpg must be 2.5.21 or
 later wherever the file is opened, and the summary says so. A run where nothing else is asked does
 not ask this either: it is classical unless `--key-type pqc`.
 
-Then EnvFolio asks whether to set a passphrase on the export's own key too (`[y/N]`: no by
+Then Folio asks whether to set a passphrase on the export's own key too (`[y/N]`: no by
 default; never asked with `--file-passphrase-stdin`, and `--key-passphrase-fd` sets one without
 asking). The lock on the file already protects that key; with a passphrase on it as well, a folder
 unpacked from the file and left behind opens nothing, and whoever opens the file needs both.
 
-With neither `--to` nor a passphrase option, EnvFolio then asks how to lock the file: with a
-passphrase (gpg asks for it, after EnvFolio says so and waits for Enter), or with a public key —
+With neither `--to` nor a passphrase option, Folio then asks how to lock the file: with a
+passphrase (gpg asks for it, after Folio says so and waits for Enter), or with a public key —
 picked from the usable keys in your keyring, or given as a key file.
 
 So a run that asks everything asks, in order: the items, the file, the key's kind (when gpg can make
 a post-quantum key), the key's passphrase (yes or no), and the lock. Then gpg asks, in order: your
 store key's passphrase, to read the secrets (when it is not kept); the export key's passphrase, if
 you said yes; and the file's passphrase, for a file locked with one. Before each passphrase gpg
-asks for, EnvFolio shows the file and its two locks, and marks the one asked next:
+asks for, Folio shows the file and its two locks, and marks the one asked next:
 
 ```
 ┌─ store-20261107.folio ─────────────────────────────────┐
@@ -1909,7 +1909,7 @@ passphrase when it is made, before the store key's passphrase is asked, and gpg 
 once to sign the texts.
 
 The file is `<export>` — a path ending in `.folio`, or a name in `FOLIO_FILE_DIR`, as
-[below](#an-exports-path-or-its-name) — never inside the store. With no `-o`, EnvFolio asks,
+[below](#an-exports-path-or-its-name) — never inside the store. With no `-o`, Folio asks,
 offering `store-<date>` in `FOLIO_FILE_DIR` when it is set, else `./store-<date>.folio` (Tab
 completes names). An existing file is never replaced. The file is readable by you only.
 
@@ -1957,7 +1957,7 @@ completes the names in `FOLIO_FILE_DIR` beside the files.
 folio export web
 ```
 
-Takes the texts under `web/` (its secrets need `--secrets`). EnvFolio asks where to write the file
+Takes the texts under `web/` (its secrets need `--secrets`). Folio asks where to write the file
 (Enter takes `store-20261006.folio` here) and how to lock it; pick the passphrase, and
 gpg asks for one for the file (twice).
 
@@ -2034,7 +2034,7 @@ given, so what they brought feeds the `${NAME}`s there too.
 
 ## `folio import`
 
-Brings items from a file made by `folio export` into the EnvFolio store.
+Brings items from a file made by `folio export` into the Folio store.
 
 ```
 folio import [-a|--all] [--overwrite|--skip-existing] [--key <id>] [--file-passphrase-stdin|--file-passphrase-fd <n>] [--key-passphrase-fd <n>] [--store-passphrase-fd <n>] [--allow-unsafe-folder] [<export> [<name>...]]
@@ -2054,10 +2054,10 @@ folio import [-a|--all] [--overwrite|--skip-existing] [--key <id>] [--file-passp
 | `-h`, `--help` | Show the options and stop. |
 
 `<export>` is the file's path, ending in `.folio`, or its name in `FOLIO_FILE_DIR` (see
-[An export's path, or its name](#an-exports-path-or-its-name)). With no `<export>`, EnvFolio asks
+[An export's path, or its name](#an-exports-path-or-its-name)). With no `<export>`, Folio asks
 for it, the same way (Tab completes names). A `<name>` is an item in the export,
-or a folder: every item under it. With neither `<name>` nor `--all`, EnvFolio lists the export's
-items and asks which ones. Before gpg asks for the passphrase of a file locked with one, EnvFolio
+or a folder: every item under it. With neither `<name>` nor `--all`, Folio lists the export's
+items and asks which ones. Before gpg asks for the passphrase of a file locked with one, Folio
 says so, shows the file and its locks (as [`folio export`](#folio-export) does), and waits for
 Enter. If a passphrase was set on the export's own key, gpg asks for that too, once, after the file
 is opened, again after the picture of the locks (or give it with `--key-passphrase-fd`; with no terminal to
@@ -2073,7 +2073,7 @@ keyring of its own and never added to yours.
 With no store yet, one is made first, as `folio init` does: its key — `--key`, or picked,
 or a new one from your name and email — is asked for before anything is made. An item already in
 the store is overwritten or skipped as `--overwrite` or
-`--skip-existing` says; with neither, EnvFolio lists them and asks.
+`--skip-existing` says; with neither, Folio lists them and asks.
 
 ### Into a new store
 
@@ -2095,7 +2095,7 @@ Takes `aws/key` and `web/user`; one already in the store stays as it is.
 
 ## Passphrase prompts in a window (GUI)
 
-EnvFolio never asks for a passphrase itself: gpg does, through its agent's *pinentry* program. By
+Folio never asks for a passphrase itself: gpg does, through its agent's *pinentry* program. By
 default that is often a prompt in the terminal. To get a window instead, install a GUI pinentry,
 name it in `~/.gnupg/gpg-agent.conf`, and restart the agent. This is gpg's own setting, so it
 applies to `pass` and every other gpg tool on the machine too.
@@ -2139,7 +2139,7 @@ gpgconf --kill gpg-agent
 echo test | gpg --clearsign > /dev/null
 ```
 
-The window should open and ask for your key's passphrase. Then any EnvFolio command that needs it
+The window should open and ask for your key's passphrase. Then any Folio command that needs it
 (`folio show secret`, `folio insert text`, `folio export`, …) asks the same way.
 
 ### Good to know
@@ -2150,7 +2150,7 @@ The window should open and ask for your key's passphrase. Then any EnvFolio comm
 - With no display — over SSH, in a container or a booth — keep a terminal pinentry
   (`pinentry-curses` or `pinentry-tty`). The GUI ones usually fall back to the terminal when
   there is no display.
-- A terminal pinentry asks on the terminal in `GPG_TTY`. When it is not set, EnvFolio sets it to
+- A terminal pinentry asks on the terminal in `GPG_TTY`. When it is not set, Folio sets it to
   the terminal it runs in, so gpg can still ask when stdin is a pipe or a file
   (`echo x | folio insert text x`, `--file-passphrase-stdin`). A `GPG_TTY` you set is kept, and
   the command `exec` and `shell` run gets the one you had, if any.
@@ -2164,7 +2164,7 @@ The window should open and ask for your key's passphrase. Then any EnvFolio comm
 
 ## Passphrases without a prompt
 
-EnvFolio deals with three kinds of passphrase, and each has its own options:
+Folio deals with three kinds of passphrase, and each has its own options:
 
 | Option | Gives | Taken by |
 | --- | --- | --- |
@@ -2182,8 +2182,8 @@ folio show secret --store-passphrase-fd 3 web/github 3< ~/.store-pass
 folio export --secrets --store-passphrase-fd 3 --file-passphrase-fd 4 web 3< ~/.store-pass 4< ~/.export-pass
 ```
 
-- EnvFolio closes the fd once it is read, so a command that `folio exec` runs never gets it.
-- With `--store-passphrase-fd`, EnvFolio first hands the passphrase to gpg-agent (gpg's loopback
+- Folio closes the fd once it is read, so a command that `folio exec` runs never gets it.
+- With `--store-passphrase-fd`, Folio first hands the passphrase to gpg-agent (gpg's loopback
   mode), then works as usual. A wrong passphrase stops it there, before anything changes. The agent
   then remembers the passphrase for its cache time, as when you type it — so a `folio` command
   just after may not need it at all.
@@ -2210,7 +2210,7 @@ line instead, and nothing is asked: `show secret`, `insert text`, `exec --secret
 `init` makes a new key with it.
 
 - `--store-passphrase-fd` given on a command wins over the file.
-- The file must be yours, and no one else may read or write it (`chmod 600`): otherwise EnvFolio
+- The file must be yours, and no one else may read or write it (`chmod 600`): otherwise Folio
   stops and says so, as ssh does with a key. An empty first line is refused too.
 - A wrong passphrase stops the command before anything changes, as with `--store-passphrase-fd`.
 - The command `exec` and `shell` run does not get `FOLIO_STORE_PASSPHRASE_FILE`.
@@ -2264,7 +2264,7 @@ export FOLIO_FRESH_PASSPHRASE=1     # 0, or unset, to turn it off
 
 ## Just the output
 
-What a command gives you — a text, a secret, a list — goes to **stdout**; everything EnvFolio says
+What a command gives you — a text, a secret, a list — goes to **stdout**; everything Folio says
 about it goes to **stderr**: the picture of an export's locks, the note before gpg asks for a
 passphrase, `Copied … to clipboard`, `folio shell: loaded …`, warnings and errors. So
 `user=$(folio show text --from app2-prod gh/user)` gets only the text, and `2>/dev/null` hides

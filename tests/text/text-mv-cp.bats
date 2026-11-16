@@ -131,7 +131,7 @@ clean() { [ -z "$(git -C "$FOLIO_STORE_DIR" status --porcelain)" ] ; }
     for how in mv cp; do
         run "$FOLIO" "$how" text a b < /dev/null
         [ "$status" -eq 1 ]
-        [[ $output == *"No ready EnvFolio store"* ]] || false
+        [[ $output == *"No ready Folio store"* ]] || false
         run "$FOLIO" "$how" text --help
         [ "$status" -eq 0 ]
         [[ $output == *"Usage: folio $how text"* ]] || false

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# EnvFolio installer: downloads `folio` and `SHA256SUMS` from a release, checks the one against the
+# Folio installer: downloads `folio` and `SHA256SUMS` from a release, checks the one against the
 # other, and puts `folio` in ~/.local/bin. No sudo, and nothing outside that folder is changed.
 #
 # Usage: curl -fsSL https://raw.githubusercontent.com/NawaMan/EnvFolio/main/install.sh | bash

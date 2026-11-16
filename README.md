@@ -1,6 +1,9 @@
-<p align="center"><img src="logo-on-dark.svg" alt="EnvFolio" width="160"></p>
+<p align="center"><img src="logo-on-dark.svg" alt="Folio" width="160"></p>
 
-# EnvFolio
+# Folio
+
+_Formerly EnvFolio: the project is now called Folio, after its command. The repository and its
+links keep the old name._
 
 Run a command with your secrets and settings as environment variables, kept in a
 [`pass`](https://www.passwordstore.org/) store — the way `op run` and `aws-vault exec` do, with
@@ -49,7 +52,7 @@ puts it in `~/.local/bin` — no sudo. `| FOLIO_INSTALL_DIR=<folder> bash` puts 
 `| FOLIO_VERSION=1.0.1 bash` installs that release. Read
 [install.sh](install.sh) first if you'd rather. Run it again to upgrade.
 
-Or by hand — EnvFolio is one bash script. Download `folio` and `SHA256SUMS` from the
+Or by hand — Folio is one bash script. Download `folio` and `SHA256SUMS` from the
 [latest release](https://github.com/NawaMan/EnvFolio/releases/latest), check it, make it
 executable and put it on your `PATH`:
 
@@ -86,7 +89,7 @@ sudo apt install pass gnupg git tree  # Debian / Ubuntu
 ```
 
 `gpg` 2.4 is fine. 2.5.21 or later can also make a post-quantum key — see
-[Updating gpg for post-quantum keys](#updating-gpg-for-post-quantum-keys). On Windows, EnvFolio
+[Updating gpg for post-quantum keys](#updating-gpg-for-post-quantum-keys). On Windows, Folio
 runs in WSL.
 
 ## Quick start
@@ -113,7 +116,7 @@ folio exec --secrets --names gh aws -- ./release.sh
 | | Secret | Text |
 | --- | --- | --- |
 | Stored as | `<name>.gpg`, encrypted to the store's key | `<name>.txt`, plain, plus a signature `<name>.txt.sig` |
-| Reading it | needs the key's passphrase | needs no passphrase; refused if changed outside EnvFolio |
+| Reading it | needs the key's passphrase | needs no passphrase; refused if changed outside Folio |
 | `exec` / `shell` | only with `--secrets` | loaded by default |
 | `show -c` | clipboard cleared after 45 seconds | clipboard not cleared |
 | For | tokens, passwords, private keys | URLs, user names, regions, ports — anything not secret that must not be tampered with |
@@ -233,7 +236,7 @@ See [Feeding a command](MANUAL.md#feeding-a-command-contract-store-and-namespace
 
 ## Security model
 
-What EnvFolio does:
+What Folio does:
 
 - **Secrets never go on a command line, into a file, or on the screen** unless you ask to see
   one. They are read at a hidden prompt or from a pipe and handed to `pass` on stdin; there is no
@@ -242,9 +245,9 @@ What EnvFolio does:
   into the command's environment — that is their job. Anything running as you can read a
   process's environment (`/proc/<pid>/environ` on Linux), so run only commands you trust.
   `--debug` and `--confirm` show what a run will load before any value is read.
-- **Texts are signed.** A text changed, or signed by another key, outside EnvFolio is refused, and
+- **Texts are signed.** A text changed, or signed by another key, outside Folio is refused, and
   the message says how to see what changed.
-- **The store folder is private** (`700`). EnvFolio warns whenever it belongs to someone else or
+- **The store folder is private** (`700`). Folio warns whenever it belongs to someone else or
   other users can get into it.
 - **The clipboard** is cleared after 45 seconds for a secret (`PASSWORD_STORE_CLIP_TIME`).
 - **An export is always locked**, with a passphrase or to a public key (`--to`), and carries a
@@ -260,7 +263,7 @@ are as safe as your GPG key and its passphrase.
 
 ## Syncing the store with git
 
-The store is a git repository, and every change is committed. EnvFolio has no `push` or `pull`,
+The store is a git repository, and every change is committed. Folio has no `push` or `pull`,
 but you can add a remote yourself — a **private** one: the texts and the names of the secrets are
 plain in it, and the secrets are encrypted to your key.
 
@@ -330,13 +333,13 @@ Texts are not `pass` entries: they are the `.txt` files next to the secrets.
 
 ## Why not …?
 
-- **`pass` alone** — EnvFolio *is* a `pass` store; it adds texts, running commands with items as
+- **`pass` alone** — Folio *is* a `pass` store; it adds texts, running commands with items as
   variables, vars files, namespaces, and backup/export in one file.
 - **`op run`, `aws-vault exec`** — the same idea, without an account or a service: the store is
   files and a GPG key on your machine.
-- **`.env` files, `direnv`** — those keep values in plain files next to the code. With EnvFolio,
+- **`.env` files, `direnv`** — those keep values in plain files next to the code. With Folio,
   a vars file holds the names and the store holds the values.
-- **`sops`** — encrypts whole config files for a team in a repository. EnvFolio is a personal
+- **`sops`** — encrypts whole config files for a team in a repository. Folio is a personal
   store that hands values to commands.
 
 ## Limitations
@@ -349,7 +352,7 @@ Texts are not `pass` entries: they are the `.txt` files next to the secrets.
 
 ## Development
 
-EnvFolio is developed in a [CodingBooth](https://codingbooth.io) container that has every tool:
+Folio is developed in a [CodingBooth](https://codingbooth.io) container that has every tool:
 
 ```bash
 just test-all                                  # every test, under bash 3.2 and bash 5
@@ -362,7 +365,7 @@ handled, and how tests stay away from your real store.
 ## Updating gpg for post-quantum keys
 
 A post-quantum key needs gpg 2.5.21 or later on every machine that opens the store, a backup of
-it, or an export locked to it. Check with `gpg --version`. If it is older, EnvFolio keeps working
+it, or an export locked to it. Check with `gpg --version`. If it is older, Folio keeps working
 with classical keys, but it cannot make, restore or open post-quantum ones.
 
 - **macOS** — install gpg with [Homebrew](https://brew.sh): `brew install gnupg` (or
@@ -376,11 +379,11 @@ with classical keys, but it cannot make, restore or open post-quantum ones.
   cv25519) imported without a passphrase. Homebrew's has the fix; building it yourself, add the
   two commits linked from that bug, or take a later 2.5. Ubuntu's 2.4.8 (with libgcrypt 1.12.0)
   has a bug of its own that looks alike: it often cannot use a cv25519 key it has just imported,
-  with a passphrase or without. An export made with EnvFolio 1.1.0 or later has an RSA key, which
+  with a passphrase or without. An export made with Folio 1.1.0 or later has an RSA key, which
   both can use; one made before has a cv25519 key — export it again, or open it with Homebrew's
   gpg. `folio restore` imports the store's own key into your keyring: if that key is cv25519, as
   gpg makes by default, use Homebrew's gpg there.
-- **Windows** — EnvFolio runs in WSL: follow the Linux steps there.
+- **Windows** — Folio runs in WSL: follow the Linux steps there.
 
 Then stop the old gpg-agent, so the new gpg starts its own: `gpgconf --kill all`. `pass` uses a
 command named `gpg2` instead of `gpg` when there is one: if `gpg2 --version` shows an older gpg,

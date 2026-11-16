@@ -59,6 +59,6 @@ make-store() {
 @test "cp secret: no store fails and creates nothing" {
     run "$FOLIO" cp secret web/github x < /dev/null
     [ "$status" -eq 1 ]
-    [[ $output == *"No ready EnvFolio store"*"folio init"* ]] || false
+    [[ $output == *"No ready Folio store"*"folio init"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }

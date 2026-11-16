@@ -56,7 +56,7 @@ fake-clipboard() {
     cmp <("$FOLIO" show text note) <(printf 'one\ntwo\n\n')
 }
 
-@test "MANUAL: show text — a text changed outside EnvFolio is not shown" {
+@test "MANUAL: show text — a text changed outside Folio is not shown" {
     make-store
     printf 'mallory\n' > "$FOLIO_STORE_DIR/web/user.txt"
     run "$FOLIO" show text web/user
@@ -103,7 +103,7 @@ fake-clipboard() {
     [ ! -e "$CLIPBOARD" ]
 }
 
-@test "show text --clip: a text changed outside EnvFolio is not copied" {
+@test "show text --clip: a text changed outside Folio is not copied" {
     make-store
     fake-clipboard
     printf 'mallory\n' > "$FOLIO_STORE_DIR/web/user.txt"
@@ -175,7 +175,7 @@ fake-clipboard() {
 @test "show text: no store fails and creates nothing" {
     run "$FOLIO" show text web/user
     [ "$status" -eq 1 ]
-    [[ $output == *"No ready EnvFolio store"*"folio init"* ]] || false
+    [[ $output == *"No ready Folio store"*"folio init"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 

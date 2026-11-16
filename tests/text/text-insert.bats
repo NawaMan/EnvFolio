@@ -149,7 +149,7 @@ is-signed() {
 @test "insert text: no store fails and creates nothing" {
     run "$FOLIO" insert text -t x note < /dev/null
     [ "$status" -eq 1 ]
-    [[ $output == *"No ready EnvFolio store"*"folio init"* ]] || false
+    [[ $output == *"No ready Folio store"*"folio init"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 

@@ -39,7 +39,7 @@ plain() { printf '%s\n' "$output" | sed $'s/\e\\[[0-9;]*m//g' ; }
     make-store
     run "$FOLIO" ls
     [ "$status" -eq 0 ]
-    [ "$(plain)" = "EnvFolio Store
+    [ "$(plain)" = "Folio Store
 ├── (T)note
 └── web
     ├── (S)github
@@ -51,7 +51,7 @@ plain() { printf '%s\n' "$output" | sed $'s/\e\\[[0-9;]*m//g' ; }
     make-store
     run "$FOLIO" ls web
     [ "$status" -eq 0 ]
-    [ "$(plain)" = "EnvFolio Store
+    [ "$(plain)" = "Folio Store
 web
 ├── (S)github
 ├── (T)github
@@ -126,7 +126,7 @@ web
 @test "ls: no store fails and creates nothing" {
     run "$FOLIO" ls
     [ "$status" -eq 1 ]
-    [[ $output == *"No ready EnvFolio store"*"folio init"* ]] || false
+    [[ $output == *"No ready Folio store"*"folio init"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 

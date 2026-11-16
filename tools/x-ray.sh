@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# x-ray.sh — a dev tool: show how the gpg files EnvFolio makes are locked and what they hold,
+# x-ray.sh — a dev tool: show how the gpg files Folio makes are locked and what they hold,
 # without ever showing a secret value, a text's contents or a key.
 #
 # Usage: tools/x-ray.sh [--open] <file|folder>...

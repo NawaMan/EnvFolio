@@ -87,7 +87,7 @@ plain() { printf '%s\n' "$output" | sed $'s/\e\\[[0-9;]*m//g' ; }
 @test "find text: no store fails and creates nothing" {
     run "$FOLIO" find text home
     [ "$status" -eq 1 ]
-    [[ $output == *"No ready EnvFolio store"*"folio init"* ]] || false
+    [[ $output == *"No ready Folio store"*"folio init"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 

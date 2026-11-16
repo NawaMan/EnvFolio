@@ -82,7 +82,7 @@ make-store() {
 @test "insert secret: no store fails and creates nothing" {
     run "$FOLIO" insert secret web/github < <(printf 's3cr3t\ns3cr3t\n')
     [ "$status" -eq 1 ]
-    [[ $output == *"No ready EnvFolio store"*"folio init"* ]] || false
+    [[ $output == *"No ready Folio store"*"folio init"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 
@@ -90,7 +90,7 @@ make-store() {
     mkdir -p "$FOLIO_STORE_DIR"
     run "$FOLIO" insert secret web/github < <(printf 's3cr3t\ns3cr3t\n')
     [ "$status" -eq 1 ]
-    [[ $output == *"No ready EnvFolio store"* ]] || false
+    [[ $output == *"No ready Folio store"* ]] || false
 }
 
 @test "insert secret: bad arguments get pass's usage" {

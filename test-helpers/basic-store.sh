@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# basic-store.sh: fill an existing EnvFolio store with the sample items the --use tests use
+# basic-store.sh: fill an existing Folio store with the sample items the --use tests use
 # (tests/exec/exec-use.bats), plus @app1 — one namespace deep — to try exec/shell/export by hand:
 #
 #   server/port                         22

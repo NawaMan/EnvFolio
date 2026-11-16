@@ -1,7 +1,7 @@
 #!/usr/bin/env bats
 
-# GPG_TTY: with stdin a pipe, gpg's terminal pinentry still asks on the terminal EnvFolio runs in;
-# exec's command does not get a GPG_TTY EnvFolio added. Answered on a real terminal: tmux, on a
+# GPG_TTY: with stdin a pipe, gpg's terminal pinentry still asks on the terminal Folio runs in;
+# exec's command does not get a GPG_TTY Folio added. Answered on a real terminal: tmux, on a
 # socket of its own in the sandbox (never the user's tmux), runs folio in a pane. The store's key
 # has a passphrase ("pw"). Skipped without tmux, or without a pinentry for gpg to run.
 
@@ -66,7 +66,7 @@ wait-until() {
     [ "$output" = "piped value" ]
 }
 
-@test "GPG_TTY: exec's command does not get the one EnvFolio set; one already set is kept" {
+@test "GPG_TTY: exec's command does not get the one Folio set; one already set is kept" {
     "$FOLIO" insert text -t v t/x --store-passphrase-fd 3 3< <(printf 'pw\n') < /dev/null
     in-pane "'$FOLIO' exec t/x -- sh -c 'echo \"GOT=\${GPG_TTY-unset}\"' < /dev/null"
     wait-until on-pane "GOT="
