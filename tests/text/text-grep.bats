@@ -85,7 +85,7 @@ buy milk" ]
 @test "grep text: no store fails and creates nothing" {
     run "$FOLIO" grep text jane
     [ "$status" -eq 1 ]
-    [[ $output == *"No ready EnvFolio store"*"folio init"* ]] || false
+    [[ $output == *"No ready Folio store"*"folio init"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 

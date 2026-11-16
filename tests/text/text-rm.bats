@@ -98,7 +98,7 @@ make-store() {
 @test "rm text: no store fails and creates nothing" {
     run "$FOLIO" rm text x < /dev/null
     [ "$status" -eq 1 ]
-    [[ $output == *"No ready EnvFolio store"* ]] || false
+    [[ $output == *"No ready Folio store"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 

@@ -69,7 +69,7 @@ teardown() {
     echo "someone else's file" > "$FOLIO_STORE_DIR/notes.txt"
     run Init
     [ "$status" -eq 1 ]
-    [[ $output == *"not a ready EnvFolio store"* ]] || false
+    [[ $output == *"not a ready Folio store"* ]] || false
 }
 
 @test "store-init: refuses an unfinished store (no git history)" {
@@ -77,7 +77,7 @@ teardown() {
     echo "0123456789ABCDEF" > "$FOLIO_STORE_DIR/.gpg-id"
     run Init
     [ "$status" -eq 1 ]
-    [[ $output == *"not a ready EnvFolio store"* ]] || false
+    [[ $output == *"not a ready Folio store"* ]] || false
 }
 
 @test "store-init: refuses a folder with only a hidden file" {
@@ -85,7 +85,7 @@ teardown() {
     : > "$FOLIO_STORE_DIR/.keep"
     run Init
     [ "$status" -eq 1 ]
-    [[ $output == *"not a ready EnvFolio store"* ]] || false
+    [[ $output == *"not a ready Folio store"* ]] || false
     [ "$(ls -A "$FOLIO_STORE_DIR")" = ".keep" ]
 }
 

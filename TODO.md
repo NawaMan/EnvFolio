@@ -2,7 +2,7 @@
 
 ## Store key expiry and rotation
 
-The store key can expire, and EnvFolio says nothing until a command fails.
+The store key can expire, and Folio says nothing until a command fails.
 
 What happens once it expires (checked with gpg 2.4.4):
 

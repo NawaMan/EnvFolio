@@ -76,7 +76,7 @@ is-restored() {
     new-machine
     run "$FOLIO" restore "$(backup-file)" < /dev/null
     [ "$status" -eq 0 ]
-    [[ $output == *"Your EnvFolio store is restored."* && $output == *"History: new"* ]] || false
+    [[ $output == *"Your Folio store is restored."* && $output == *"History: new"* ]] || false
     is-restored
     # A new history: one commit, of everything restored.
     [ "$(git -C "$FOLIO_STORE_DIR" log --format=%s)" = "Add current contents of password store." ]
@@ -146,7 +146,7 @@ is-restored() {
 @test "backup: no store fails" {
     run "$FOLIO" backup "$SANDBOX/out"
     [ "$status" -eq 1 ]
-    [[ $output == *"No ready EnvFolio store"* ]] || false
+    [[ $output == *"No ready Folio store"* ]] || false
 }
 
 @test "restore: refuses when the store folder exists, and changes nothing" {
@@ -178,7 +178,7 @@ is-restored() {
     ln -s "$SANDBOX/mnt" "$FOLIO_STORE_DIR"
     run "$FOLIO" restore --allow-unsafe-folder "$(backup-file)" < /dev/null
     [ "$status" -eq 0 ]
-    [[ $output == *"Your EnvFolio store is restored."* ]] || false
+    [[ $output == *"Your Folio store is restored."* ]] || false
     [[ $output == *"warning: other users can get into $FOLIO_STORE_DIR"* ]] || false
     [ -L "$FOLIO_STORE_DIR" ]
     [ -s "$SANDBOX/mnt/.gpg-id" ] && [ -d "$SANDBOX/mnt/.git" ] || false
@@ -232,13 +232,13 @@ is-restored() {
     is-restored
 }
 
-@test "restore: a file that is not an EnvFolio backup is refused, nothing left behind" {
+@test "restore: a file that is not a Folio backup is refused, nothing left behind" {
     mkdir -p "$SANDBOX/junk" && echo hi > "$SANDBOX/junk/x"
     tar -czf "$SANDBOX/out/junk--folio.tar.gz" -C "$SANDBOX/junk" x
     cp "$SANDBOX/out/junk--folio.tar.gz" "$SANDBOX/out/junk.tgz"
     run "$FOLIO" restore "$SANDBOX/out/junk.tgz"
     [ "$status" -eq 1 ]
-    [[ $output == *"not an EnvFolio backup"* ]] || false
+    [[ $output == *"not a Folio backup"* ]] || false
     run "$FOLIO" restore "$SANDBOX/out/junk--folio.tar.gz"
     [ "$status" -eq 1 ]
     [[ $output == *"no folio-backup.txt"* ]] || false

@@ -2,7 +2,7 @@
 
 #== Doc ========================================================================
 #
-# EnvFolio — a command-line tool for keeping texts and secrets, built on `pass`.
+# Folio — a command-line tool for keeping texts and secrets, built on `pass`.
 #
 # Usage: folio <command> [args...]        (`folio help` lists the commands)
 #   folio init | path | backup | restore | export | import
@@ -12,7 +12,7 @@
 #   (The kind can also come first: `folio text show` is `folio show text`.)
 #
 # Environment:
-#   FOLIO_STORE_DIR  The EnvFolio store (default ~/.folio). Laid out like a pass store, but
+#   FOLIO_STORE_DIR  The Folio store (default ~/.folio). Laid out like a pass store, but
 #                    kept apart from your own ~/.password-store.
 #
 # Every command, with examples: MANUAL.md
@@ -32,7 +32,7 @@ STORE_PATH=${FOLIO_STORE_DIR:-$HOME/.folio}
 CALLER_STORE_DIR_SET=${PASSWORD_STORE_DIR+set}
 CALLER_STORE_DIR=${PASSWORD_STORE_DIR-}
 
-# The EnvFolio store is laid out like a pass store, but lives in its own place so it never touches
+# The Folio store is laid out like a pass store, but lives in its own place so it never touches
 # the user's own ~/.password-store. Every `pass` call goes there.
 export PASSWORD_STORE_DIR="$STORE_PATH"
 
@@ -97,7 +97,7 @@ Main() {
 }
 
 Version() {
-    echo "EnvFolio $APP_VERSION"
+    echo "Folio $APP_VERSION"
 }
 
 # folio help [command...]
@@ -156,7 +156,7 @@ function folio-help() {
 Usage: folio <command> [args...]
 
 Commands:
-  init              Create the EnvFolio store
+  init              Create the Folio store
   path              Print the store's folder
   backup            Save the store and its key into one file
   restore           Bring the store and its key back from a backup
@@ -188,7 +188,7 @@ Commands:
   exec              Run a command with entries as environment variables
   shell             Start a shell with entries as environment variables
   completion        Print the Tab completion script for bash or zsh
-  version           Print EnvFolio's version
+  version           Print Folio's version
   help [command]    Show help, e.g. `folio help init`
 
 Options for every command:
@@ -200,7 +200,7 @@ Options for every command:
                       -q is grep's own.
 
 The kind can also come first: `folio text show` is `folio show text`.
-The store is $FOLIO_STORE_DIR, default ~/.folio. EnvFolio warns when that folder is someone
+The store is $FOLIO_STORE_DIR, default ~/.folio. Folio warns when that folder is someone
 else's or open to other users.
 On a machine you trust: FOLIO_STORE_PASSPHRASE_FILE=<file> (yours only, chmod 600) gives the store
 key's passphrase from its first line, so it is never asked.
@@ -266,7 +266,7 @@ function path-help() {
     cat <<'EOF'
 Usage: folio path
 
-Print the EnvFolio store's folder: $FOLIO_STORE_DIR, default ~/.folio. Works without a store.
+Print the Folio store's folder: $FOLIO_STORE_DIR, default ~/.folio. Works without a store.
 
 Options:
   -h, --help          Show this help and stop.
@@ -317,7 +317,7 @@ function is-unsafe-store() {
 }
 
 # Warn, as gpg does for its home, when the store's folder is someone else's or other users can get
-# into it. EnvFolio makes the folder private (700) when it creates it, but leaves one it was given
+# into it. Folio makes the folder private (700) when it creates it, but leaves one it was given
 # (a bind mount, say) as it is. There is no switch to hide this: it is the user's data.
 function warn-unsafe-store() {
     [[ -d $STORE_PATH ]] || return 0
@@ -346,7 +346,7 @@ function accept-unsafe-store() {
     STORE_MODE_CHECKED=1
     if (( ! allowed )); then
         (( ! stdin_taken )) \
-            || die "Not using $STORE_PATH: stdin carries the passphrase, so EnvFolio cannot ask. Nothing changed." \
+            || die "Not using $STORE_PATH: stdin carries the passphrase, so Folio cannot ask. Nothing changed." \
                    "Add --allow-unsafe-folder to use it anyway."
         confirm "Use $STORE_PATH anyway?" \
             || die "Not using $STORE_PATH. Nothing changed. Add --allow-unsafe-folder to use it anyway, or run with${EXTRA_LINE}    FOLIO_STORE_DIR=<other-folder>"
@@ -368,11 +368,11 @@ function init-help() {
     store-init-usage
     cat <<'EOF'
 
-Create the EnvFolio store ($FOLIO_STORE_DIR, default ~/.folio): pick or create the GPG key
+Create the Folio store ($FOLIO_STORE_DIR, default ~/.folio): pick or create the GPG key
 that encrypts it, run `pass init`, and start the store's git history. A new key's passphrase is
 the first line of the file FOLIO_STORE_PASSPHRASE_FILE names, if set and no option gives one. A folder made here is private
 (700); an existing empty folder is used as it is. When that folder is someone else's or other users
-can get in, EnvFolio warns and asks before using it. Anything not given is asked for.
+can get in, Folio warns and asks before using it. Anything not given is asked for.
 
 Options:
   --key <id>          Use an existing secret key: fingerprint, key id or email (must match one).
@@ -434,7 +434,7 @@ Init() {
 
     section "Overview"
     cat >&2 <<'EOF'
-This creates your EnvFolio store, where your texts and secrets are kept. It needs:
+This creates your Folio store, where your texts and secrets are kept. It needs:
   - A folder for the store.
   - A GPG key to protect it: an existing one, or a new one made from your name and email.
     (For a key with special needs, make it with gpg first and pick it here.)
@@ -456,11 +456,11 @@ EOF
         status=1
     fi
     if (( status == 0 )); then
-        die "A EnvFolio store already exists at $STORE_PATH." \
+        die "A Folio store already exists at $STORE_PATH." \
             "To create another one, run with${EXTRA_LINE}    FOLIO_STORE_DIR=<other-folder> $0 init."
     fi
     if (( status == 2 )); then
-        die "$STORE_PATH exists but is not a ready EnvFolio store" \
+        die "$STORE_PATH exists but is not a ready Folio store" \
             "(maybe an earlier \`folio init\` did not finish)." \
             "Remove it and run again, or run with${EXTRA_LINE}    FOLIO_STORE_DIR=<other-folder> $0 init."
     fi
@@ -642,7 +642,7 @@ function require-store() {
 # check-store: require-store without unlocking the key — for exec and shell, which unlock it only
 # once they go on to read a value.
 function check-store() {
-    store-exists || die "No ready EnvFolio store at $STORE_PATH. Create one with: folio init"
+    store-exists || die "No ready Folio store at $STORE_PATH. Create one with: folio init"
     if (( ! STORE_MODE_CHECKED )); then
         STORE_MODE_CHECKED=1
         warn-unsafe-store
@@ -667,7 +667,7 @@ function backup-help() {
     store-backup-usage
     cat <<'EOF'
 
-Save the whole EnvFolio store and its GPG key into one file, to get it all back with
+Save the whole Folio store and its GPG key into one file, to get it all back with
 `folio restore` — here or on a new machine. gpg asks for the key's passphrase to export
 it; in the backup, the key stays protected by that passphrase.
 
@@ -792,7 +792,7 @@ Backup() {
     show-answer "File" "$file"
 
     local lines=(
-        "Your EnvFolio store is backed up."
+        "Your Folio store is backed up."
         ""
         "File:      $(tilde-path "$file")"
         "Key:       ${keys[0]}"
@@ -819,11 +819,11 @@ function restore-help() {
     store-restore-usage
     cat <<'EOF'
 
-Bring back an EnvFolio store from a file made by `folio backup`: import its GPG key
+Bring back a Folio store from a file made by `folio backup`: import its GPG key
 (trusted as your own), and put the store at $FOLIO_STORE_DIR (default ~/.folio). A backup
 without its git history starts a new one. Refuses when $FOLIO_STORE_DIR is a folder with anything
 in it. An existing empty folder is used as it is (a folder made here is private, 700); when it is
-someone else's or other users can get in, EnvFolio warns and asks before using it.
+someone else's or other users can get in, Folio warns and asks before using it.
 
 Options:
   --file-passphrase-stdin
@@ -874,7 +874,7 @@ Restore() {
         *"$BACKUP_SUFFIX")
             [[ $passphrase_stdin == 0 && -z $passphrase_fd ]] \
                 || die "--file-passphrase-stdin and --file-passphrase-fd are only for an encrypted backup ($ENCRYPTED_BACKUP_SUFFIX)." ;;
-        *)  die "$file is not an EnvFolio backup: its name ends in neither $BACKUP_SUFFIX nor $ENCRYPTED_BACKUP_SUFFIX." ;;
+        *)  die "$file is not a Folio backup: its name ends in neither $BACKUP_SUFFIX nor $ENCRYPTED_BACKUP_SUFFIX." ;;
     esac
     # An empty folder is as good as none: the store is moved inside it (it may be a mount point),
     # its mode left as it is.
@@ -910,7 +910,7 @@ Restore() {
 
     local field value format="" name="" keys=() key manifest=$stage/folio-backup.txt
     [[ -f $manifest ]] || manifest=$stage/envfolio-backup.txt    # made before 0.4.0, renamed by hand
-    [[ -f $manifest ]] || die "$file is not an EnvFolio backup: it has no folio-backup.txt."
+    [[ -f $manifest ]] || die "$file is not a Folio backup: it has no folio-backup.txt."
     while read -r field value; do
         case $field in
             folio-backup|envfolio-backup) format=$value ;;
@@ -918,7 +918,7 @@ Restore() {
             key)                          keys+=("$value") ;;
         esac
     done < "$manifest"
-    [[ $format == 1 ]] || die "$file is an EnvFolio backup of a format this EnvFolio cannot read ($format)."
+    [[ $format == 1 ]] || die "$file is a Folio backup of a format this Folio cannot read ($format)."
     [[ -n $name && $name != */* && $name != . && $name != .. && -s $stage/$name/.gpg-id ]] \
         || die "$file has no store in it."
     [[ -s $stage/key.asc && ${#keys[@]} -gt 0 ]] || die "$file has no key in it."
@@ -958,7 +958,7 @@ Restore() {
     fi
 
     section "Summary"
-    show-box "Your EnvFolio store is restored." \
+    show-box "Your Folio store is restored." \
              "" \
              "Store:   $(tilde-path "$target")" \
              "Key:     ${keys[0]}" \
@@ -990,26 +990,26 @@ function export-help() {
 Copy some items into one file, to bring them into another store with `folio import` — on
 a server, in a booth, or on another machine. Your store's key stays here: the items are encrypted
 and signed with a new key made for this export only, and the file is locked — with a passphrase,
-or with --to, to the public key of where it is going. With neither given, EnvFolio asks which.
-When this gpg can make a post-quantum key, EnvFolio asks which kind the export's own key is
+or with --to, to the public key of where it is going. With neither given, Folio asks which.
+When this gpg can make a post-quantum key, Folio asks which kind the export's own key is
 (--key-type): classical by default, as any gpg can open it; a post-quantum one needs gpg 2.5.21 or
-later wherever the file is opened. EnvFolio also asks whether to set a passphrase on the export's
+later wherever the file is opened. Folio also asks whether to set a passphrase on the export's
 own key too (no by default; never asked with --file-passphrase-stdin or --key-passphrase-fd), and
 then how to lock the file. With a passphrase on the key, gpg asks you to choose it, then once more
 to pack the key into the file; opening the file needs it as well as what unlocks the file. Before
-each passphrase gpg asks for, EnvFolio shows the file and its locks, and which one is asked. gpg
+each passphrase gpg asks for, Folio shows the file and its locks, and which one is asked. gpg
 may ask for your store key's passphrase to read the secrets.
 
 A <name> is a text or secret, or a folder: every text under it, and its secrets with --secrets.
 With --use @app2, every item under @app2 is taken as if @app2/ were not in its path, and the file
 has it so: @app2/@prod/server/user goes in as @prod/server/user. The <name>s and --use are laid
 in the order typed, and the last one wins where two give the same item. With --vars, the items a
-vars file names are taken too. With no <name>, --use or --vars, EnvFolio lists every item and
+vars file names are taken too. With no <name>, --use or --vars, Folio lists every item and
 asks which ones.
 
 <export> is the file's path, ending in .folio, or a name in $FOLIO_FILE_DIR: test is
 $FOLIO_FILE_DIR/test.folio. It is never inside the store, and an existing file is never replaced.
-With no -o, EnvFolio asks, offering store-<date> in $FOLIO_FILE_DIR when it is set, else
+With no -o, Folio asks, offering store-<date> in $FOLIO_FILE_DIR when it is set, else
 ./store-<date>.folio (taken as it is with --file-passphrase-stdin).
 
 Options:
@@ -1320,7 +1320,7 @@ EOF
     [[ $key_algo != pqc ]] || primary=(pqc default never)
     (( ! set_now )) || make_key=("${with_key[@]}")
     status=$(GNUPGHOME=$home "${make_key[@]}" --status-fd 4 \
-                 --quick-generate-key "EnvFolio export key $(date +%Y%m%d-%H%M%S)" "${primary[@]}" \
+                 --quick-generate-key "Folio export key $(date +%Y%m%d-%H%M%S)" "${primary[@]}" \
                  4>&1 1>/dev/null 2>/dev/null 3< <(printf '%s\n' "$key_pass"))
     key=$(printf '%s\n' "$status" | awk '$2 == "KEY_CREATED" { print $4 }')
     [[ -n $key ]] || die "Making the export's key failed."
@@ -1448,7 +1448,7 @@ function import-help() {
     store-import-usage
     cat <<'EOF'
 
-Bring items from a file made by `folio export` into the EnvFolio store
+Bring items from a file made by `folio export` into the Folio store
 ($FOLIO_STORE_DIR, default ~/.folio): the secrets are encrypted to the store's key, the texts
 checked and signed with it (gpg may ask for its passphrase). With no store yet, one is made first,
 as `folio init` does: its key is asked for here, before anything is made. The export's key
@@ -1456,11 +1456,11 @@ is used here only, never added to your keyring. If a passphrase was set on it wh
 exported, gpg asks for that too (or give it with --key-passphrase-fd).
 
 <export> is the file's path, ending in .folio, or a name in $FOLIO_FILE_DIR: test is
-$FOLIO_FILE_DIR/test.folio. With no <export>, EnvFolio asks for it (the same way).
+$FOLIO_FILE_DIR/test.folio. With no <export>, Folio asks for it (the same way).
 
 A <name> is an item in the export, or a folder: every item under it. With neither <name> nor
---all, EnvFolio lists the export's items and asks which ones. An item already in the store is
-overwritten or skipped, as the options say; otherwise EnvFolio asks.
+--all, Folio lists the export's items and asks which ones. An item already in the store is
+overwritten or skipped, as the options say; otherwise Folio asks.
 
 Options:
   -a, --all           Take every item in the export.
@@ -1541,7 +1541,7 @@ Import() {
     local status=0 new_store=0
     store-exists || status=$?
     if (( status == 2 )) && ! is-empty-dir "$STORE_PATH"; then
-        die "$STORE_PATH exists but is not a ready EnvFolio store" \
+        die "$STORE_PATH exists but is not a ready Folio store" \
             "(maybe an earlier \`folio init\` did not finish)." \
             "Remove it and run again, or run with${EXTRA_LINE}    FOLIO_STORE_DIR=<other-folder>"
     fi
@@ -1553,7 +1553,7 @@ Import() {
 
     section "Overview"
     cat >&2 <<'EOF'
-This brings items from a file made by `folio export` into your EnvFolio store. With no
+This brings items from a file made by `folio export` into your Folio store. With no
 store yet, one is made first. It needs:
   - The export file, and what opens it: its passphrase, or your key it is locked to.
   - The items to take.
@@ -1715,7 +1715,7 @@ EOF
 
 # open-export <file> <passphrase> [quiet] [<key-passphrase>]: unpack an export into a private
 # temporary folder, its key into a GnuPG home of its own (never your keyring); both are removed
-# when EnvFolio exits. Sets EXPORT_HOME, EXPORT_ROOT (its items, laid out like a store) and
+# when Folio exits. Sets EXPORT_HOME, EXPORT_ROOT (its items, laid out like a store) and
 # EXPORT_KEY. An empty <passphrase> leaves opening to gpg: it asks for the file's passphrase, or
 # uses your key the file is locked to. With quiet, gpg says only what goes wrong. A key with a
 # passphrase of its own is unlocked here, once, with <key-passphrase>, or gpg asks for it.
@@ -1743,14 +1743,14 @@ function open-export() {
 
     local field value format="" key="" manifest=$stage/unpack/folio-export.txt
     [[ -f $manifest ]] || manifest=$stage/unpack/envfolio-export.txt    # made before 0.4.0, renamed by hand
-    [[ -f $manifest ]] || die "$file is not an EnvFolio export: it has no folio-export.txt."
+    [[ -f $manifest ]] || die "$file is not a Folio export: it has no folio-export.txt."
     while read -r field value; do
         case $field in
             folio-export|envfolio-export) format=$value ;;
             key)                          key=$value    ;;
         esac
     done < "$manifest"
-    [[ $format == 1 ]]                 || die "$file is an EnvFolio export of a format this EnvFolio cannot read ($format)."
+    [[ $format == 1 ]]                 || die "$file is a Folio export of a format this Folio cannot read ($format)."
     [[ $key =~ ^[0-9A-F]{40,64}$ ]]    || die "$file names a key that is not a fingerprint: $key"
     [[ -s $stage/unpack/key.asc && -d $EXPORT_ROOT ]] || die "$file has no key or no items in it."
     # The export's own key post-quantum (export --key-type pqc): an older gpg cannot import it, and
@@ -1784,9 +1784,9 @@ function open-export() {
                "classical. Nothing changed."$'\n'"$PQC_GPG_HELP"
     can-use-imported-key "$home" "$key" \
         || die "This gpg ($(gpg-version)) cannot use the key in $file: some gpg builds cannot decrypt" \
-               "with a cv25519 key they have just imported, as an export made before EnvFolio 1.1.0" \
+               "with a cv25519 key they have just imported, as an export made before Folio 1.1.0" \
                "has — Ubuntu's 2.4.8 (with libgcrypt 1.12.0), often, and 2.5.23 and 2.5.24 as released" \
-               "(https://dev.gnupg.org/T8469). Export it again with this EnvFolio, or use another gpg" \
+               "(https://dev.gnupg.org/T8469). Export it again with this Folio, or use another gpg" \
                "— Homebrew's, or a later 2.5. Nothing changed."$'\n'"$PQC_GPG_HELP"
     EXPORT_HOME=$home EXPORT_KEY=$key
 }
@@ -1845,7 +1845,7 @@ function resolve-export-file() {
 # check-export-file <file>: die unless <file> is there and named as an export.
 function check-export-file() {
     [[ -f $1 ]] || die "There is no file $1."
-    [[ $1 == *"$EXPORT_SUFFIX" ]] || die "$1 is not an EnvFolio export: its name does not end in $EXPORT_SUFFIX."
+    [[ $1 == *"$EXPORT_SUFFIX" ]] || die "$1 is not a Folio export: its name does not end in $EXPORT_SUFFIX."
 }
 
 # file-lock-label <file>: what unlocks an export, as show-locks names its lock 1.
@@ -1997,7 +1997,7 @@ function save-text() {
 }
 
 # verify-text <name>: die unless <name>.txt.sig is there, matches, and is by the store's key (the
-# first in .gpg-id) — i.e. the text was not changed outside EnvFolio. Needs no passphrase.
+# first in .gpg-id) — i.e. the text was not changed outside Folio. Needs no passphrase.
 function verify-text() {
     local name=$1 file=$STORE_PATH/$1.txt store_key signer check
     check="Uncommitted change:  git -C $STORE_PATH diff -- $name.txt${EXTRA_LINE}"
@@ -2043,7 +2043,7 @@ function text-ls-help() {
 Usage: folio ls text [--flat] [--plain]
                     [--from <export> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]] [<subfolder>]
 
-List the texts in the EnvFolio store as a tree — names only. Give a subfolder to list only what is
+List the texts in the Folio store as a tree — names only. Give a subfolder to list only what is
 under it. With --from, list the texts in an export file instead.
 
 Options:
@@ -2145,7 +2145,7 @@ Usage: folio show text [-c|--clip[=<line>]]
                        [--from <export> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]] <name>
 
 Show a text: check its signature, then print it. A text whose signature is missing, does not
-match, or is not by the store's key is not shown — it was changed outside EnvFolio.
+match, or is not by the store's key is not shown — it was changed outside Folio.
 With --clip, copy its first line to the clipboard instead. A text is not a secret, so the
 clipboard is not cleared afterwards. With --from, show a text in an export file instead: its
 signature is checked with the export's own key.
@@ -2217,7 +2217,7 @@ function text-insert-help() {
 Usage: folio insert text [-m|--multiline] [-f|--force] [-t|--text <text>] [--store-passphrase-fd <n>]
                          <name>
 
-Add a text to the EnvFolio store — kept plain, not encrypted — and sign it with the store's key
+Add a text to the Folio store — kept plain, not encrypted — and sign it with the store's key
 (gpg may ask for the key's passphrase). The text is asked for once, with echo; piped in, it is
 the first line. Texts are not secrets: never put a secret here.
 
@@ -2281,7 +2281,7 @@ function text-edit-help() {
 Usage: folio edit text [--store-passphrase-fd <n>] <name>
 
 Edit a text in $EDITOR (vi if unset), or add it if it is new; then sign and commit it. The text's
-signature is checked first: a text changed outside EnvFolio is not opened.
+signature is checked first: a text changed outside Folio is not opened.
 
 Options:
   --store-passphrase-fd <n>
@@ -2293,7 +2293,7 @@ EOF
 
 # folio edit text <name>
 # As `pass edit`: edit a copy, keep it only if it changed. A text is checked first, so editing never
-# signs a text that was changed outside EnvFolio.
+# signs a text that was changed outside Folio.
 TextEdit() {
     case ${1:-} in -h|--help) text-edit-help ; return 0 ;; esac
     (( $# == 1 )) || die "Usage: folio edit text <name>"
@@ -2370,7 +2370,7 @@ TextGenerate() {
     [[ ${#text} -eq $length ]] || die "generate text: could not generate a text from /dev/urandom."
 
     if (( inplace )) && [[ -f $file ]]; then
-        # The rest of the text is kept, so it must be the one EnvFolio signed.
+        # The rest of the text is kept, so it must be the one Folio signed.
         verify-text "$name"
         { printf '%s\n' "$text" ; tail -n +2 "$file" ; } \
             | save-text "$name" "Replace generated text for $name." || exit 1
@@ -2568,7 +2568,7 @@ function secret-ls-help() {
 Usage: folio ls secret [--flat] [--plain]
                       [--from <export> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]] [<subfolder>]
 
-List the secrets in the EnvFolio store as a tree — names only, never their values.
+List the secrets in the Folio store as a tree — names only, never their values.
 Give a subfolder to list only what is under it. With --from, list the secrets in an export file
 instead.
 
@@ -2720,7 +2720,7 @@ function secret-insert-help() {
     cat <<'EOF'
 Usage: folio insert secret [-m|--multiline] [-f|--force] <name>
 
-Add a secret to the EnvFolio store, encrypted with the store's key. The secret is asked for twice,
+Add a secret to the Folio store, encrypted with the store's key. The secret is asked for twice,
 without echo. Piped in, give it twice (one per line), or use --multiline to take all of stdin.
 
 Options:
@@ -2865,7 +2865,7 @@ function list-help() {
 Usage: folio ls [--flat] [--plain]
                 [--from <export> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]] [<subfolder>]
 
-List the texts and secrets in the EnvFolio store together as a tree — names only, never values.
+List the texts and secrets in the Folio store together as a tree — names only, never values.
 Each name is marked (S) for a secret or (T) for a text — on a screen that draws emoji, 🔑 and 📄;
 secrets yellow and texts green (no colour with NO_COLOR set). Give a subfolder to list only what
 is under it. With --from, list what is in an export file instead.
@@ -2895,7 +2895,7 @@ Ls() {
     case ${1:-} in -h|--help) list-help ; return 0 ;; esac
     take-from-options "ls" "$@" ; set -- ${ARGS[@]+"${ARGS[@]}"}
     open-store-or-export "ls"
-    list-store all "EnvFolio Store" "ls" "$@"
+    list-store all "Folio Store" "ls" "$@"
 }
 
 #== Command: Info ==============================================================
@@ -3042,11 +3042,11 @@ function entry-history() {
 # key — as verify-text checks, but said rather than stopping folio. Needs no passphrase.
 function text-signature() {
     local name=$1 file=$STORE_PATH/$1.txt store_key status signer epoch uid when
-    [[ -f $file.sig ]] || { echo "no signature — changed outside EnvFolio?" ; return 0 ; }
+    [[ -f $file.sig ]] || { echo "no signature — changed outside Folio?" ; return 0 ; }
     store_key=$(store-key-fpr)
     status=$(text-signer "$file")
     if [[ -z $status ]]; then
-        echo "the signature does NOT verify — changed outside EnvFolio?"
+        echo "the signature does NOT verify — changed outside Folio?"
         return 0
     fi
     epoch=${status%% *} signer=${status##* }
@@ -3474,14 +3474,14 @@ function open-store-or-export() {
 # so no loaded name can clobber what this needs; the check catches the names bash keeps for
 # itself (RANDOM, UID, ...).
 function export-and-exec() {
-    # The command gets the environment EnvFolio was started with, not a GPG_TTY set-gpg-tty added.
+    # The command gets the environment Folio was started with, not a GPG_TTY set-gpg-tty added.
     (( ! GPG_TTY_SET )) || unset GPG_TTY
     while [[ $1 != -- ]]; do
         set -- "${1%%=*}" "$@"
         # shellcheck disable=SC2163  # $2 is <var>=<value>, exported as written
         if ! export -- "$2" 2>/dev/null \
             || [[ $(declare -p -- "$1" 2>/dev/null) != "declare -x $1="* || ${!1} != "${2#*=}" ]]; then
-            die "could not set $1: bash or EnvFolio keeps that name for itself. Load it under another name with VAR=<name>."
+            die "could not set $1: bash or Folio keeps that name for itself. Load it under another name with VAR=<name>."
         fi
         shift 2
     done
@@ -3626,7 +3626,7 @@ function used-items() {
 # one left out never covers a text of the same name.
 # Only files are copied: a secret stays encrypted, and nothing is read or decrypted. VIEW_FROM[i]
 # says which item in the source the item VIEW_PATHS[i] in the view was laid from. The view is
-# removed when EnvFolio exits (or, before an exec, by remove-now). Without a --use: nothing.
+# removed when Folio exits (or, before an exec, by remove-now). Without a --use: nothing.
 VIEW_SOURCE="" VIEW_PATHS=() VIEW_FROM=()
 function make-view() {
     local how=$1 secrets=$2 entry="" view file name prefix
@@ -4118,7 +4118,7 @@ function scan-placeholder() {
 }
 
 # look-up-env <name>: LOOKED_UP gets ${name}: from a variable set before — by an earlier line, else
-# by the entries, --all and --use that feed the vars files — else from the environment EnvFolio
+# by the entries, --all and --use that feed the vars files — else from the environment Folio
 # was started with. Fails when unset or empty.
 function look-up-env() {
     local i
@@ -4137,7 +4137,7 @@ function look-up-env() {
         read-entry-value "$VARS_HOW" "${INPUT_FILES[i]}" ; LOOKED_UP=$ENTRY_VALUE
         [[ -n $LOOKED_UP ]] ; return
     done
-    # printenv, not ${!name}: that would see EnvFolio's own variables.
+    # printenv, not ${!name}: that would see Folio's own variables.
     if [[ $1 == PASSWORD_STORE_DIR ]]; then LOOKED_UP=$CALLER_STORE_DIR
     else                                    LOOKED_UP=$(printenv "$1") || return 1
     fi
@@ -4306,7 +4306,7 @@ Completion() {
 # `folio __complete` what fits, as the zsh one does.
 function completion-bash() {
     cat <<'EOF'
-# Tab completion for folio (EnvFolio), from `folio completion bash`.
+# Tab completion for folio, from `folio completion bash`.
 _folio() {
     local line cur trim how item folio
     local -a words
@@ -4340,7 +4340,7 @@ EOF
 function completion-zsh() {
     cat <<'EOF'
 #compdef folio
-# Tab completion for folio (EnvFolio), from `folio completion zsh`: eval'd from ~/.zshrc, or as the
+# Tab completion for folio, from `folio completion zsh`: eval'd from ~/.zshrc, or as the
 # file _folio on $fpath (as Homebrew installs it), which compinit loads at the first Tab.
 _folio() {
     local how line word desc folio=${words[1]}
@@ -4727,7 +4727,7 @@ function check-passphrase-fd() {
 }
 
 # read-passphrase-fd <fd>: set PASSPHRASE to the first line of fd <fd>, then close it (unless it is
-# stdin, stdout or stderr), so nothing EnvFolio starts — the command `folio exec` runs — gets it.
+# stdin, stdout or stderr), so nothing Folio starts — the command `folio exec` runs — gets it.
 # Dies when the line is empty.
 function read-passphrase-fd() {
     PASSPHRASE=""
@@ -4861,7 +4861,7 @@ function take-fresh-passphrase() {
     done
 }
 
-# With -q/--quiet (or FOLIO_QUIET=1), EnvFolio leaves out what it says only to tell you what
+# With -q/--quiet (or FOLIO_QUIET=1), Folio leaves out what it says only to tell you what
 # happens next: the picture of an export's locks, the notes before gpg asks for a passphrase,
 # "Copied … to clipboard" and shell's "loaded …". Errors, warnings and questions are still said.
 QUIET=0
@@ -4891,7 +4891,7 @@ function take-quiet() {
 function note() { (( QUIET )) || printf '%s\n' "$*" >&2 ; }
 
 # start-fresh-passphrase: with --fresh-passphrase, have gpg-agent forget the store key's passphrase
-# now, and once more when EnvFolio exits. The store is kept by its path now: STORE_PATH points at an
+# now, and once more when Folio exits. The store is kept by its path now: STORE_PATH points at an
 # export or a view for a while.
 function start-fresh-passphrase() {
     (( FRESH_PASSPHRASE )) || return 0
@@ -4954,8 +4954,8 @@ function forget-keygrips() {
 # --- Pass ---------------------------------------------------------------------
 
 # call-pass <help-function> <pass-command> [args...]
-# Show EnvFolio's help on -h/--help (before any --); otherwise hand everything to `pass <command>`,
-# dropping what was typed before, as EnvFolio's own prompts do: pass may ask (rm, an overwrite).
+# Show Folio's help on -h/--help (before any --); otherwise hand everything to `pass <command>`,
+# dropping what was typed before, as Folio's own prompts do: pass may ask (rm, an overwrite).
 function call-pass() {
     local help=$1 command=$2 arg ; shift 2
     for arg in "$@"; do
@@ -5146,7 +5146,7 @@ function set-gpg-tty() {
     GPG_TTY=$terminal GPG_TTY_SET=1
     export GPG_TTY
 }
-# remove-on-exit <path>...: remove these when EnvFolio exits, however it exits. The gpg-agent of a
+# remove-on-exit <path>...: remove these when Folio exits, however it exits. The gpg-agent of a
 # new-gpg-home is stopped first.
 REMOVE_ON_EXIT=() GPG_HOMES=()
 function remove-on-exit() {
@@ -5162,9 +5162,9 @@ function remove-now() {
     REMOVE_ON_EXIT=() GPG_HOMES=()
     (( ! FRESH_PASSPHRASE )) || forget-passphrases
 }
-# new-gpg-home <folder>: a GnuPG home of its own, for an export's key; gone when EnvFolio exits.
+# new-gpg-home <folder>: a GnuPG home of its own, for an export's key; gone when Folio exits.
 # Its gpg-agent asks with your pinentry (a window one too: your gpg-agent.conf's pinentry-program),
-# and keeps a passphrase for as long as EnvFolio runs — the export's key, if it has one, is
+# and keeps a passphrase for as long as Folio runs — the export's key, if it has one, is
 # unlocked once (open-export).
 function new-gpg-home() {
     mkdir -m 700 "$1" || die "Cannot make a temporary folder."
@@ -5555,7 +5555,7 @@ function select-key() {
     printf '%s\n' "${key%]}"
 }
 
-# Whether this gpg makes post-quantum keys that EnvFolio can also back up and restore: Kyber (ML-KEM)
+# Whether this gpg makes post-quantum keys that Folio can also back up and restore: Kyber (ML-KEM)
 # is among its public-key algorithms (gpg 2.5+), and it is 2.5.21 or later — the first that imports
 # a Kyber secret key with --batch, as restore and import do.
 function gpg-has-pqc() {

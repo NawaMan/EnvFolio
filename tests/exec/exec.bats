@@ -2,7 +2,7 @@
 
 # folio exec and folio shell, through the real ./folio, against a throwaway GPG home and store.
 
-# shellcheck disable=SC2016  # the '$VAR's are for the command EnvFolio runs to expand, not this file
+# shellcheck disable=SC2016  # the '$VAR's are for the command Folio runs to expand, not this file
 bats_require_minimum_version 1.5.0    # run --separate-stderr
 
 setup() {
@@ -315,7 +315,7 @@ folio exec: left out 1 secret(s) under 'gh'; add --secrets to load them." ]
     [ ! -e "$SANDBOX/ran" ]
 }
 
-@test "exec: a name bash keeps for itself is refused; EnvFolio's own names load like any other" {
+@test "exec: a name bash keeps for itself is refused; Folio's own names load like any other" {
     make-store
     "$FOLIO" insert text -t "seed" random    < /dev/null
     "$FOLIO" insert text -t "me"   uid       < /dev/null
@@ -334,7 +334,7 @@ folio exec: left out 1 secret(s) under 'gh'; add --secrets to load them." ]
     [ "$output" = "ev|test@example.com|Test User" ]
 }
 
-@test "exec: a text changed outside EnvFolio stops everything; the command does not run" {
+@test "exec: a text changed outside Folio stops everything; the command does not run" {
     make-store
     echo "tampered" > "$FOLIO_STORE_DIR/git/email.txt"
     run "$FOLIO" exec git -- touch "$SANDBOX/ran"
@@ -343,7 +343,7 @@ folio exec: left out 1 secret(s) under 'gh'; add --secrets to load them." ]
     [ ! -e "$SANDBOX/ran" ]
 }
 
-@test "exec: the command's exit status and output are its own; EnvFolio prints no values" {
+@test "exec: the command's exit status and output are its own; Folio prints no values" {
     make-store
     run --separate-stderr "$FOLIO" exec --secrets gh git -- sh -c 'exit 7'
     [ "$status" -eq 7 ]

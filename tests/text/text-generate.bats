@@ -58,7 +58,7 @@ make-store() {
     [ "$(git -C "$FOLIO_STORE_DIR" log -1 --format=%s)" = "Replace generated text for note." ]
 }
 
-@test "generate text: --in-place refuses a text changed outside EnvFolio" {
+@test "generate text: --in-place refuses a text changed outside Folio" {
     make-store
     printf 'mallory\nrest\n' > "$FOLIO_STORE_DIR/note.txt"
     run "$FOLIO" generate text -i note < /dev/null
@@ -97,7 +97,7 @@ make-store() {
 @test "generate text: no store fails and creates nothing" {
     run "$FOLIO" generate text x < /dev/null
     [ "$status" -eq 1 ]
-    [[ $output == *"No ready EnvFolio store"* ]] || false
+    [[ $output == *"No ready Folio store"* ]] || false
     [ ! -e "$FOLIO_STORE_DIR" ]
 }
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# demo-data.sh: fill an existing EnvFolio store with demo items for test-helpers/demo.vars — two
+# demo-data.sh: fill an existing Folio store with demo items for test-helpers/demo.vars — two
 # environments of @first-app, and @second-app with items of its own — to try exec/shell/export by
 # hand:
 #

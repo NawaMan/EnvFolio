@@ -14,8 +14,8 @@ setup() {
 
     RELEASES="$SANDBOX/releases"
     export FOLIO_DOWNLOAD_URL="file://$RELEASES"
-    fake-release latest/download "EnvFolio 9.9.9"
-    fake-release download/v1.2.3 "EnvFolio 1.2.3"
+    fake-release latest/download "Folio 9.9.9"
+    fake-release download/v1.2.3 "Folio 1.2.3"
 }
 
 teardown() {
@@ -33,15 +33,15 @@ fake-release() {
     run bash "$INSTALL"
     [ "$status" -eq 0 ]
     [ -x "$HOME/.local/bin/folio" ]
-    [ "$("$HOME/.local/bin/folio")" = "EnvFolio 9.9.9" ]
-    [[ $output == *"EnvFolio 9.9.9"* ]] || false
+    [ "$("$HOME/.local/bin/folio")" = "Folio 9.9.9" ]
+    [[ $output == *"Folio 9.9.9"* ]] || false
     [ -z "$(ls -A "$TMPDIR")" ]
 }
 
 @test "install.sh: FOLIO_VERSION picks that release, FOLIO_INSTALL_DIR the folder" {
     FOLIO_VERSION=1.2.3 FOLIO_INSTALL_DIR="$SANDBOX/bin" run bash "$INSTALL"
     [ "$status" -eq 0 ]
-    [ "$("$SANDBOX/bin/folio")" = "EnvFolio 1.2.3" ]
+    [ "$("$SANDBOX/bin/folio")" = "Folio 1.2.3" ]
     [ ! -e "$HOME/.local/bin/folio" ]
 }
 

@@ -3,7 +3,7 @@
 # folio exec --vars and folio shell --vars, through the real ./folio, against a throwaway GPG home
 # and store.
 
-# shellcheck disable=SC2016  # the '$VAR's are for the command EnvFolio runs to expand, not this file
+# shellcheck disable=SC2016  # the '$VAR's are for the command Folio runs to expand, not this file
 bats_require_minimum_version 1.5.0    # run --separate-stderr
 
 setup() {

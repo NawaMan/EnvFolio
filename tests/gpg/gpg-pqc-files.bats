@@ -154,7 +154,7 @@ old-gpg-meets-pqc() {
     FOLIO_STORE_DIR=$there STORE_PATH=$there PASSWORD_STORE_DIR=$there \
         run Import --all --key test@example.com --file-passphrase-fd 3 "$SANDBOX/out/items.folio" < /dev/null 3< <(printf 'x\n')
     [ "$status" -eq 1 ]
-    [[ $output == *"This gpg (2.5.24) cannot use the key in $SANDBOX/out/items.folio"*"made before EnvFolio 1.1.0"*"https://dev.gnupg.org/T8469"*"Export it again with this EnvFolio"*"Nothing changed."* ]] || false
+    [[ $output == *"This gpg (2.5.24) cannot use the key in $SANDBOX/out/items.folio"*"made before Folio 1.1.0"*"https://dev.gnupg.org/T8469"*"Export it again with this Folio"*"Nothing changed."* ]] || false
     [ ! -e "$there" ]
     run Exec --secrets --from "$SANDBOX/out/items.folio" --file-passphrase-fd 3 web/github -- true 3< <(printf 'x\n')
     [ "$status" -eq 1 ]

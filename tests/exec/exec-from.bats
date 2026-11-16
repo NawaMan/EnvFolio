@@ -3,7 +3,7 @@
 # folio exec --from and folio shell --from, through the real ./folio: the entries come from an
 # export file, on a machine ("there") with its own throwaway GPG home and no store at all.
 
-# shellcheck disable=SC2016  # the '$VAR's are for the command EnvFolio runs to expand, not this file
+# shellcheck disable=SC2016  # the '$VAR's are for the command Folio runs to expand, not this file
 bats_require_minimum_version 1.5.0    # run --separate-stderr
 
 setup() {
@@ -56,7 +56,7 @@ go-there() {
 left-clean() {
     [ ! -e "$FOLIO_STORE_DIR" ]
     [ -z "$(ls -A "$TMPDIR")" ]
-    run gpg --list-keys "EnvFolio export"
+    run gpg --list-keys "Folio export"
     [ "$status" -ne 0 ]
 }
 
