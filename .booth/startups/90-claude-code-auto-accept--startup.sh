@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-# Configured by: booth config --no-tui --overwrite --variant terminal --set silence-build --set writable-booth --select apt-pkg:bats,pass,shellcheck,tmux/git-credential/shell-history/homebrew/claude-code+auto-accept+credential+settings-cache/bash/tty-owner/gnupg:2.5.24
+# Configured by: booth config --no-tui --overwrite --variant terminal --set silence-build --set writable-booth --select gnupg:2.5.24/tty-owner/apt-pkg:bats,pass,shellcheck,tmux/gh+token/bash/git-credential/shell-history/homebrew/claude-code+auto-accept+credential+settings-cache
 
 # Detect user-bound volumes and protect them from accidental rm -rf
 # by patching Claude Code's deny rules with jq.
