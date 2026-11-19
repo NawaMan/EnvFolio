@@ -112,6 +112,26 @@ field() { printf '%s\n' "$output" | awk -v l="$1" 'index($0, "  " l " ") == 1 { 
     [ "$(field Variable:)" = "GITHUB_USER" ]
 }
 
+@test "info: after an mv that re-encrypts the secret, the history still goes back to the earlier name" {
+    make-store
+    gpg --batch --passphrase '' --quick-generate-key "Other <other@example.com>" default default never 2>/dev/null
+    # A folder with its own key: pass mv re-encrypts what moves in, so its content is all new and git
+    # sees no rename.
+    pass init -p github other@example.com >/dev/null
+    "$FOLIO" mv secret gh/token github/token >/dev/null
+    "$FOLIO" mv secret github/token github/pat >/dev/null
+    run "$FOLIO" info github/pat
+    [ "$status" -eq 0 ]
+    [ "$(field Changes:)" = "3 commits;  was named: github/token, gh/token" ]
+    [[ $(field Created:) == *"Add given password for gh/token to store."* ]] || false
+    # A whole folder moved, re-encrypted: each file is told from the others by its last name part.
+    printf 'S3CR3T-TWO\n' | "$FOLIO" insert secret -m github/other >/dev/null
+    pass init -p work test@example.com >/dev/null
+    "$FOLIO" mv secret github work/github >/dev/null
+    run "$FOLIO" info work/github/pat
+    [ "$(field Changes:)" = "4 commits;  was named: github/pat, github/token, gh/token" ]
+}
+
 @test "info: a secret encrypted to a key no longer in .gpg-id is STALE" {
     make-store
     gpg --batch --passphrase '' --quick-generate-key "Other <other@example.com>" default default never 2>/dev/null
