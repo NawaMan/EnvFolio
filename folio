@@ -3016,26 +3016,59 @@ function info-history-lines() {
 }
 
 # entry-history <file>: the git history of <file> (<name>.txt or <name>.gpg) in the store, across
-# renames, in one `git log --follow`: HISTORY_COUNT commits, HISTORY_FIRST and HISTORY_LAST
-# ("<date> <time>  (<hash>  <subject>)", local time), and HISTORY_NAMES — its earlier names, newest
-# first, comma-separated ("" when none). File times are not used: restore and import reset them.
+# renames: HISTORY_COUNT commits, HISTORY_FIRST and HISTORY_LAST ("<date> <time>  (<hash>
+# <subject>)", local time), and HISTORY_NAMES — its earlier names, newest first, comma-separated
+# ("" when none). File times are not used: restore and import reset them.
+#
+# Not `git log --follow`: it finds a rename by the content staying alike, and `pass mv` re-encrypts
+# a secret it moves to other keys (a folder with its own .gpg-id), so nothing is alike. Instead the
+# history of one name is read back to the commit that added it, and that commit tells the earlier
+# name (rename-source); then the history of that name, from before that commit, and so on.
 function entry-history() {
-    local file=$1 line hash when subject path seen=" "
+    local file=$1 path=$1 rev=HEAD line hash short when subject status oldest added earlier seen=" "
     HISTORY_COUNT=0 HISTORY_FIRST="" HISTORY_LAST="" HISTORY_NAMES=""
-    while IFS= read -r line; do
-        if [[ $line == $'\x01'* ]]; then
-            IFS=$'\t' read -r hash when subject <<< "${line#$'\x01'}"
-            HISTORY_FIRST="$when  ($hash  $subject)"
-            [[ -n $HISTORY_LAST ]] || HISTORY_LAST=$HISTORY_FIRST
-            HISTORY_COUNT=$(( HISTORY_COUNT + 1 ))
-        elif [[ -n $line && $line != "$file" ]]; then
-            path=${line%.*}
-            [[ $seen != *" $path "* ]] || continue
-            seen+="$path "
-            HISTORY_NAMES+=${HISTORY_NAMES:+, }$path
+    while [[ -n $path ]]; do
+        oldest="" added=""
+        while IFS= read -r line; do
+            if [[ $line == $'\x01'* ]]; then
+                IFS=$'\t' read -r hash short when subject <<< "${line#$'\x01'}"
+                HISTORY_FIRST="$when  ($short  $subject)"
+                [[ -n $HISTORY_LAST ]] || HISTORY_LAST=$HISTORY_FIRST
+                HISTORY_COUNT=$(( HISTORY_COUNT + 1 ))
+                oldest=$hash added=""
+            elif [[ -n $line ]]; then
+                status=${line%%$'\t'*}
+                [[ $status != A ]] || added=yes
+            fi
+        done < <(git -C "$STORE_PATH" -c core.quotePath=false log --no-renames --name-status \
+                     --date='format-local:%Y-%m-%d %H:%M' --format='%x01%H%x09%h%x09%ad%x09%s' \
+                     "$rev" -- "$path" 2>/dev/null)
+        [[ -n $oldest && -n $added ]] || break
+        earlier=$(rename-source "$oldest" "$path")
+        [[ -n $earlier ]] || break
+        if [[ $earlier != "$file" && $seen != *" ${earlier%.*} "* ]]; then
+            seen+="${earlier%.*} "
+            HISTORY_NAMES+=${HISTORY_NAMES:+, }${earlier%.*}
         fi
-    done < <(git -C "$STORE_PATH" -c core.quotePath=false log --follow --name-only \
-                 --date='format-local:%Y-%m-%d %H:%M' --format='%x01%h%x09%ad%x09%s' -- "$file" 2>/dev/null)
+        path=$earlier rev=$oldest^
+    done
+}
+
+# rename-source <commit> <file>: the file in the store that <commit>, which added <file>, renamed to
+# it — nothing when it was not a rename. Git's own rename detection first (the content alike); else
+# the one file of the same kind (.gpg, or .txt) that the commit removed — or, when it removed several
+# (a whole folder moved), the one of them with the same last part of the name.
+function rename-source() {
+    local commit=$1 file=$2 ext=${2##*.} status old new gone=() same=() f
+    while IFS=$'\t' read -r status old new; do
+        if [[ $status == R* && $new == "$file" ]]; then echo "$old" ; return 0 ; fi
+        [[ $status == D && $old == *."$ext" ]] && gone+=("$old")
+    done < <(git -C "$STORE_PATH" -c core.quotePath=false show -M --name-status --format= \
+                 "$commit" 2>/dev/null)
+    (( ${#gone[@]} > 0 )) || return 0
+    if (( ${#gone[@]} == 1 )); then echo "${gone[0]}" ; return 0 ; fi
+    for f in "${gone[@]}"; do [[ ${f##*/} != "${file##*/}" ]] || same+=("$f") ; done
+    (( ${#same[@]} != 1 )) || echo "${same[0]}"
 }
 
 # text-signature <name>: who signed the text <name>, when, and whether it verifies with the store's
