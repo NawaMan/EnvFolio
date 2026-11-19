@@ -2,7 +2,7 @@
 
 #== Doc ========================================================================
 #
-# Folio — a command-line tool for keeping texts and secrets, built on `pass`.
+# EnvFolio (Folio for short) — a command-line tool for keeping texts and secrets, built on `pass`.
 #
 # Usage: folio <command> [args...]        (`folio help` lists the commands)
 #   folio init | path | backup | restore | export | import
@@ -97,7 +97,7 @@ Main() {
 }
 
 Version() {
-    echo "Folio $APP_VERSION"
+    echo "EnvFolio $APP_VERSION"
 }
 
 # folio help [command...]
@@ -188,7 +188,7 @@ Commands:
   exec              Run a command with entries as environment variables
   shell             Start a shell with entries as environment variables
   completion        Print the Tab completion script for bash or zsh
-  version           Print Folio's version
+  version           Print EnvFolio's version
   help [command]    Show help, e.g. `folio help init`
 
 Options for every command:
@@ -1320,7 +1320,7 @@ EOF
     [[ $key_algo != pqc ]] || primary=(pqc default never)
     (( ! set_now )) || make_key=("${with_key[@]}")
     status=$(GNUPGHOME=$home "${make_key[@]}" --status-fd 4 \
-                 --quick-generate-key "Folio export key $(date +%Y%m%d-%H%M%S)" "${primary[@]}" \
+                 --quick-generate-key "EnvFolio export key $(date +%Y%m%d-%H%M%S)" "${primary[@]}" \
                  4>&1 1>/dev/null 2>/dev/null 3< <(printf '%s\n' "$key_pass"))
     key=$(printf '%s\n' "$status" | awk '$2 == "KEY_CREATED" { print $4 }')
     [[ -n $key ]] || die "Making the export's key failed."
@@ -2895,7 +2895,7 @@ Ls() {
     case ${1:-} in -h|--help) list-help ; return 0 ;; esac
     take-from-options "ls" "$@" ; set -- ${ARGS[@]+"${ARGS[@]}"}
     open-store-or-export "ls"
-    list-store all "Folio Store" "ls" "$@"
+    list-store all "EnvFolio Store" "ls" "$@"
 }
 
 #== Command: Info ==============================================================

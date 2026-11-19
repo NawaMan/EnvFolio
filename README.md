@@ -1,13 +1,10 @@
-<p align="center"><img src="logo-on-dark.svg" alt="Folio" width="160"></p>
+<p align="center"><img src="logo-on-dark.svg" alt="EnvFolio" width="160"></p>
 
-# Folio
+# EnvFolio
 
-_Formerly EnvFolio: the project is now called Folio, after its command. The repository and its
-links keep the old name._
-
-Run a command with your secrets and settings as environment variables, kept in a
-[`pass`](https://www.passwordstore.org/) store — the way `op run` and `aws-vault exec` do, with
-nothing but bash, `pass` and `gpg`.
+**EnvFolio** (Folio for short, after its command) runs a command with your secrets and settings as
+environment variables, kept in a [`pass`](https://www.passwordstore.org/) store — the way `op run`
+and `aws-vault exec` do, with nothing but bash, `pass` and `gpg`.
 
 ```bash
 folio exec --secrets gh/token -- gh release list     # gh gets GH_TOKEN

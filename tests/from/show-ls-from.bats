@@ -63,7 +63,7 @@ go-there() {
 left-clean() {
     [ ! -e "$FOLIO_STORE_DIR" ]
     [ -z "$(ls -A "$TMPDIR")" ]
-    run gpg --list-keys "Folio export"
+    run gpg --list-keys "EnvFolio export"
     [ "$status" -ne 0 ]
 }
 
@@ -104,7 +104,7 @@ EOF
     [ "$output" = $'(S)gh/token\n(T)gh/user\n(T)git/email\n(S)note' ]
     run --separate-stderr "$FOLIO" ls --plain --from "$FILE" --file-passphrase-fd 3 3< <(printf 'export pass\n')
     [ "$status" -eq 0 ]
-    [[ ${lines[0]} == "Folio Export: $FILE" ]] || false
+    [[ ${lines[0]} == "EnvFolio Export: $FILE" ]] || false
     [[ $output == *"gh"*"(S)token"*"(T)user"* ]] || false
     [[ $output != *"shared"* && $output != *".sig"* ]] || false
     run --separate-stderr "$FOLIO" ls text --flat --from "$FILE" --file-passphrase-fd 3 3< <(printf 'export pass\n')

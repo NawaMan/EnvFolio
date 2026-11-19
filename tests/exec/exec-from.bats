@@ -56,7 +56,7 @@ go-there() {
 left-clean() {
     [ ! -e "$FOLIO_STORE_DIR" ]
     [ -z "$(ls -A "$TMPDIR")" ]
-    run gpg --list-keys "Folio export"
+    run gpg --list-keys "EnvFolio export"
     [ "$status" -ne 0 ]
 }
 

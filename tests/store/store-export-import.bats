@@ -58,7 +58,7 @@ export-file() {
 # Nothing left in TMPDIR, and the export's key never in the keyring.
 left-clean() {
     [ -z "$(ls -A "$TMPDIR")" ]
-    run gpg --list-keys "Folio export"
+    run gpg --list-keys "EnvFolio export"
     [ "$status" -ne 0 ]
 }
 
