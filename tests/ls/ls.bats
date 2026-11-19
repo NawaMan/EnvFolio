@@ -39,7 +39,7 @@ plain() { printf '%s\n' "$output" | sed $'s/\e\\[[0-9;]*m//g' ; }
     make-store
     run "$FOLIO" ls
     [ "$status" -eq 0 ]
-    [ "$(plain)" = "Folio Store
+    [ "$(plain)" = "EnvFolio Store
 ├── (T)note
 └── web
     ├── (S)github
@@ -51,7 +51,7 @@ plain() { printf '%s\n' "$output" | sed $'s/\e\\[[0-9;]*m//g' ; }
     make-store
     run "$FOLIO" ls web
     [ "$status" -eq 0 ]
-    [ "$(plain)" = "Folio Store
+    [ "$(plain)" = "EnvFolio Store
 web
 ├── (S)github
 ├── (T)github

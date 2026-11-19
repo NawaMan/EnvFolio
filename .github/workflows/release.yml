@@ -1,4 +1,4 @@
-# Release Folio: Actions → Release → Run workflow (on main), or `gh workflow run release.yml`.
+# Release EnvFolio: Actions → Release → Run workflow (on main), or `gh workflow run release.yml`.
 # Running it is the go-ahead; nothing here releases on its own.
 #
 #   prepare  the version: the `version` input, or APP_VERSION in ./folio without --rc
@@ -80,7 +80,7 @@ jobs:
           sed -i "s/^APP_VERSION=.*/APP_VERSION=$VERSION/" folio
           sed -i "s/^## Unreleased\$/## $VERSION — $(date -u +%F)/" CHANGELOG.md
           git diff --quiet || git commit -qam "Release $VERSION"
-          git tag -a "$TAG" -m "Folio $VERSION"
+          git tag -a "$TAG" -m "EnvFolio $VERSION"
           git push --atomic origin HEAD:main "refs/tags/$TAG"
 
       - name: Create the GitHub Release
@@ -90,7 +90,7 @@ jobs:
               > "$RUNNER_TEMP/notes.md"
           sha256sum folio > "$RUNNER_TEMP/SHA256SUMS"
           gh release create "$TAG" folio "$RUNNER_TEMP/SHA256SUMS" \
-              --verify-tag --title "Folio $VERSION" --notes-file "$RUNNER_TEMP/notes.md"
+              --verify-tag --title "EnvFolio $VERSION" --notes-file "$RUNNER_TEMP/notes.md"
 
       - name: Start the next version on main
         run: |

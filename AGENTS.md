@@ -1,7 +1,8 @@
 # AGENTS.md — Working on this repository
 
-Guidance for an AI agent (Claude Code, or similar) helping develop **Folio**, a command-line app with
-interactive prompts, written in **bash**, for keeping texts and secrets.
+Guidance for an AI agent (Claude Code, or similar) helping develop **EnvFolio**
+(Folio for short), a command-line app with interactive prompts, written in **bash**, for keeping
+texts and secrets.
 
 ---
 

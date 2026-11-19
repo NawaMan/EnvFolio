@@ -80,8 +80,8 @@ shows-nothing-secret() {
     GNUPGHOME="$SANDBOX/there" run "$XRAY" --open "$SANDBOX/out/to.folio"
     [ "$status" -eq 0 ]
     [[ $output == *"encrypted to "*"Server <server@example.com>"* && $output == *"folio-export 1"* ]] || false
-    [[ $output == *"(S)web/github"*"encrypted to "*"Folio export "* ]] || false
-    [[ $output == *"(T)web/home"*"Folio export "*", verifies"* ]] || false
+    [[ $output == *"(S)web/github"*"encrypted to "*"EnvFolio export "* ]] || false
+    [[ $output == *"(T)web/home"*"EnvFolio export "*", verifies"* ]] || false
     shows-nothing-secret
     # Here, without the server's key, it cannot be opened.
     run "$XRAY" --open "$SANDBOX/out/to.folio"

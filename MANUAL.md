@@ -1,4 +1,4 @@
-# Folio Manual
+# EnvFolio Manual
 
 One section per command, one subsection per example. Every example that can run without a
 keyboard has a matching test in `tests/` named `MANUAL: <command> — <example>`.
@@ -261,7 +261,7 @@ folio ls
 ```
 
 ```
-Folio Store
+EnvFolio Store
 ├── (T)note
 └── web
     ├── (S)github
@@ -299,7 +299,7 @@ folio ls --from app2-prod
 ```
 
 ```
-Folio Export: ~/.local/folio/app2-prod.folio
+EnvFolio Export: ~/.local/folio/app2-prod.folio
 └── gh
     ├── (S)token
     └── (T)user

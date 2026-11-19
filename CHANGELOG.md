@@ -1,6 +1,6 @@
 # Changelog
 
-User-visible changes to Folio (called EnvFolio until 2.1.0). Newest first.
+User-visible changes to EnvFolio (Folio for short). Newest first.
 
 ## Unreleased
 
@@ -16,10 +16,8 @@ User-visible changes to Folio (called EnvFolio until 2.1.0). Newest first.
 
 ### Changed
 
-- EnvFolio is now called **Folio**, after its command. `folio version` says `Folio <version>`,
-  `folio ls` heads its tree `Folio Store`, and help and messages say Folio. Nothing else changes:
-  the command, the store, `FOLIO_*`, backups and exports are as before, and the repository and
-  its links keep the name EnvFolio. A new export's own key is named `Folio export key …`.
+- Help and messages call EnvFolio by its short name, Folio, after its command ("No ready Folio
+  store", "Your Folio store is backed up"). Nothing else changes.
 
 ## 2.0.0 — 2026-11-08
 
