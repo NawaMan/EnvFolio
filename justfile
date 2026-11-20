@@ -28,6 +28,7 @@ test-bash5:
 # The booth runs its command through a shell, so each argument is quoted once more for it.
 # With quiet=true, stderr goes to a private temp file inside the booth (the booth's terminal would
 # merge it into stdout on the host) and is printed only when the command fails.
+# gpg's passphrase prompt, if any, comes before the booth starts, from the host's agent.
 # Run Claude in the booth, with the todos MCP token (todos/mcp-token) loaded and its tools allowed.
 [positional-arguments]
 claude *args:
@@ -41,6 +42,12 @@ claude *args:
                       exit "$rc"' quiet "${cmd[@]}")
     fi
     if [[ {{in_booth}} == true ]]; then exec "${cmd[@]}"; fi
+    # The booth's gpg uses the host's agent when its socket is there (config.toml mounts it), and
+    # the booth never asks for a passphrase then: unlock the key here first, on this terminal,
+    # by decrypting the token to nowhere. No prompt when the agent has the passphrase cached.
+    if [[ -S ${XDG_RUNTIME_DIR:-/nonexistent}/gnupg/S.gpg-agent && -t 0 ]]; then
+        GPG_TTY=$(tty) gpg --quiet --decrypt "${FOLIO_STORE_DIR:-$HOME/.folio}/todos/mcp-token.gpg" >/dev/null
+    fi
     quoted=()
     for a in "${cmd[@]}"; do quoted+=("$(printf '%q' "$a")"); done
     if [[ {{quiet}} != true ]]; then exec ./booth --privileged-allowed --quiet -- "${quoted[@]}"; fi
