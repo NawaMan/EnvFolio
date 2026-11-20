@@ -29,11 +29,28 @@ test-bash5:
 # With quiet=true, stderr goes to a private temp file inside the booth (the booth's terminal would
 # merge it into stdout on the host) and is printed only when the command fails.
 # gpg's passphrase prompt, if any, comes before the booth starts, from the host's agent.
+# Leading `--worktree <name>` and `--worktree-keep` go to the booth, which then runs on that git
+# worktree (`just claude --worktree fix-1 -p "…"`); a worktree the run creates is removed when it
+# exits, if nothing would be lost, unless --worktree-keep. Only leading ones: later, they are
+# claude's (claude has a --worktree of its own).
 # Run Claude in the booth, with the todos MCP token (todos/mcp-token) loaded and its tools allowed.
 [positional-arguments]
 claude *args:
     #!/usr/bin/env bash
     set -euo pipefail
+    booth_opts=()
+    while (( $# )); do
+        case $1 in
+            --worktree)      (( $# >= 2 )) || { echo "just claude: --worktree needs a name" >&2; exit 2; }
+                             booth_opts+=("$1" "$2"); shift 2 ;;
+            --worktree=*)    booth_opts+=(--worktree "${1#--worktree=}"); shift ;;
+            --worktree-keep) booth_opts+=("$1"); shift ;;
+            *)               break ;;
+        esac
+    done
+    if [[ {{in_booth}} == true && ${#booth_opts[@]} -gt 0 ]]; then
+        echo "just claude: --worktree is for starting a booth; this is already in one" >&2; exit 2
+    fi
     cmd=(folio exec -s todos/mcp-token -- claude --allowedTools mcp__todos "$@")
     if [[ {{quiet}} == true ]]; then
         cmd=(bash -c 'umask 077; err=$(mktemp); trap '\''rm -f "$err"'\'' EXIT
@@ -50,9 +67,10 @@ claude *args:
     fi
     quoted=()
     for a in "${cmd[@]}"; do quoted+=("$(printf '%q' "$a")"); done
-    if [[ {{quiet}} != true ]]; then exec ./booth --privileged-allowed --quiet -- "${quoted[@]}"; fi
+    booth=(./booth --privileged-allowed --quiet ${booth_opts[@]+"${booth_opts[@]}"} --)
+    if [[ {{quiet}} != true ]]; then exec "${booth[@]}" "${quoted[@]}"; fi
     # The booth's own start-up warnings go to the host's stderr: kept the same way.
     umask 077; err=$(mktemp); trap 'rm -f "$err"' EXIT
-    rc=0; ./booth --privileged-allowed --quiet -- "${quoted[@]}" 2>"$err" || rc=$?
+    rc=0; "${booth[@]}" "${quoted[@]}" 2>"$err" || rc=$?
     (( rc == 0 )) || cat "$err" >&2
     exit "$rc"
