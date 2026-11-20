@@ -7,6 +7,7 @@ keyboard has a matching test in `tests/` named `MANUAL: <command> — <example>`
 
 - **Start:** [`help`](#folio-help) · [`init`](#folio-init) · [`path`](#folio-path) ·
   [`ls`](#folio-ls) · [`info`](#folio-info)
+- **Tags:** [`tag add`](#folio-tag-add) · [`tag rm`](#folio-tag-rm) · [`tag ls`](#folio-tag-ls)
 - **Texts:** [`ls text`](#folio-ls-text) · [`find text`](#folio-find-text) ·
   [`grep text`](#folio-grep-text) · [`show text`](#folio-show-text) ·
   [`insert text`](#folio-insert-text) · [`edit text`](#folio-edit-text) ·
@@ -235,7 +236,7 @@ terminal (it writes 🔑, asks where the cursor went, and wipes the line), so a 
 draw them keeps (S)/(T), as does `TERM=linux` or a locale that is not UTF-8. Sent to a pipe or a
 file, with `TERM=dumb`, or with `--plain`, there are neither colours nor emoji (`NO_COLOR` takes
 only the colours away) — what scripts and the examples below see.
-Signatures (`.txt.sig`) are left out.
+Signatures (`.txt.sig`) and tags (`.tags`) are left out.
 
 ```
 folio ls [--flat] [--plain] [--from <export> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]] [<subfolder>]
@@ -326,7 +327,8 @@ folio info <name>
 
 For either kind: the file and its size, the variable `exec` and `shell` give it, when it was
 created and last modified, how many commits changed it and the names it had before an `mv`, and
-whether it has changes not yet committed. The times come from the store's git history (every
+whether it has changes not yet committed, and its tags ([`folio tag add`](#folio-tag-add)) or
+`none`. The times come from the store's git history (every
 change is a commit), in local time, not from the file: `restore` and `import` make files anew.
 A text also shows who signed it and when, and whether the signature verifies with the store's key
 — a text changed outside Folio is reported, not refused as `show text` does. A secret shows the
@@ -351,6 +353,7 @@ gh/token  (secret)
   Modified:     2026-11-01 09:30  (d4e5f6a  Rename github/token to gh/token.)
   Changes:      2 commits;  was named: github/token
   Uncommitted:  no
+  Tags:         rotate-2027, work
   Encrypted to: 3965E1B66F05078C Jane Doe <jane@example.com>   (the store's key; never expires)
 ```
 
@@ -369,7 +372,132 @@ gh/user  (text)
   Modified:     2026-09-02 14:10  (b2c3d4e  Add given text for gh/user to store.)
   Changes:      1 commit
   Uncommitted:  no
+  Tags:         none
   Signed by:    Jane Doe <jane@example.com>, 2026-09-02 14:10 — valid
+```
+
+---
+
+## `folio tag add`
+
+Puts tags on a text or a secret: your own labels, like hashtags, to mark the items of a project,
+the ones to rotate next year, the ones a colleague gave you. A tag is letters, digits, `_`, `-`
+and `.`, not starting with `-` or `.`; a `#` in front is dropped (quote it, or the shell takes it
+for a comment: `'#work'`).
+
+```
+folio tag add <name> <tag>...
+```
+
+| Option | Meaning |
+| --- | --- |
+| `-h`, `--help` | Show the options and stop. Works without a store. |
+
+The tags are kept in `<name>.tags` next to the item, one per line, sorted, and committed to the
+store's git history. They are **plain and not signed**, as the names are: never put a secret in
+one. No passphrase is needed. A text and a secret of the same name share their tags.
+[`folio info`](#folio-info) shows them.
+
+The tags go with the item: `mv` and `cp` (of a text or a secret) carry them to the new name, added
+to those it has; `rm` removes them once no item of that name is left. `folio backup` holds them,
+and `folio export` puts them in the file, plain, for `folio import` to add to those the item has
+in the store. Tags do not pick what `exec` and `shell` load.
+
+### Tag an item
+
+```bash
+folio tag add gh/token work rotate-2027
+folio info gh/token
+```
+
+```
+gh/token  (secret)
+  ...
+  Tags:         rotate-2027, work
+  ...
+```
+
+### The tags go into an export, and come back with import
+
+```bash
+folio export --secrets -o items.folio gh     # here
+folio import --all items.folio               # there
+folio tag ls work
+```
+
+```
+(S)gh/token
+(T)gh/user
+```
+
+### The tags are in a backup, and come back with restore
+
+```bash
+folio backup /media/usb
+# ... on the new machine:
+folio restore /media/usb/backup-…--folio.tar.gz
+folio info gh/token                          # its Tags: line is as it was
+```
+
+---
+
+## `folio tag rm`
+
+Takes tags off a text or a secret. When one of them is not on it, nothing is changed.
+
+```
+folio tag rm <name> <tag>...
+```
+
+| Option | Meaning |
+| --- | --- |
+| `-h`, `--help` | Show the options and stop. Works without a store. |
+
+### Take a tag off
+
+```bash
+folio tag rm gh/token old work
+```
+
+---
+
+## `folio tag ls`
+
+Lists every tag in the store, with how many names carry it — or, given a tag, the items that
+carry it, one per line, marked as [`folio ls --flat`](#list-flat) marks them. Tags left behind by
+an item removed outside Folio (with `pass rm`) are not listed.
+
+```
+folio tag ls [--plain] [<tag>]
+```
+
+| Option | Meaning |
+| --- | --- |
+| `--plain` | Mark secrets (S) and texts (T), with no colour, even on a screen. |
+| `-h`, `--help` | Show the options and stop. Works without a store. |
+
+### List the tags
+
+```bash
+folio tag ls
+```
+
+```
+rotate-2027 (1)
+work (3)
+```
+
+### List the items with a tag
+
+```bash
+folio tag ls work
+```
+
+```
+(T)gh/both
+(S)gh/both
+(S)gh/token
+(T)gh/user
 ```
 
 ---

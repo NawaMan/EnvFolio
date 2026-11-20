@@ -8,6 +8,7 @@
 #   folio init | path | backup | restore | export | import
 #   folio ls | find | grep | show | insert | edit | generate | rm | mv | cp   text|secret
 #   folio check vars
+#   folio tag add | rm | ls
 #   folio ls | info | exec | shell | completion | version | help [command]
 #   (The kind can also come first: `folio text show` is `folio show text`.)
 #
@@ -81,6 +82,7 @@ Main() {
         vars)    Vars    "$@" ;;
         ls)      Ls      "$@" ;;
         info)    Info    "$@" ;;
+        tag)     Tag     "$@" ;;
         exec)    Exec    "$@" ;;
         shell)   Shell   "$@" ;;
         completion) Completion "$@" ;;
@@ -91,7 +93,7 @@ Main() {
                  case " $* " in *" -h "*|*" --help "*) kinds-help "$category" ; return 0 ;; esac
                  die "$category: a text or a secret? \`folio $category text …\` or \`folio $category secret …\`." ;;
         check)   die "check: check what? \`folio check vars <file>…\`." ;;
-        "")      echo    "Usage: folio <init|path|backup|restore|export|import|text|secret|vars|ls|info|exec|shell|completion|version|help> [args...]" >&2 ; return 1 ;;
+        "")      echo    "Usage: folio <init|path|backup|restore|export|import|text|secret|vars|ls|info|tag|exec|shell|completion|version|help> [args...]" >&2 ; return 1 ;;
         *)       echo    "folio: unknown command: $category" >&2 ; return 1 ;;
     esac
 }
@@ -113,6 +115,10 @@ Help() {
         "import")          import-help          ;;
         "ls")              list-help            ;;
         "info")            info-help            ;;
+        "tag")             tag-help             ;;
+        "tag add")         tag-add-help         ;;
+        "tag rm")          tag-rm-help          ;;
+        "tag ls")          tag-ls-help          ;;
         "exec")            run-exec-help        ;;
         "shell")           run-shell-help       ;;
         "completion")      completion-help      ;;
@@ -166,6 +172,9 @@ Commands:
   ls text           List texts
   ls secret         List secrets
   info              Show what is known about one text or secret — never its value
+  tag add           Put tags (your own labels) on a text or a secret
+  tag rm            Take tags off a text or a secret
+  tag ls            List the tags, or the items that carry one
   find text         Find texts by name
   find secret       Find secrets by name
   grep text         Find texts by value
@@ -1344,6 +1353,8 @@ EOF
             GNUPGHOME=$home "${sign[@]}" --quiet --local-user "$key" --detach-sign --output "$out.sig" "$out" \
                 3< <(printf '%s\n' "$key_pass") || die "export: could not sign '$name'."
         fi
+        # Its tags go with it, plain as in the store (a text and a secret of one name share them).
+        [[ -z $(tags-of "$name") ]] || tags-of "$name" > "$pack/store/$name.tags"
         show-answer "Copied" "$(item-label "$item")"
     done
 
@@ -1700,6 +1711,11 @@ EOF
         else
             save-text "$name" "Import text for $name." < "$root/$item"
             texts=$(( texts + 1 ))
+        fi
+        # Its tags in the export are added to those it has in the store.
+        if [[ -n $(tags-of "$name" "$root") ]]; then
+            tags-of "$name" "$root" | merge-tags "$name"
+            commit-tags "Import the tags of $name."
         fi
         show-answer "Imported" "$(item-label "$item")"
     done
@@ -2429,12 +2445,19 @@ TextRm() {
 
     if (( folder )); then
         find "$STORE_PATH/$path" -type f \( -name '*.txt' -o -name '*.txt.sig' \) -exec rm -f -- {} +
+        # The tags of each name that is no longer an item (no secret of that name either).
+        local file
+        while IFS= read -r file; do
+            file=${file#"$STORE_PATH"/}
+            drop-orphan-tags "${file%.tags}"
+        done < <(find "$STORE_PATH/$path" -type f -name '*.tags')
         find "$STORE_PATH/$path" -depth -type d -empty -exec rmdir -- {} \;
         # git's * matches across folders: every text under <path>.
         git -C "$STORE_PATH" rm -r -q --cached --ignore-unmatch -- "$path/*.txt" "$path/*.txt.sig"
     else
         rm -f -- "$STORE_PATH/$path.txt" "$STORE_PATH/$path.txt.sig"
         git -C "$STORE_PATH" rm -q --cached --ignore-unmatch -- "$path.txt" "$path.txt.sig"
+        drop-orphan-tags "$path"
     fi
     rmdir -p "$(dirname "$STORE_PATH/$path")" 2>/dev/null
     git -C "$STORE_PATH" diff --cached --quiet || git -C "$STORE_PATH" commit --quiet -m "Remove $path from store."
@@ -2473,7 +2496,7 @@ TextCp() { text-copy-move cp "$@" ; }
 
 # text-copy-move <mv|cp> [-f|--force] <old-name> <new-name>
 # As `pass mv` / `pass cp`, for texts. A signature covers the text, not its name, so it moves with
-# it and still verifies.
+# it and still verifies. Its tags go with it too (carry-tags).
 function text-copy-move() {
     local how=$1 force=0 names=() arg ; shift
     while (( $# > 0 )); do
@@ -2523,8 +2546,9 @@ function text-copy-move() {
         done
         if [[ $how == mv ]]; then
             git -C "$STORE_PATH" rm -q --cached --ignore-unmatch -- "${from[i]}.txt" "${from[i]}.txt.sig"
-            rmdir -p "$(dirname "$STORE_PATH/${from[i]}")" 2>/dev/null
         fi
+        carry-tags "$how" "${from[i]}" "${to[i]}"
+        [[ $how != mv ]] || rmdir -p "$(dirname "$STORE_PATH/${from[i]}")" 2>/dev/null
         git -C "$STORE_PATH" add -- "${to[i]}.txt"
         [[ -e $STORE_PATH/${to[i]}.txt.sig ]] && git -C "$STORE_PATH" add -- "${to[i]}.txt.sig"
     done
@@ -2820,7 +2844,25 @@ EOF
 }
 
 # folio rm secret [-r|--recursive] [-f|--force] <name>
-SecretRm() { call-pass secret-rm-help rm "$@" ; }
+# pass removes the secret (or the folder, whole); then the tags of a name that is no longer an
+# item go too.
+SecretRm() {
+    local arg name="" dashes=0
+    for arg in "$@"; do
+        if (( dashes )); then name=$arg ; continue ; fi
+        case $arg in
+            --)        dashes=1 ;;
+            -h|--help) secret-rm-help ; return 0 ;;
+            -*)        ;;
+            *)         name=$arg ;;
+        esac
+    done
+    call-pass secret-rm-help rm "$@" || return
+    name=${name%/}
+    [[ -n $name ]] || return 0
+    drop-orphan-tags "$name"
+    commit-tags "Remove the tags of $name."
+}
 
 # --- secret mv ----------------------------------------------------------------
 
@@ -2838,7 +2880,7 @@ EOF
 }
 
 # folio mv secret [-f|--force] <old-name> <new-name>
-SecretMv() { call-pass secret-mv-help mv "$@" ; }
+SecretMv() { secret-copy-move mv "$@" ; }
 
 # --- secret cp ----------------------------------------------------------------
 
@@ -2856,7 +2898,44 @@ EOF
 }
 
 # folio cp secret [-f|--force] <old-name> <new-name>
-SecretCp() { call-pass secret-cp-help cp "$@" ; }
+SecretCp() { secret-copy-move cp "$@" ; }
+
+# secret-copy-move <mv|cp> [-f|--force] <old-name> <new-name>
+# `pass mv` / `pass cp`, then the tags of the secret go with it (carry-tags), in a commit of their
+# own. Only for one secret: a folder pass moves or copies whole, its .tags files with it.
+function secret-copy-move() {
+    local how=$1 arg names=() dashes=0 ; shift
+    for arg in "$@"; do
+        if (( dashes )); then names+=("$arg") ; continue ; fi
+        case $arg in
+            --)        dashes=1 ;;
+            -h|--help) "secret-$how-help" ; return 0 ;;
+            -*)        ;;
+            *)         names+=("$arg") ;;
+        esac
+    done
+    # Where pass puts one secret, as pass works it out: into <new-name> when that is a folder or
+    # ends in /. `before` tells a copy that was made from one pass asked about and left alone.
+    local old="" new="" before=""
+    if (( ${#names[@]} == 2 )); then
+        old=${names[0]%/} new=${names[1]}
+        if [[ -f $STORE_PATH/$old.gpg && ! ( ${names[0]} == */ && -d $STORE_PATH/$old ) ]]; then
+            [[ ! -d $STORE_PATH/$new && $new != */ ]] || new=${new%/}/${old##*/}
+            [[ ! -f $STORE_PATH/$new.gpg ]] || before=$(cksum < "$STORE_PATH/$new.gpg")
+        else
+            old=""
+        fi
+    fi
+    call-pass "secret-$how-help" "$how" "$@" || return
+    [[ -n $old && -f $STORE_PATH/$new.gpg ]] || return 0
+    if [[ $how == mv ]]; then
+        [[ ! -f $STORE_PATH/$old.gpg ]] || return 0
+    else
+        [[ $(cksum < "$STORE_PATH/$new.gpg") != "$before" ]] || return 0
+    fi
+    carry-tags "$how" "$old" "$new"
+    commit-tags "Carry the tags of $old to $new."
+}
 
 #== Command: List ==============================================================
 
@@ -2908,8 +2987,9 @@ Show what is known about one text or secret, never its value: its file and size,
 exec and shell give it, when it was made and last changed (from the store's git history, which
 also gives its earlier names after an mv), whether it has changes not yet committed — and, for a
 text, who signed it and whether the signature verifies; for a secret, the keys it is encrypted to,
-each marked when it is not (or no longer) a key of the store. Nothing is decrypted and no
-passphrase is asked. A name that is both a text and a secret shows both.
+each marked when it is not (or no longer) a key of the store. Its tags too (`folio tag add`).
+Nothing is decrypted and no passphrase is asked. A name that is both a text and a secret shows
+both.
 
 Options:
   -h, --help          Show this help and stop.
@@ -2958,6 +3038,7 @@ function info-text() {
     info-line "Size:"      "$bytes bytes, $lines line$(plural "$lines")"
     info-var-line "$name"
     info-history-lines "$name.txt" "$name.txt" "$name.txt.sig"
+    info-line "Tags:"      "$(tags-line "$name")"
     info-line "Signed by:" "$(text-signature "$name")"
 }
 
@@ -2969,6 +3050,7 @@ function info-secret() {
     info-line "File:"      "$(tilde-path "$file")   ($bytes bytes, encrypted)"
     info-var-line "$name"
     info-history-lines "$name.gpg" "$name.gpg"
+    info-line "Tags:"      "$(tags-line "$name")"
     recipients=$(secret-recipients "$name")
     [[ -n $recipients ]] || recipients="no key found in the file"
     while IFS= read -r line; do
@@ -3167,6 +3249,229 @@ function key-lifetime() {
     if [[ $validity == e ]]; then echo "expired $day"
     else                          echo "expires $day"
     fi
+}
+
+#== Command: Tag ===============================================================
+
+# The tags of an item are your own labels for it, kept in <name>.tags next to <name>.txt and
+# <name>.gpg: one tag per line, sorted, plain and not signed — a tag is a label, never a value. A
+# text and a secret of the same name share them.
+
+function tag-add-help() {
+    cat <<'EOF'
+Usage: folio tag add <name> <tag>...
+
+Put tags on a text or a secret: your own labels, like hashtags. A tag is letters, digits, _ - and .
+(a # in front is dropped). `folio info <name>` shows them.
+A text and a secret of the same name share their tags. The tags go with the item when it is moved
+or copied, into a backup, and into an export. They are kept plain, as the names are: never put a
+secret in one.
+
+Options:
+  -h, --help          Show this help and stop.
+EOF
+}
+
+function tag-rm-help() {
+    cat <<'EOF'
+Usage: folio tag rm <name> <tag>...
+
+Take tags off a text or a secret. Nothing is changed when one of them is not on it.
+
+Options:
+  -h, --help          Show this help and stop.
+EOF
+}
+
+function tag-ls-help() {
+    cat <<'EOF'
+Usage: folio tag ls [--plain] [<tag>]
+
+List every tag in the store, with how many names carry it — or, given a tag, the items that carry
+it, one per line, marked as `folio ls --flat` marks them.
+
+Options:
+      --plain         No colour, even on a screen.
+  -h, --help          Show this help and stop.
+EOF
+}
+
+# tag-help: the help of the three tag commands, for `folio tag --help` and `folio help tag`.
+function tag-help() {
+    tag-add-help
+    echo
+    tag-rm-help
+    echo
+    tag-ls-help
+}
+
+Tag() {
+    local category="${1:-}" ; (( $# > 0 )) && shift
+    case "$category" in
+        add)       TagAdd "$@" ;;
+        rm)        TagRm  "$@" ;;
+        ls)        TagLs  "$@" ;;
+        -h|--help) tag-help ;;
+        "")        echo "Usage: folio tag <add|rm|ls> [args...]" >&2 ; return 1 ;;
+        *)         echo "folio tag: unknown command: $category"  >&2 ; return 1 ;;
+    esac
+}
+
+# folio tag add <name> <tag>...
+TagAdd() { tag-change add "$@" ; }
+
+# folio tag rm <name> <tag>...
+TagRm() { tag-change rm "$@" ; }
+
+# tag-change <add|rm> <name> <tag>...: put the tags on the item <name>, or take them off. Every
+# tag is checked before anything is written.
+function tag-change() {
+    local how=$1 words=() arg ; shift
+    while (( $# > 0 )); do
+        arg=$1 ; shift
+        case $arg in
+            -h|--help) "tag-$how-help" ; return 0 ;;
+            --)        words+=("$@") ; break ;;
+            -*)        die "tag $how: unknown option: $arg" ;;
+            *)         words+=("$arg") ;;
+        esac
+    done
+    (( ${#words[@]} >= 2 )) || die "Usage: folio tag $how <name> <tag>..."
+    local name=${words[0]%/} tag tags given=""
+    [[ -n $name && /$name/ != */../* && /$name/ != */./* ]] \
+        || die "tag $how: '${words[0]}' is not a valid name."
+    check-store
+    has-item "$name" || die "tag $how: '$name' is not a text or a secret in the store."
+    tags=$(tags-of "$name")
+    for tag in "${words[@]:1}"; do
+        tag=${tag#\#}
+        is-tag "$tag" || die "tag $how: '$tag' is not a tag: letters, digits, _ - and . only, and no - or . in front."
+        [[ $how == add || $EXTRA_LINE$tags$EXTRA_LINE == *"$EXTRA_LINE$tag$EXTRA_LINE"* ]] \
+            || die "tag rm: '$name' has no tag '$tag'."
+        given+=$tag$EXTRA_LINE
+    done
+    if [[ $how == add ]]; then
+        printf '%s' "$given" | merge-tags "$name"
+        commit-tags "Add tags to $name."
+    else
+        # The tags it has that were not given.
+        printf '%s\n' "$tags" | grep -v -x -F -e "$(printf '%s' "$given")" | save-tags "$name"
+        commit-tags "Remove tags from $name."
+    fi
+}
+
+# folio tag ls [--plain] [<tag>]
+TagLs() {
+    local words=() arg
+    while (( $# > 0 )); do
+        arg=$1 ; shift
+        case $arg in
+            -h|--help) tag-ls-help ; return 0 ;;
+            --plain)   PLAIN=1 ;;
+            --)        words+=("$@") ; break ;;
+            -*)        die "tag ls: unknown option: $arg" ;;
+            *)         words+=("$arg") ;;
+        esac
+    done
+    (( ${#words[@]} <= 1 )) || die "Usage: folio tag ls [--plain] [<tag>]"
+    check-store
+    if (( ${#words[@]} == 0 )); then
+        tagged-names | cut -f1 | LC_ALL=C sort | uniq -c | awk '{ print $2 " (" $1 ")" }'
+        return 0
+    fi
+    local tag=${words[0]#\#} line name found=0
+    is-tag "$tag" || die "tag ls: '${words[0]}' is not a tag."
+    set-marks
+    while IFS= read -r line; do
+        [[ ${line%%$'\t'*} == "$tag" ]] || continue
+        name=${line#*$'\t'} found=1
+        [[ ! -f $STORE_PATH/$name.txt ]] || echo "$TEXT_ON$TEXT_MARK$name$COLOR_OFF"
+        [[ ! -f $STORE_PATH/$name.gpg ]] || echo "$SECRET_ON$SECRET_MARK$name$COLOR_OFF"
+    done < <(tagged-names)
+    (( found )) || die "tag ls: no item has the tag '$tag'."
+}
+
+# is-tag <word>: whether it can be a tag — letters, digits, _ - and ., not starting with - or .
+function is-tag() {
+    local LC_ALL=C
+    [[ -n $1 && $1 != [-.]* && $1 != *[!A-Za-z0-9_.-]* ]]
+}
+
+# has-item <name>: whether <name> is a text or a secret in the store.
+function has-item() { [[ -f $STORE_PATH/$1.txt || -f $STORE_PATH/$1.gpg ]] ; }
+
+# tags-of <name> [<root>]: the tags of the item <name> in the store (or under <root>, an opened
+# export), one per line; nothing when it has none. Only lines that are tags: the file is plain, and
+# may have been changed outside Folio.
+function tags-of() {
+    local file=${2:-$STORE_PATH}/$1.tags
+    [[ -f $file ]] || return 0
+    LC_ALL=C grep -E '^[A-Za-z0-9_][A-Za-z0-9_.-]*$' "$file" | LC_ALL=C sort -u
+}
+
+# tags-line <name>: the tags of <name> on one line, "db, prod" — or "none".
+function tags-line() {
+    tags-of "$1" | awk '{ printf "%s%s", (NR > 1 ? ", " : ""), $0 } END { if (!NR) printf "none" ; print "" }'
+}
+
+# tagged-names: one line "<tag><tab><name>" for each tag of each name that is a text or a secret
+# in the store, sorted by name. Tags left behind by an item removed outside Folio are not listed.
+function tagged-names() {
+    local file name tag
+    [[ -d $STORE_PATH ]] || return 0
+    find -L "$STORE_PATH" -mindepth 1 -name '.*' -prune -o -type f -name '*.tags' -print | LC_ALL=C sort \
+        | while IFS= read -r file; do
+            name=${file#"$STORE_PATH"/} ; name=${name%.tags}
+            has-item "$name" || continue
+            tags-of "$name" | while IFS= read -r tag; do printf '%s\t%s\n' "$tag" "$name" ; done
+        done
+}
+
+# save-tags <name> < tags: write <name>.tags as the tags given, one per line — or remove it when
+# none is given — and stage it. Not committed: commit-tags does, or the commit of the change it is
+# part of.
+function save-tags() {
+    local name=$1 file=$STORE_PATH/$1.tags tags
+    tags=$(LC_ALL=C grep -E '^[A-Za-z0-9_][A-Za-z0-9_.-]*$' | LC_ALL=C sort -u)
+    if [[ -n $tags ]]; then
+        umask "${PASSWORD_STORE_UMASK:-077}"
+        mkdir -p "$(dirname "$file")"
+        printf '%s\n' "$tags" > "$file"
+        git -C "$STORE_PATH" add -- "$name.tags"
+    else
+        rm -f -- "$file"
+        git -C "$STORE_PATH" rm -q --cached --ignore-unmatch -- "$name.tags"
+    fi
+}
+
+# merge-tags <name> < tags: add the tags given to those <name> has, and stage it.
+function merge-tags() {
+    local name=$1 more
+    more=$(cat)
+    { printf '%s\n' "$more" ; tags-of "$name" ; } | save-tags "$name"
+}
+
+# commit-tags <message>: commit what save-tags staged, if anything.
+function commit-tags() {
+    git -C "$STORE_PATH" diff --cached --quiet || git -C "$STORE_PATH" commit --quiet -m "$1"
+}
+
+# carry-tags <mv|cp> <old> <new>: after the text or the secret <old> was moved or copied to <new>,
+# <new> gets the tags of <old>, added to its own. After a move, <old> keeps them only while it is
+# still an item (its other kind stayed). Staged, not committed.
+function carry-tags() {
+    local how=$1 old=$2 new=$3 tags
+    [[ $old != "$new" ]] || return 0
+    tags=$(tags-of "$old")
+    [[ -z $tags ]] || printf '%s\n' "$tags" | merge-tags "$new"
+    [[ $how != mv ]] || drop-orphan-tags "$old"
+}
+
+# drop-orphan-tags <name>: remove <name>.tags when <name> is no longer a text or a secret. Staged,
+# not committed.
+function drop-orphan-tags() {
+    [[ -f $STORE_PATH/$1.tags ]] || return 0
+    has-item "$1" || save-tags "$1" < /dev/null
 }
 
 #== Command: Exec ==============================================================
@@ -3716,12 +4021,12 @@ function check-use-prefix() {
 }
 
 # lay-in-view <view> <src> <dst>: copy the item named <src> in the source — its .txt and .txt.sig,
-# its .gpg, whichever it has — to the name <dst> in <view>, over whatever item was there.
+# its .gpg, its .tags, whichever it has — to the name <dst> in <view>, over whatever item was there.
 function lay-in-view() {
     local view=$1 src=$2 dst=$3 ext i
     mkdir -p "$view/$(dirname "$dst")"
-    rm -f -- "$view/$dst.txt" "$view/$dst.txt.sig" "$view/$dst.gpg"
-    for ext in .txt .txt.sig .gpg; do
+    rm -f -- "$view/$dst.txt" "$view/$dst.txt.sig" "$view/$dst.gpg" "$view/$dst.tags"
+    for ext in .txt .txt.sig .gpg .tags; do
         [[ ! -f $VIEW_SOURCE/$src$ext ]] || cp -- "$VIEW_SOURCE/$src$ext" "$view/$dst$ext"
     done
     for (( i = 0; i < ${#VIEW_PATHS[@]}; i++ )); do
@@ -4430,7 +4735,7 @@ function complete-words() {
     cur=${words[${#words[@]}-1]}
     if (( ${#words[@]} == 1 )); then complete-commands "" "$cur" ; return 0 ; fi
     key=${words[0]}
-    if [[ $key == text || $key == secret || $key == vars ]]; then
+    if [[ $key == text || $key == secret || $key == vars || $key == tag ]]; then
         if (( ${#words[@]} == 2 )); then complete-commands "$key" "$cur" ; return 0 ; fi
         key="$key ${words[1]}" at=2
     elif (( ${#words[@]} == 2 )) && is-action "$key"; then
@@ -4488,10 +4793,12 @@ function complete-words() {
         secret-folder)   complete-entries gpg "$cur" folders ;;
         entry-folder)    complete-entries all "$cur" folders ;;
         name)            complete-entries all "$cur" ;;
+        tag)             { echo words ; tagged-names | cut -f1 | LC_ALL=C sort -u | awk '{ print $0 "\ttag" }' ; } \
+                             | complete-matching "$cur" ;;
         shell)           printf 'words\nbash\tFor bash\nzsh\tFor zsh\n' | complete-matching "$cur" ;;
         help)
             if (( count == 0 )); then complete-commands "" "$cur"
-            elif (( count == 1 )) && { [[ $last == text || $last == secret || $last == vars ]] || is-action "$last" ; }; then
+            elif (( count == 1 )) && { [[ $last == text || $last == secret || $last == vars || $last == tag ]] || is-action "$last" ; }; then
                 complete-commands "$last" "$cur"
             else echo none ; fi ;;
         *)               echo none ;;
@@ -4548,7 +4855,7 @@ function complete-namespaces() {
 # completion-args <command>: the kinds of its arguments, in order; one marked ... stands for all
 # the rest. Fails for a command it does not know. Kinds: none, files, dirs, text, secret, entry
 # (either, or a folder of them, or VAR=<name>), name (a text or a secret, no VAR=), text-folder,
-# secret-folder, entry-folder, shell, help.
+# secret-folder, entry-folder, tag (a tag some item carries), shell, help.
 # A new command needs a line here: tests/completion/completion.bats fails until it has one.
 # <command> is the kind first (text show), as the code takes it; show text is taken as that too.
 function completion-args() {
@@ -4561,6 +4868,8 @@ function completion-args() {
         export|exec|shell)            echo "entry..." ;;
         ls)                           echo entry-folder ;;
         info)                         echo name ;;
+        "tag add"|"tag rm")           echo "name tag..." ;;
+        "tag ls")                     echo tag ;;
         completion)                   echo shell ;;
         help)                         echo "help..." ;;
         "text ls")                    echo text-folder ;;
@@ -4618,7 +4927,13 @@ function complete-commands() {
             name=${names[i]} desc=${descs[i]}
             if [[ $name == *:* ]]; then
                 kind=${name%:*} action=${name#*:}
-                if   [[ $group == "$kind" ]];   then name=$action
+                if [[ $kind == tag ]]; then
+                    # A group of its own, always typed first: `folio tag add`.
+                    if   [[ $group == tag ]]; then name=$action
+                    elif [[ -z $group ]];     then name=tag desc="add|rm|ls"
+                    else continue
+                    fi
+                elif [[ $group == "$kind" ]];   then name=$action
                 elif [[ $group == "$action" ]]; then name=$kind
                 elif [[ -n $group || $singles == *" $action "* ]]; then continue   # ls: its own line
                 else
@@ -5045,14 +5360,14 @@ function store-flat() {
 
 # store-tree <gpg|txt|all> <folder> [tree-option...]: the secrets (gpg), the texts (txt) or both
 # (all) under <folder> as a tree, names only. pass's own `tree` line (ls, find), plus leaving out
-# signatures, the other kind, and folders left empty. With all, each name gets its mark in front.
+# signatures, tags, the other kind, and folders left empty. With all, each name gets its mark in front.
 # Marks and colours as set-marks says; tree colours (its folders) only when there are colours.
 function store-tree() {
     local kind=$1 folder=$2 others color=-n s='' t='' esc=$'\e' ; shift 2
     case $kind in
-        gpg) others='*.txt|*.txt.sig' ;;
-        txt) others='*.gpg|*.txt.sig' ;;
-        all) others='*.txt.sig'       ;;
+        gpg) others='*.txt|*.txt.sig|*.tags' ;;
+        txt) others='*.gpg|*.txt.sig|*.tags' ;;
+        all) others='*.txt.sig|*.tags'       ;;
     esac
     set-marks
     [[ $kind != all ]] || s="$SECRET_MARK" t="$TEXT_MARK"

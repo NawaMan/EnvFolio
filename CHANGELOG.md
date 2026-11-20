@@ -4,6 +4,17 @@ User-visible changes to EnvFolio (Folio for short). Newest first.
 
 ## Unreleased
 
+### Added
+
+- Tags: `folio tag add <name> <tag>...` puts your own labels on a text or a secret, like hashtags
+  (letters, digits, `_`, `-` and `.`; a `#` in front is dropped), `folio tag rm` takes them off,
+  and `folio tag ls [<tag>]` lists every tag with how many names carry it, or the items that carry
+  one. `folio info` shows an item's tags. They are kept plain in `<name>.tags` next to the item
+  (not signed, no passphrase needed — never put a secret in one), shared by a text and a secret of
+  the same name, and go with the item: `mv` and `cp` carry them, `rm` removes them, `backup` holds
+  them, and `export` puts them in the file for `import` to add to the store. Tab completes the
+  commands, the names and the tags.
+
 ## 2.1.0 — 2026-11-19
 
 ### Added
