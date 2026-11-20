@@ -1,5 +1,5 @@
 # syntax=codingbooth/boothfile:1
-# Configured by: booth config --no-tui --overwrite --variant terminal --set silence-build --set writable-booth --select gnupg:2.5.24/tty-owner/apt-pkg:bats,pass,shellcheck,tmux/gh+token/bash/git-credential/shell-history/homebrew/envfolio+store-host/claude-code+auto-accept+credential+settings-cache/host-agent
+# Configured by: booth config --no-tui --overwrite --variant terminal --set silence-build --set writable-booth --select host-agent/tty-owner/apt-pkg:bats,pass,shellcheck,tmux/gh+token/bash/git-credential/shell-history/homebrew/envfolio+store-host/claude-code+auto-accept+credential+settings-cache
 
 env APT_SNAPSHOT=20261025T000000Z
 
@@ -9,7 +9,6 @@ arg ENVFOLIO_VERSION=2.0.0
 arg FOLIO_HOST_GNUPG=~/.gnupg
 arg FOLIO_HOST_STORE=~/.folio
 arg GH_VERSION=latest
-arg GNUPG_VERSION=2.5.24
 arg GNU_BASH_VERSION=3.2.57
 
 install apt ${APT_PKGS}
@@ -19,5 +18,4 @@ setup envfolio --version ${ENVFOLIO_VERSION}
 setup gh --version ${GH_VERSION}
 env PATH=/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:$PATH
 setup homebrew
-setup gnupg ${GNUPG_VERSION}
 setup tty-owner

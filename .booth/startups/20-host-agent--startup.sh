@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-# Configured by: booth config --no-tui --overwrite --variant terminal --set silence-build --set writable-booth --select gnupg:2.5.24/tty-owner/apt-pkg:bats,pass,shellcheck,tmux/gh+token/bash/git-credential/shell-history/homebrew/envfolio+store-host/claude-code+auto-accept+credential+settings-cache/host-agent
+# Configured by: booth config --no-tui --overwrite --variant terminal --set silence-build --set writable-booth --select host-agent/tty-owner/apt-pkg:bats,pass,shellcheck,tmux/gh+token/bash/git-credential/shell-history/homebrew/envfolio+store-host/claude-code+auto-accept+credential+settings-cache
 
 # Docker creates the folder above the mounted socket owned by root, and gpg ignores a socket
 # folder it does not own (it would start an agent of its own): give it to coder. Then point
