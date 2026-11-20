@@ -20,3 +20,16 @@ test-bash32:
 # folder puts it first on PATH as `bash`.
 test-bash5:
     {{run_in_booth}} bash -c 'd=$(mktemp -d) && ln -s /usr/bin/bash.distro "$d/bash" && export PATH="$d:/usr/bin:$PATH" && cd $HOME/code/tests && ./test-all.sh 5'
+
+# Arguments go to claude as given: `just claude`, or `just claude -p "List undone todos for EnvFolio"`.
+# The booth runs its command through a shell, so each argument is quoted once more for it.
+# Run Claude in the booth, with the todos MCP token (todos/mcp-token) loaded and its tools allowed.
+[positional-arguments]
+claude *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cmd=(folio exec -s todos/mcp-token -- claude --allowedTools mcp__todos "$@")
+    if [[ {{in_booth}} == true ]]; then exec "${cmd[@]}"; fi
+    quoted=()
+    for a in "${cmd[@]}"; do quoted+=("$(printf '%q' "$a")"); done
+    exec ./booth --privileged-allowed --quiet -- "${quoted[@]}"
