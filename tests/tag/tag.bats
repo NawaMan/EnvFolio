@@ -104,9 +104,7 @@ info-tags() { "$FOLIO" info "$1" | awk 'index($0, "  Tags: ") == 1 { print subst
     done
     run "$FOLIO" tag add nope work
     [ "$status" -eq 1 ]
-    [ "$output" = "folio: tag add: 'nope' is not a text or a secret in the store." ]
-    run "$FOLIO" tag add gh work
-    [ "$status" -eq 1 ]
+    [ "$output" = "folio: tag add: 'nope' is not a text, a secret or a folder of them in the store." ]
     run "$FOLIO" tag add gh/user
     [ "$status" -eq 1 ]
     [ "$output" = "folio: Usage: folio tag add <name> <tag>..." ]
@@ -117,6 +115,44 @@ info-tags() { "$FOLIO" info "$1" | awk 'index($0, "  Tags: ") == 1 { print subst
     [ "$status" -eq 1 ]
     [ ! -e "$FOLIO_STORE_DIR/gh/user.tags" ]
     clean
+}
+
+@test "MANUAL: tag add — tag every item in a folder" {
+    make-store
+    "$FOLIO" tag add gh/token old
+    run "$FOLIO" tag add gh public
+    [ "$status" -eq 0 ]
+    [ "$(tags gh/user)" = "public" ]
+    [ "$(tags gh/both)" = "public" ]
+    [ "$(tags gh/token)" = "old public" ]
+    [ ! -e "$FOLIO_STORE_DIR/gh.tags" ]
+    [ ! -e "$FOLIO_STORE_DIR/web/home.tags" ]
+    [ "$(git -C "$FOLIO_STORE_DIR" log -1 --format=%s)" = "Add tags to gh." ]
+    [ "$("$FOLIO" tag ls)" = "old (1)"$'\n'"public (3)" ]
+    clean
+    # Folders in it too.
+    "$FOLIO" tag add web/ site
+    [ "$(tags web/deep/x)" = "site" ]
+    [ "$(tags web/github)" = "site" ]
+    clean
+}
+
+@test "tag rm: a folder — off every item under it that has the tag; none has it, nothing changes" {
+    make-store
+    "$FOLIO" tag add gh public
+    "$FOLIO" tag add gh/token keep
+    "$FOLIO" tag rm gh/user public
+    run "$FOLIO" tag rm gh public
+    [ "$status" -eq 0 ]
+    [ "$(tags gh/token)" = "keep" ]
+    [ ! -e "$FOLIO_STORE_DIR/gh/user.tags" ]
+    [ ! -e "$FOLIO_STORE_DIR/gh/both.tags" ]
+    [ "$(git -C "$FOLIO_STORE_DIR" log -1 --format=%s)" = "Remove tags from gh." ]
+    clean
+    run "$FOLIO" tag rm gh public
+    [ "$status" -eq 1 ]
+    [ "$output" = "folio: tag rm: no item under 'gh' has any of these tags." ]
+    [ "$(tags gh/token)" = "keep" ]
 }
 
 @test "tag: no command, an unknown one, and --help without a store" {
@@ -169,27 +205,115 @@ info-tags() { "$FOLIO" info "$1" | awk 'index($0, "  Tags: ") == 1 { print subst
     [ "$output" = "rotate-2027 (1)"$'\n'"work (3)" ]
 }
 
-@test "MANUAL: tag ls — list the items with a tag" {
-    make-store
-    "$FOLIO" tag add gh/token work rotate-2027
-    "$FOLIO" tag add gh/user work
-    "$FOLIO" tag add gh/both work
-    run "$FOLIO" tag ls work
-    [ "$status" -eq 0 ]
-    [ "$output" = "(T)gh/both"$'\n'"(S)gh/both"$'\n'"(S)gh/token"$'\n'"(T)gh/user" ]
-    [ "$("$FOLIO" tag ls '#rotate-2027')" = "(S)gh/token" ]
-}
-
-@test "tag ls: no tags lists nothing; a tag no item has fails" {
+@test "tag ls: no tags lists nothing; given a tag, it says to use ls --tag" {
     make-store
     run "$FOLIO" tag ls
     [ "$status" -eq 0 ]
     [ -z "$output" ]
-    run "$FOLIO" tag ls nope
+    run "$FOLIO" tag ls work
     [ "$status" -eq 1 ]
-    [ "$output" = "folio: tag ls: no item has the tag 'nope'." ]
-    run "$FOLIO" tag ls a b
+    [ "$output" = "folio: tag ls: it takes no name; the items with a tag: \`folio ls --tag work\`." ]
+}
+
+# --- ls --tag, ls --use -----------------------------------------------------------
+
+# make-store, plus a namespace @local (texts gh/user, db/host; secret gh/token), and tags:
+# work on gh/token, gh/user, gh/both, web/home, @local/gh/token; old on gh/token and @local/db/host.
+make-tagged() {
+    make-store
+    "$FOLIO" insert text -t local-user @local/gh/user < /dev/null
+    "$FOLIO" insert text -t local-db   @local/db/host < /dev/null
+    printf 'LOCAL\n' | "$FOLIO" insert secret -m @local/gh/token >/dev/null
+    "$FOLIO" tag add gh/token work old
+    "$FOLIO" tag add gh/user work
+    "$FOLIO" tag add gh/both work
+    "$FOLIO" tag add web/home work
+    "$FOLIO" tag add @local/gh/token work
+    "$FOLIO" tag add @local/db/host old
+}
+
+@test "MANUAL: ls — list the items with a tag" {
+    make-tagged
+    run "$FOLIO" ls --flat --tag work
+    [ "$status" -eq 0 ]
+    [ "$output" = "(S)@local/gh/token"$'\n'"(S)gh/both"$'\n'"(T)gh/both"$'\n'"(S)gh/token"$'\n'"(T)gh/user"$'\n'"(T)web/home" ]
+    # As a tree: under a title that says so, and only the folders that hold one.
+    run "$FOLIO" ls --tag '#old'
+    [ "$status" -eq 0 ]
+    [ "${lines[0]}" = "EnvFolio Store (tag: old)" ]
+    [[ $output == *"(S)token"* && $output == *"(T)host"* ]] || false
+    [[ $output != *user* && $output != *web* && $output != *tags* ]] || false
+    # Nothing is left behind.
+    [ -z "$(ls -A "$TMPDIR")" ]
+}
+
+@test "ls --tag: in a folder; one kind; several tags are all needed; no item, nothing listed" {
+    make-tagged
+    [ "$("$FOLIO" ls --flat --tag work web)" = "(T)web/home" ]
+    [ "$("$FOLIO" ls text --flat --tag work gh)" = "gh/both"$'\n'"gh/user" ]
+    [ "$("$FOLIO" ls secret --flat --tag=work)" = "@local/gh/token"$'\n'"gh/both"$'\n'"gh/token" ]
+    [ "$("$FOLIO" ls --flat --tag work --tag old)" = "(S)gh/token" ]
+    run "$FOLIO" ls --flat --tag nope
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+    run "$FOLIO" ls --tag nope web
+    [ "$status" -eq 0 ]
+    [ "$output" = "EnvFolio Store (tag: nope)"$'\n'"web" ]
+}
+
+@test "ls --tag: a bad tag, no value, and a folder that is not there are refused" {
+    make-tagged
+    run "$FOLIO" ls --tag 'two words'
     [ "$status" -eq 1 ]
+    [ "$output" = "folio: ls: 'two words' is not a tag." ]
+    run "$FOLIO" ls --tag
+    [ "$status" -eq 1 ]
+    [ "$output" = "folio: ls: --tag needs a value." ]
+    run "$FOLIO" ls --tag work nope
+    [ "$status" -eq 1 ]
+    [ "$output" = "folio: ls: 'nope' is not a folder in the store." ]
+}
+
+@test "MANUAL: ls — list a namespace, named without it" {
+    make-tagged
+    run "$FOLIO" ls --flat --use @local
+    [ "$status" -eq 0 ]
+    [ "$output" = "(T)db/host"$'\n'"(S)gh/token"$'\n'"(T)gh/user" ]
+    run "$FOLIO" ls --use @local gh
+    [ "$status" -eq 0 ]
+    [ "${lines[0]}" = "EnvFolio Store (@local)" ]
+    [ "${lines[1]}" = "gh" ]
+    [[ $output == *"(S)token"* && $output == *"(T)user"* && $output != *host* ]] || false
+}
+
+@test "MANUAL: ls — a tag and a namespace together" {
+    make-tagged
+    [ "$("$FOLIO" ls --flat --tag work --use @local)" = "(S)gh/token" ]
+    [ "$("$FOLIO" ls --flat --use=@local --tag old)" = "(T)db/host" ]
+    run "$FOLIO" ls --tag work --use @local
+    [ "${lines[0]}" = "EnvFolio Store (@local; tag: work)" ]
+}
+
+@test "ls --use: not a namespace, one that is not there, and a folder not under it are refused" {
+    make-tagged
+    run "$FOLIO" ls --use gh
+    [ "$status" -eq 1 ]
+    [[ $output == *"'gh' is not a namespace"* ]] || false
+    run "$FOLIO" ls --use @nope
+    [ "$status" -eq 1 ]
+    [[ $output == *"there is no '@nope' in the store"* ]] || false
+    run "$FOLIO" ls --use @local web
+    [ "$status" -eq 1 ]
+    [ "$output" = "folio: ls: 'web' is not a folder in the store, under @local." ]
+}
+
+@test "ls --tag --from: the items with a tag in an export file" {
+    make-tagged
+    "$FOLIO" export -o "$SANDBOX/out/items.folio" --secrets --file-passphrase-stdin gh web \
+        < <(printf 'export pass\n') >/dev/null 2>&1
+    run "$FOLIO" -q ls --flat --tag old --from "$SANDBOX/out/items.folio" --file-passphrase-fd 3 3< <(printf 'export pass\n')
+    [ "$status" -eq 0 ]
+    [ "$output" = "(S)gh/token" ]
 }
 
 @test "tags: ls, ls text, ls secret and find never show the .tags files" {
@@ -336,7 +460,7 @@ info-tags() { "$FOLIO" info "$1" | awk 'index($0, "  Tags: ") == 1 { print subst
     [ "$(tags gh/token)" = "rotate-2027 work" ]
     [ "$(tags gh/user)" = "work" ]
     [ ! -e "$FOLIO_STORE_DIR/web" ]
-    [ "$("$FOLIO" tag ls work)" = "(S)gh/token"$'\n'"(T)gh/user" ]
+    [ "$("$FOLIO" ls --flat --tag work)" = "(S)gh/token"$'\n'"(T)gh/user" ]
     clean
     [ -z "$(ls -A "$TMPDIR")" ]
 }
@@ -394,8 +518,10 @@ words() { "$FOLIO" __complete "$@" | tail -n +2 | cut -f1 | paste -s -d ' ' - ; 
     [ "$(words tag add gh/t)" = "gh/token" ]
     [ "$(words tag rm gh/token "")" = "rotate-2027 work" ]
     [ "$(words tag rm gh/token work r)" = "rotate-2027" ]
-    [ "$(words tag ls w)" = "work" ]
-    [ "$(words tag ls --p)" = "--plain" ]
+    [ "$(words tag ls "")" = "" ]
+    [ "$(words ls --tag w)" = "work" ]
+    [ "$(words ls text --tag "")" = "rotate-2027 work" ]
+    [ "$(words ls --t)" = "--tag" ]
     # tag is not a kind of the actions: `folio rm <Tab>` and `folio ls <Tab>` do not offer it.
     [[ " $(words rm "") " != *" tag "* ]] || false
     [[ " $(words ls "") " != *" tag "* ]] || false

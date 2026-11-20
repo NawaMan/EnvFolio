@@ -174,7 +174,7 @@ Commands:
   info              Show what is known about one text or secret — never its value
   tag add           Put tags (your own labels) on a text or a secret
   tag rm            Take tags off a text or a secret
-  tag ls            List the tags, or the items that carry one
+  tag ls            List the tags (the items that carry one: ls --tag)
   find text         Find texts by name
   find secret       Find secrets by name
   grep text         Find texts by value
@@ -2056,7 +2056,7 @@ function primary-fprs() {
 
 function text-ls-help() {
     cat <<'EOF'
-Usage: folio ls text [--flat] [--plain]
+Usage: folio ls text [--flat] [--plain] [--tag <tag>]... [--use <@namespace>]
                     [--from <export> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]] [<subfolder>]
 
 List the texts in the Folio store as a tree — names only. Give a subfolder to list only what is
@@ -2064,6 +2064,10 @@ under it. With --from, list the texts in an export file instead.
 
 Options:
       --flat          Full names, one per line, sorted, instead of a tree.
+      --tag <tag>     Only the items that carry the tag (see `folio tag add`). Given more than
+                      once: those that carry every one.
+  --use <@namespace>  Only what is under the namespace (@app2, or @app2/@prod), named without
+                      it, as exec --use names it.
       --plain         No colour, even on a screen.
   --from <export>     List the texts in a file made by `folio export`, not in the store, which is
                       then not needed. gpg asks for the file's passphrase, or uses your key the
@@ -2589,7 +2593,7 @@ Secret() {
 
 function secret-ls-help() {
     cat <<'EOF'
-Usage: folio ls secret [--flat] [--plain]
+Usage: folio ls secret [--flat] [--plain] [--tag <tag>]... [--use <@namespace>]
                       [--from <export> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]] [<subfolder>]
 
 List the secrets in the Folio store as a tree — names only, never their values.
@@ -2598,6 +2602,10 @@ instead.
 
 Options:
       --flat          Full names, one per line, sorted, instead of a tree.
+      --tag <tag>     Only the items that carry the tag (see `folio tag add`). Given more than
+                      once: those that carry every one.
+  --use <@namespace>  Only what is under the namespace (@app2, or @app2/@prod), named without
+                      it, as exec --use names it.
       --plain         No colour, even on a screen.
   --from <export>     List the secrets in a file made by `folio export`, not in the store, which is
                       then not needed. gpg asks for the file's passphrase, or uses your key the
@@ -2941,7 +2949,7 @@ function secret-copy-move() {
 
 function list-help() {
     cat <<'EOF'
-Usage: folio ls [--flat] [--plain]
+Usage: folio ls [--flat] [--plain] [--tag <tag>]... [--use <@namespace>]
                 [--from <export> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]] [<subfolder>]
 
 List the texts and secrets in the Folio store together as a tree — names only, never values.
@@ -2952,6 +2960,10 @@ is under it. With --from, list what is in an export file instead.
 
 Options:
       --flat          Full names, one per line, sorted, instead of a tree.
+      --tag <tag>     Only the items that carry the tag (see `folio tag add`). Given more than
+                      once: those that carry every one.
+  --use <@namespace>  Only what is under the namespace (@app2, or @app2/@prod), named without
+                      it, as exec --use names it.
       --plain         Mark secrets (S) and texts (T), with no colour, even on a screen.
   --from <export>     List what is in a file made by `folio export`, not in the store, which is
                       then not needed. gpg asks for the file's passphrase, or uses your key the
@@ -3263,6 +3275,7 @@ Usage: folio tag add <name> <tag>...
 
 Put tags on a text or a secret: your own labels, like hashtags. A tag is letters, digits, _ - and .
 (a # in front is dropped). `folio info <name>` shows them.
+<name> can be a folder: every text and secret under it gets the tags.
 A text and a secret of the same name share their tags. The tags go with the item when it is moved
 or copied, into a backup, and into an export. They are kept plain, as the names are: never put a
 secret in one.
@@ -3277,6 +3290,7 @@ function tag-rm-help() {
 Usage: folio tag rm <name> <tag>...
 
 Take tags off a text or a secret. Nothing is changed when one of them is not on it.
+<name> can be a folder: the tags are taken off every text and secret under it that has them.
 
 Options:
   -h, --help          Show this help and stop.
@@ -3285,13 +3299,12 @@ EOF
 
 function tag-ls-help() {
     cat <<'EOF'
-Usage: folio tag ls [--plain] [<tag>]
+Usage: folio tag ls
 
-List every tag in the store, with how many names carry it — or, given a tag, the items that carry
-it, one per line, marked as `folio ls --flat` marks them.
+List every tag in the store, with how many names carry it. The items that carry a tag:
+`folio ls --tag <tag>`.
 
 Options:
-      --plain         No colour, even on a screen.
   -h, --help          Show this help and stop.
 EOF
 }
@@ -3323,8 +3336,9 @@ TagAdd() { tag-change add "$@" ; }
 # folio tag rm <name> <tag>...
 TagRm() { tag-change rm "$@" ; }
 
-# tag-change <add|rm> <name> <tag>...: put the tags on the item <name>, or take them off. Every
-# tag is checked before anything is written.
+# tag-change <add|rm> <name> <tag>...: put the tags on the item <name>, or take them off — or, when
+# <name> is a folder (ending in /, or not an item), on or off every item under it. Every tag is
+# checked before anything is written.
 function tag-change() {
     local how=$1 words=() arg ; shift
     while (( $# > 0 )); do
@@ -3337,58 +3351,65 @@ function tag-change() {
         esac
     done
     (( ${#words[@]} >= 2 )) || die "Usage: folio tag $how <name> <tag>..."
-    local name=${words[0]%/} tag tags given=""
+    local name=${words[0]%/} tag tags given="" names=() folder=0 file seen=$EXTRA_LINE
     [[ -n $name && /$name/ != */../* && /$name/ != */./* ]] \
         || die "tag $how: '${words[0]}' is not a valid name."
     check-store
-    has-item "$name" || die "tag $how: '$name' is not a text or a secret in the store."
-    tags=$(tags-of "$name")
+    if has-item "$name" && [[ ${words[0]} != */ ]]; then
+        names=("$name")
+    elif [[ -d $STORE_PATH/$name ]]; then
+        # Every name under the folder, once (a text and a secret of one name share their tags).
+        folder=1
+        while IFS= read -r file; do
+            file=${file#"$STORE_PATH"/} ; file=${file%.*}
+            [[ $seen != *"$EXTRA_LINE$file$EXTRA_LINE"* ]] || continue
+            names+=("$file") ; seen+=$file$EXTRA_LINE
+        done < <(entries-under 1 "$STORE_PATH/$name")
+        (( ${#names[@]} > 0 )) || die "tag $how: '$name' holds no texts or secrets."
+    else
+        die "tag $how: '$name' is not a text, a secret or a folder of them in the store."
+    fi
     for tag in "${words[@]:1}"; do
         tag=${tag#\#}
         is-tag "$tag" || die "tag $how: '$tag' is not a tag: letters, digits, _ - and . only, and no - or . in front."
-        [[ $how == add || $EXTRA_LINE$tags$EXTRA_LINE == *"$EXTRA_LINE$tag$EXTRA_LINE"* ]] \
-            || die "tag rm: '$name' has no tag '$tag'."
         given+=$tag$EXTRA_LINE
     done
+    given=${given%"$EXTRA_LINE"}
     if [[ $how == add ]]; then
-        printf '%s' "$given" | merge-tags "$name"
-        commit-tags "Add tags to $name."
-    else
-        # The tags it has that were not given.
-        printf '%s\n' "$tags" | grep -v -x -F -e "$(printf '%s' "$given")" | save-tags "$name"
-        commit-tags "Remove tags from $name."
-    fi
-}
-
-# folio tag ls [--plain] [<tag>]
-TagLs() {
-    local words=() arg
-    while (( $# > 0 )); do
-        arg=$1 ; shift
-        case $arg in
-            -h|--help) tag-ls-help ; return 0 ;;
-            --plain)   PLAIN=1 ;;
-            --)        words+=("$@") ; break ;;
-            -*)        die "tag ls: unknown option: $arg" ;;
-            *)         words+=("$arg") ;;
-        esac
-    done
-    (( ${#words[@]} <= 1 )) || die "Usage: folio tag ls [--plain] [<tag>]"
-    check-store
-    if (( ${#words[@]} == 0 )); then
-        tagged-names | cut -f1 | LC_ALL=C sort | uniq -c | awk '{ print $2 " (" $1 ")" }'
+        for name in "${names[@]}"; do printf '%s\n' "$given" | merge-tags "$name" ; done
+        commit-tags "Add tags to ${words[0]%/}."
         return 0
     fi
-    local tag=${words[0]#\#} line name found=0
-    is-tag "$tag" || die "tag ls: '${words[0]}' is not a tag."
-    set-marks
-    while IFS= read -r line; do
-        [[ ${line%%$'\t'*} == "$tag" ]] || continue
-        name=${line#*$'\t'} found=1
-        [[ ! -f $STORE_PATH/$name.txt ]] || echo "$TEXT_ON$TEXT_MARK$name$COLOR_OFF"
-        [[ ! -f $STORE_PATH/$name.gpg ]] || echo "$SECRET_ON$SECRET_MARK$name$COLOR_OFF"
-    done < <(tagged-names)
-    (( found )) || die "tag ls: no item has the tag '$tag'."
+    # One item must have every tag given; under a folder, at least one item must have one of them.
+    local any=0
+    for name in "${names[@]}"; do
+        tags=$(tags-of "$name")
+        while IFS= read -r tag; do
+            if [[ $EXTRA_LINE$tags$EXTRA_LINE == *"$EXTRA_LINE$tag$EXTRA_LINE"* ]]; then any=1
+            elif (( ! folder )); then die "tag rm: '$name' has no tag '$tag'."
+            fi
+        done <<< "$given"
+    done
+    (( any )) || die "tag rm: no item under '${words[0]%/}' has any of these tags."
+    for name in "${names[@]}"; do
+        # The tags it has that were not given.
+        tags-of "$name" | grep -v -x -F -e "$given" | save-tags "$name"
+    done
+    commit-tags "Remove tags from ${words[0]%/}."
+}
+
+# folio tag ls
+TagLs() {
+    local arg
+    for arg in "$@"; do
+        case $arg in
+            -h|--help) tag-ls-help ; return 0 ;;
+            -*)        die "tag ls: unknown option: $arg" ;;
+            *)         die "tag ls: it takes no name; the items with a tag: \`folio ls --tag $arg\`." ;;
+        esac
+    done
+    check-store
+    tagged-names | cut -f1 | LC_ALL=C sort | uniq -c | awk '{ print $2 " (" $1 ")" }'
 }
 
 # is-tag <word>: whether it can be a tag — letters, digits, _ - and ., not starting with - or .
@@ -4738,8 +4759,8 @@ function complete-words() {
     if [[ $key == text || $key == secret || $key == vars || $key == tag ]]; then
         if (( ${#words[@]} == 2 )); then complete-commands "$key" "$cur" ; return 0 ; fi
         key="$key ${words[1]}" at=2
-    elif (( ${#words[@]} == 2 )) && is-action "$key"; then
-        # The kinds it is for; ls also lists both together, so its folders too.
+    elif (( ${#words[@]} == 2 )) && is-action "$key" && [[ $key != ls || $cur != -* ]]; then
+        # The kinds it is for; ls also lists both together, so its folders too (and its options).
         if [[ $key == ls ]]; then
             { complete-commands ls "$cur" ; complete-entries all "$cur" folders | tail -n +2 ; }
         else
@@ -4765,6 +4786,7 @@ function complete-words() {
     done
     if [[ $value == namespaces ]]; then complete-namespaces "$cur" ; return 0 ; fi
     if [[ $value == exports ]]; then complete-exports "$cur" ; return 0 ; fi
+    if [[ $value == tags ]]; then complete-tags "$cur" ; return 0 ; fi
     if [[ -n $value ]]; then echo "$value" ; return 0 ; fi
     if (( dashes >= 0 )); then
         # After `--`: exec's command and its arguments; for the others, more of the same arguments.
@@ -4793,8 +4815,7 @@ function complete-words() {
         secret-folder)   complete-entries gpg "$cur" folders ;;
         entry-folder)    complete-entries all "$cur" folders ;;
         name)            complete-entries all "$cur" ;;
-        tag)             { echo words ; tagged-names | cut -f1 | LC_ALL=C sort -u | awk '{ print $0 "\ttag" }' ; } \
-                             | complete-matching "$cur" ;;
+        tag)             complete-tags "$cur" ;;
         shell)           printf 'words\nbash\tFor bash\nzsh\tFor zsh\n' | complete-matching "$cur" ;;
         help)
             if (( count == 0 )); then complete-commands "" "$cur"
@@ -4803,6 +4824,12 @@ function complete-words() {
             else echo none ; fi ;;
         *)               echo none ;;
     esac
+}
+
+# complete-tags <cur>: the tags some item in the store carries that start with <cur>.
+function complete-tags() {
+    { echo words ; tagged-names | cut -f1 | LC_ALL=C sort -u | awk '{ print $0 "\ttag" }' ; } \
+        | complete-matching "$1"
 }
 
 # complete-exports <cur>: what an <export> can be (resolve-export-file) — files, for a path ending
@@ -4869,7 +4896,7 @@ function completion-args() {
         ls)                           echo entry-folder ;;
         info)                         echo name ;;
         "tag add"|"tag rm")           echo "name tag..." ;;
-        "tag ls")                     echo tag ;;
+        "tag ls")                     echo none ;;
         completion)                   echo shell ;;
         help)                         echo "help..." ;;
         "text ls")                    echo text-folder ;;
@@ -4988,6 +5015,7 @@ function help-option-lines() {
             "<export>"*)          value=exports ;;
             "<folder>"*)          value=dirs ;;
             "<@namespace>"*)      value=namespaces ;;
+            "<tag>"*)             value=tags ;;
             "<"*)                 value=none ;;
             *)                    desc=$token ;;
         esac
@@ -4998,7 +5026,7 @@ function help-option-lines() {
 }
 
 # option-value <word> <options>: how to complete the value <word> takes (files, dirs, exports,
-# namespaces or none), or
+# namespaces, tags or none), or
 # nothing when it takes none — or has it already, after =.
 function option-value() {
     local name value rest
@@ -5316,27 +5344,71 @@ function call-pass() {
     pass "$command" "$@"
 }
 
-# list-store <gpg|txt|all> <title> <command> [--flat] [--plain] [<subfolder>]: what `folio ls`, `ls text`
-# and `ls secret` share — the tree under <title>, or with --flat, the full names one per line.
+# list-store <gpg|txt|all> <title> <command> [--flat] [--plain] [--tag <tag>]... [--use <@namespace>]
+# [<subfolder>]: what `folio ls`, `ls text` and `ls secret` share — the tree under <title>, or with
+# --flat, the full names one per line. With --use, what is under the namespace, named without it.
+# With --tag, only the items that carry every tag given.
 function list-store() {
-    local kind=$1 title=$2 command=$3 flat=0 args=() arg ; shift 3
-    for arg in "$@"; do
+    local kind=$1 title=$2 command=$3 flat=0 args=() arg use="" tags="" tag note="" ; shift 3
+    while (( $# > 0 )); do
+        arg=$1 ; shift
         case $arg in
-            --flat)  flat=1 ;;
-            --plain) PLAIN=1 ;;
-            *)       args+=("$arg") ;;
+            --flat)        flat=1 ;;
+            --plain)       PLAIN=1 ;;
+            --tag|--use)   [[ $# -gt 0 && -n $1 ]] || die "$command: $arg needs a value."
+                           if [[ $arg == --tag ]]; then tags+=$1$EXTRA_LINE ; else use=$1 ; fi
+                           shift ;;
+            --tag=*)       tags+=${arg#*=}$EXTRA_LINE ;;
+            --use=*)       use=${arg#*=} ;;
+            *)             args+=("$arg") ;;
         esac
     done
-    set -- "${args[@]}"
-    (( $# <= 1 )) || die "Usage: folio $command [--flat] [--plain] [--from <export>] [<subfolder>]"
+    set -- ${args[@]+"${args[@]}"}
+    (( $# <= 1 )) || die "Usage: folio $command [--flat] [--plain] [--tag <tag>]... [--use <@namespace>] [--from <export>] [<subfolder>]"
+    if [[ -n $use ]]; then
+        use=${use%/}
+        VIEW_SOURCE=$STORE_PATH check-use-prefix "$command" "$use"
+        STORE_PATH=$STORE_PATH/$use
+        note=$use
+    fi
     [[ $# -eq 0 || ( $1 != -* && /$1/ != */../* && -d $STORE_PATH/$1 ) ]] \
-        || die "$command: '$1' is not a folder in $ENTRIES_IN."
+        || die "$command: '$1' is not a folder in $ENTRIES_IN${use:+, under $use}."
+    if [[ -n $tags ]]; then
+        tags=${tags%"$EXTRA_LINE"}
+        while IFS= read -r tag; do
+            is-tag "${tag#\#}" || die "$command: '$tag' is not a tag."
+            note+="${note:+; }tag: ${tag#\#}"
+        done <<< "$tags"
+        only-tagged "$tags"
+        [[ $# -eq 0 ]] || mkdir -p "$STORE_PATH/$1"
+    fi
     if (( flat )); then store-flat "$kind" "$STORE_PATH${1:+/${1%/}}" ; return ; fi
     # From an export: "Text Export: ~/.local/folio/basic.folio".
     [[ -z $FROM_EXPORT ]] || title="${title% Store} Export: $(tilde-path "$EXPORT_FILE")"
-    echo "$title"
+    echo "$title${note:+ ($note)}"
     [[ $# -eq 0 ]] || echo "${1%/}"
     store-tree "$kind" "$STORE_PATH/${1:-}"
+}
+
+# only-tagged <tags>: from here on, list from a private temporary folder that holds — as empty
+# files, names only — the items under STORE_PATH that carry every one of <tags> (one per line, a #
+# in front dropped). Nothing is read but the .tags files. Removed when Folio exits.
+function only-tagged() {
+    local wanted=$1 view file name has tag all
+    view=$(umask 077 && mktemp -d) || die "Cannot make a temporary folder."
+    remove-on-exit "$view"
+    while IFS= read -r file; do
+        name=${file#"$STORE_PATH"/}
+        has=$EXTRA_LINE$(tags-of "${name%.*}")$EXTRA_LINE
+        all=1
+        while IFS= read -r tag; do
+            [[ $has == *"$EXTRA_LINE${tag#\#}$EXTRA_LINE"* ]] || all=0
+        done <<< "$wanted"
+        (( all )) || continue
+        mkdir -p "$view/$(dirname "$name")"
+        : > "$view/$name"
+    done < <(find -L "$STORE_PATH" -mindepth 1 -name '.*' -prune -o -type f \( -name '*.gpg' -o -name '*.txt' \) -print)
+    STORE_PATH=$view
 }
 
 # store-flat <gpg|txt|all> <folder>: as store-tree, but full names one per line, sorted. With all,

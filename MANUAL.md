@@ -239,12 +239,14 @@ only the colours away) — what scripts and the examples below see.
 Signatures (`.txt.sig`) and tags (`.tags`) are left out.
 
 ```
-folio ls [--flat] [--plain] [--from <export> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]] [<subfolder>]
+folio ls [--flat] [--plain] [--tag <tag>]... [--use <@namespace>] [--from <export> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]] [<subfolder>]
 ```
 
 | Option | Meaning |
 | --- | --- |
 | `--flat` | Full names, one per line, sorted, instead of a tree: `(S)web/github`. |
+| `--tag <tag>` | Only the items that carry the tag ([`folio tag add`](#folio-tag-add)); a `#` in front is dropped. Given more than once: those that carry every one. A folder with none is left out. |
+| `--use <@namespace>` | Only what is under the namespace (`@app2`, or `@app2/@prod`), named without it, as [`exec --use`](#peel-a-namespace-with---use) names it. A `<subfolder>` is then one under it. |
 | `--plain` | Mark secrets (S) and texts (T), with no colour, even on a screen. |
 | `--from <export>` | List what is in a file made by `folio export`, not in the store: its path, ending in `.folio`, or its name in `FOLIO_FILE_DIR` (see [An export's path, or its name](#an-exports-path-or-its-name)). gpg asks for the file's passphrase, or uses your key the file is locked to. No store is needed, and none is made or touched; the file is opened in a private temporary folder, removed when `folio` is done. |
 | `--file-passphrase-fd <n>` | With `--from`: the file's passphrase, from the first line of file descriptor `<n>`, instead of gpg's prompt. |
@@ -292,6 +294,51 @@ folio ls --flat
 ```
 
 One full name per line, ready for `grep` or a script.
+
+### List the items with a tag
+
+```bash
+folio ls --tag work
+folio ls --tag work gh           # only those under gh/
+folio ls --flat --tag work
+```
+
+```
+EnvFolio Store (tag: work)
+├── gh
+│   ├── (S)token
+│   └── (T)user
+└── web
+    └── (T)home
+```
+
+`ls text --tag` and `ls secret --tag` list one kind. Only the `.tags` files are read.
+
+### List a namespace, named without it
+
+```bash
+folio ls --flat --use @local
+```
+
+```
+(T)db/host
+(S)gh/token
+(T)gh/user
+```
+
+`folio ls @local` lists the same items under their full names (`@local/gh/token`).
+
+### A tag and a namespace together
+
+```bash
+folio ls --tag work --use @local
+```
+
+```
+EnvFolio Store (@local; tag: work)
+└── gh
+    └── (S)token
+```
 
 ### List what is in an export file
 
@@ -393,6 +440,9 @@ folio tag add <name> <tag>...
 | --- | --- |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
+`<name>` can be a folder: every text and secret under it gets the tags (the folder itself has
+none, so an item added to it later is not tagged).
+
 The tags are kept in `<name>.tags` next to the item, one per line, sorted, and committed to the
 store's git history. They are **plain and not signed**, as the names are: never put a secret in
 one. No passphrase is needed. A text and a secret of the same name share their tags.
@@ -417,12 +467,23 @@ gh/token  (secret)
   ...
 ```
 
+### Tag every item in a folder
+
+```bash
+folio tag add gh public
+folio tag ls
+```
+
+```
+public (3)
+```
+
 ### The tags go into an export, and come back with import
 
 ```bash
 folio export --secrets -o items.folio gh     # here
 folio import --all items.folio               # there
-folio tag ls work
+folio ls --flat --tag work
 ```
 
 ```
@@ -443,7 +504,8 @@ folio info gh/token                          # its Tags: line is as it was
 
 ## `folio tag rm`
 
-Takes tags off a text or a secret. When one of them is not on it, nothing is changed.
+Takes tags off a text or a secret. When one of them is not on it, nothing is changed. `<name>` can
+be a folder: the tags are taken off every text and secret under it that has them.
 
 ```
 folio tag rm <name> <tag>...
@@ -463,17 +525,16 @@ folio tag rm gh/token old work
 
 ## `folio tag ls`
 
-Lists every tag in the store, with how many names carry it — or, given a tag, the items that
-carry it, one per line, marked as [`folio ls --flat`](#list-flat) marks them. Tags left behind by
-an item removed outside Folio (with `pass rm`) are not listed.
+Lists every tag in the store, with how many names carry it. Tags left behind by an item removed
+outside Folio (with `pass rm`) are not listed. The items that carry a tag are listed by
+[`folio ls --tag <tag>`](#list-the-items-with-a-tag).
 
 ```
-folio tag ls [--plain] [<tag>]
+folio tag ls
 ```
 
 | Option | Meaning |
 | --- | --- |
-| `--plain` | Mark secrets (S) and texts (T), with no colour, even on a screen. |
 | `-h`, `--help` | Show the options and stop. Works without a store. |
 
 ### List the tags
@@ -487,19 +548,6 @@ rotate-2027 (1)
 work (3)
 ```
 
-### List the items with a tag
-
-```bash
-folio tag ls work
-```
-
-```
-(T)gh/both
-(S)gh/both
-(S)gh/token
-(T)gh/user
-```
-
 ---
 
 ## `folio ls text`
@@ -509,12 +557,14 @@ tree as `pass ls`, but with the texts instead of the secrets. Signatures (`.txt.
 holding no texts are left out.
 
 ```
-folio ls text [--flat] [--plain] [--from <export> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]] [<subfolder>]
+folio ls text [--flat] [--plain] [--tag <tag>]... [--use <@namespace>] [--from <export> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]] [<subfolder>]
 ```
 
 | Option | Meaning |
 | --- | --- |
 | `--flat` | Full names, one per line, sorted, instead of a tree. |
+| `--tag <tag>` | Only the items that carry the tag ([`folio tag add`](#folio-tag-add)); a `#` in front is dropped. Given more than once: those that carry every one. A folder with none is left out. |
+| `--use <@namespace>` | Only what is under the namespace (`@app2`, or `@app2/@prod`), named without it, as [`exec --use`](#peel-a-namespace-with---use) names it. A `<subfolder>` is then one under it. |
 | `--plain` | No colour, even on a screen. |
 | `--from <export>` | List the texts in a file made by `folio export`, not in the store: its path, ending in `.folio`, or its name in `FOLIO_FILE_DIR` (see [An export's path, or its name](#an-exports-path-or-its-name)). gpg asks for the file's passphrase, or uses your key the file is locked to. No store is needed, and none is made or touched; the file is opened in a private temporary folder, removed when `folio` is done. |
 | `--file-passphrase-fd <n>` | With `--from`: the file's passphrase, from the first line of file descriptor `<n>`, instead of gpg's prompt. |
@@ -868,12 +918,14 @@ Lists the secrets in the Folio store as a tree: names only, never their values. 
 without the texts: the same tree, minus `*.txt`/`*.txt.sig` files and folders holding only texts.
 
 ```
-folio ls secret [--flat] [--plain] [--from <export> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]] [<subfolder>]
+folio ls secret [--flat] [--plain] [--tag <tag>]... [--use <@namespace>] [--from <export> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]] [<subfolder>]
 ```
 
 | Option | Meaning |
 | --- | --- |
 | `--flat` | Full names, one per line, sorted, instead of a tree. |
+| `--tag <tag>` | Only the items that carry the tag ([`folio tag add`](#folio-tag-add)); a `#` in front is dropped. Given more than once: those that carry every one. A folder with none is left out. |
+| `--use <@namespace>` | Only what is under the namespace (`@app2`, or `@app2/@prod`), named without it, as [`exec --use`](#peel-a-namespace-with---use) names it. A `<subfolder>` is then one under it. |
 | `--plain` | No colour, even on a screen. |
 | `--from <export>` | List the secrets in a file made by `folio export`, not in the store: its path, ending in `.folio`, or its name in `FOLIO_FILE_DIR` (see [An export's path, or its name](#an-exports-path-or-its-name)). gpg asks for the file's passphrase, or uses your key the file is locked to. No store is needed, and none is made or touched; the file is opened in a private temporary folder, removed when `folio` is done. |
 | `--file-passphrase-fd <n>` | With `--from`: the file's passphrase, from the first line of file descriptor `<n>`, instead of gpg's prompt. |
