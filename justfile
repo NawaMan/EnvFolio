@@ -43,4 +43,9 @@ claude *args:
     if [[ {{in_booth}} == true ]]; then exec "${cmd[@]}"; fi
     quoted=()
     for a in "${cmd[@]}"; do quoted+=("$(printf '%q' "$a")"); done
-    exec ./booth --privileged-allowed --quiet -- "${quoted[@]}"
+    if [[ {{quiet}} != true ]]; then exec ./booth --privileged-allowed --quiet -- "${quoted[@]}"; fi
+    # The booth's own start-up warnings go to the host's stderr: kept the same way.
+    umask 077; err=$(mktemp); trap 'rm -f "$err"' EXIT
+    rc=0; ./booth --privileged-allowed --quiet -- "${quoted[@]}" 2>"$err" || rc=$?
+    (( rc == 0 )) || cat "$err" >&2
+    exit "$rc"
