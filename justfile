@@ -2,6 +2,9 @@
 in_booth     := if env("BOOTH_CONTAINER_NAME", "") == "" { "false" } else { "true" }
 run_in_booth := if in_booth == "true" { "" } else { "./booth exec --run --" }
 
+# `just quiet=true claude …`: show only what the command prints, and its errors only when it fails.
+quiet        := "false"
+
 [private]
 default:
     @just --list
@@ -23,12 +26,20 @@ test-bash5:
 
 # Arguments go to claude as given: `just claude`, or `just claude -p "List undone todos for EnvFolio"`.
 # The booth runs its command through a shell, so each argument is quoted once more for it.
+# With quiet=true, stderr goes to a private temp file inside the booth (the booth's terminal would
+# merge it into stdout on the host) and is printed only when the command fails.
 # Run Claude in the booth, with the todos MCP token (todos/mcp-token) loaded and its tools allowed.
 [positional-arguments]
 claude *args:
     #!/usr/bin/env bash
     set -euo pipefail
     cmd=(folio exec -s todos/mcp-token -- claude --allowedTools mcp__todos "$@")
+    if [[ {{quiet}} == true ]]; then
+        cmd=(bash -c 'umask 077; err=$(mktemp); trap '\''rm -f "$err"'\'' EXIT
+                      rc=0; "$@" 2>"$err" || rc=$?
+                      (( rc == 0 )) || cat "$err" >&2
+                      exit "$rc"' quiet "${cmd[@]}")
+    fi
     if [[ {{in_booth}} == true ]]; then exec "${cmd[@]}"; fi
     quoted=()
     for a in "${cmd[@]}"; do quoted+=("$(printf '%q' "$a")"); done
