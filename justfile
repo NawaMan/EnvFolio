@@ -75,8 +75,9 @@ claude *args:
     (( rc == 0 )) || cat "$err" >&2
     exit "$rc"
 
-# A todo's work, on a git worktree named after it: its number, a dash, a word or two (`299-note`
-# is todo #299). The todo, in the todos app, is the task; each step moves its status along.
+# A todo's work, on a git worktree named after it: its number, alone or with a dash and a word or
+# two (`299` or `299-note` is todo #299; once it has a worktree, `299` finds it). The todo, in the
+# todos app, is the task; each step moves its status along.
 #   any To do status --pickup--> Analyse --start--> Working --ready--> Wait for testing --land--> Done
 #   just pickup <name>    booth: makes the worktree (kept), writes the proposal into the todo's
 #                         description (## Plan), and stops; no code changes.
@@ -91,6 +92,28 @@ claude *args:
 # in the worktree, holds the steps' own working notes (land keeps what is worth it in the log).
 # All but discuss run unattended (claude -p). Words after the name are added to the prompt.
 # quiet=true works for all but discuss, as for `just claude`.
+
+# The worktree branch for a todo name: `299-note` as given, or `299` for the one worktree whose
+# branch is 299 or 299-<word>. With `new`, a name no worktree has yet is fine (pickup makes it).
+[private]
+[positional-arguments]
+todo-worktree name *new:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    name=$1
+    [[ $name =~ ^[0-9]+(-[A-Za-z0-9].*)?$ ]] || { echo "name it <todo number> or <todo number>-<word>, like 299 or 299-note" >&2; exit 2; }
+    branches=$(git worktree list --porcelain | sed -n 's|^branch refs/heads/||p')
+    if [[ $name =~ ^[0-9]+$ ]]; then
+        found=$(printf '%s\n' "$branches" | grep -E "^$name(-|$)" || true)
+    else
+        found=$(printf '%s\n' "$branches" | grep -Fx -- "$name" || true)
+    fi
+    case $(printf '%s' "$found" | grep -c .) in
+        1) echo "$found" ;;
+        0) if [[ ${2:-} == new ]]; then echo "$name"; exit 0; fi
+           echo "no worktree for $name; just pickup $name makes it" >&2; exit 2 ;;
+        *) echo "more than one worktree for $name; name one of:" >&2; printf '%s\n' "$found" | sed 's/^/  /' >&2; exit 2 ;;
+    esac
 
 # Run a todo step: `todo-step <name> <interactive|unattended> <prompt>`, in the booth on that
 # worktree (made if missing, and kept), or right here when this booth is already on it.
@@ -111,13 +134,12 @@ todo-step name mode prompt:
     fi
     exec just quiet={{quiet}} claude --worktree "$name" --worktree-keep "${args[@]}"
 
-# Pick up todo #N (any To do status) on a new worktree <N-word>: write the proposal into the todo, set Analyse.
+# Pick up todo #N (any To do status) on a new worktree <N> or <N-word>: write the proposal into the todo, set Analyse.
 [positional-arguments]
 pickup name *words:
     #!/usr/bin/env bash
     set -euo pipefail
-    [[ $1 =~ ^[0-9]+-[A-Za-z0-9] ]] || { echo "just pickup: name it <todo number>-<word>, like 299-note" >&2; exit 2; }
-    name=$1; shift
+    name=$(just todo-worktree "$1" new); shift
     exec just quiet={{quiet}} todo-step "$name" unattended "Step: pickup. Its status must be one of To do (TRIAGE … DEPENDING); otherwise say what it is and stop. Set it to ANALYSE. Then study the todo and the code read-only, and write the proposal AGENTS.md asks for (Problem · Diagnostic · Approach, the checkout being this worktree, any new dependency flagged) into the todo's description as its '## Plan' section, ending with the questions I need to answer, if any. Change no files but task-memory.md (start it with what you found) and commit nothing: 'just start' implements the plan once I agree (I adjust it with 'just discuss'). End with a short summary of the plan.${*:+ $*}"
 
 # Start the work on todo worktree <name> (Analyse): implement the plan and commit; status Working.
@@ -125,11 +147,7 @@ pickup name *words:
 start name *words:
     #!/usr/bin/env bash
     set -euo pipefail
-    [[ $1 =~ ^[0-9]+-[A-Za-z0-9] ]] || { echo "just start: name it <todo number>-<word>, like 299-note" >&2; exit 2; }
-    name=$1; shift
-    if [[ {{in_booth}} != true ]] && ! git worktree list --porcelain | grep -qx "branch refs/heads/$name"; then
-        echo "just start: no worktree has branch $name checked out; just pickup $name makes it" >&2; exit 2
-    fi
+    name=$(just todo-worktree "$1"); shift
     exec just quiet={{quiet}} todo-step "$name" unattended "Step: start. Its status must be ANALYSE, and its description must have a '## Plan' with no open questions; otherwise say what is missing and stop. The plan there is my approval of the proposal. Set the status to WORKING, implement the plan, run the checks that fit (shellcheck always; the bats tests it touches) and commit on this branch. If you get stuck on something the plan does not settle, write the question under '## Work log', keep WORKING, and stop. End with what you did.${*:+ $*}"
 
 # Get todo worktree <name> (Working) ready for you to test: close gaps, run all tests, commit; status Wait for testing.
@@ -137,11 +155,7 @@ start name *words:
 ready name *words:
     #!/usr/bin/env bash
     set -euo pipefail
-    [[ $1 =~ ^[0-9]+-[A-Za-z0-9] ]] || { echo "just ready: name it <todo number>-<word>, like 299-note" >&2; exit 2; }
-    name=$1; shift
-    if [[ {{in_booth}} != true ]] && ! git worktree list --porcelain | grep -qx "branch refs/heads/$name"; then
-        echo "just ready: no worktree has branch $name checked out; just pickup $name makes it" >&2; exit 2
-    fi
+    name=$(just todo-worktree "$1"); shift
     exec just quiet={{quiet}} todo-step "$name" unattended "Step: ready. Its status must be WORKING; otherwise say what it is and stop. Audit this branch against the todo, its plan and AGENTS.md for gaps: tests that should exist, docs (README, MANUAL, CHANGELOG, help text, tab completion) not updated, experiments not concluded, accidental changes. Fill them, run shellcheck and just test-all, and commit on this branch. A test that fails the same way on main is not from this branch: name it and carry on. When all is in, set the status to WAIT_FOR_TESTING and log the test results under '## Work log'; if something of this branch still fails, keep WORKING and log why. Do not rebase, merge or change main. End with what you changed and the test results.${*:+ $*}"
 
 # Land todo worktree <name> (Wait for testing or Testing), on the host: rebase, merge, remove the worktree and branch; status Done.
@@ -152,8 +166,7 @@ land name *words:
     if [[ {{in_booth}} == true ]]; then
         echo "just land: run it on the host; a booth sees neither main's checkout nor the worktree's folder" >&2; exit 2
     fi
-    [[ $1 =~ ^[0-9]+-[A-Za-z0-9] ]] || { echo "just land: name it <todo number>-<word>, like 299-note" >&2; exit 2; }
-    name=$1; shift
+    name=$(just todo-worktree "$1"); shift
     todo=${name%%-*}
     # The worktree of branch <name>, wherever it is (worktree/<name>, or ../<repo>.worktrees/<name> from booth --worktree).
     path=$(git worktree list --porcelain | awk -v b="branch refs/heads/$name" '/^worktree /{p=substr($0,10)} $0==b{print p; exit}')
@@ -173,9 +186,5 @@ land name *words:
 discuss name *words:
     #!/usr/bin/env bash
     set -euo pipefail
-    [[ $1 =~ ^[0-9]+-[A-Za-z0-9] ]] || { echo "just discuss: name it <todo number>-<word>, like 299-note" >&2; exit 2; }
-    name=$1; shift
-    if [[ {{in_booth}} != true ]] && ! git worktree list --porcelain | grep -qx "branch refs/heads/$name"; then
-        echo "just discuss: no worktree has branch $name checked out; just pickup $name makes it" >&2; exit 2
-    fi
+    name=$(just todo-worktree "$1"); shift
     exec just todo-step "$name" interactive "Step: discuss, with me, at whatever status the todo has. Catch up first: the todo (status, plan, work log), task-memory.md, and what this branch has (git log and diff against main, uncommitted changes). Give me a short summary of where it stands, then wait for me. As we agree changes: update the '## Plan' section, or change the code (proposal before code, as AGENTS.md says) and commit on this branch when I ask. Set the status only when I ask, to exactly the one I name; mention anything that step would normally have done and has not. When I close it (REJECTED, CANCELLED, DUPLICATED), remove nothing: tell me what is left (the worktree's path, commits not in main, uncommitted files) and the exact commands to throw it away. Back to a To do status, the worktree and branch stay.${*:+ $*}"
