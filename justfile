@@ -51,7 +51,7 @@ claude *args:
     if [[ {{in_booth}} == true && ${#booth_opts[@]} -gt 0 ]]; then
         echo "just claude: --worktree is for starting a booth; this is already in one" >&2; exit 2
     fi
-    cmd=(folio exec -s todos/mcp-token -- claude --allowedTools mcp__todos "$@")
+    cmd=(folio exec -s todos/mcp-token -- claude --settings '{"permissions":{"allow":["mcp__todos"]}}' "$@")
     if [[ {{quiet}} == true ]]; then
         cmd=(bash -c 'umask 077; err=$(mktemp); trap '\''rm -f "$err"'\'' EXIT
                       rc=0; "$@" 2>"$err" || rc=$?
