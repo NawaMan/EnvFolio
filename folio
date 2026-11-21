@@ -9,6 +9,7 @@
 #   folio ls | find | grep | show | insert | edit | generate | rm | mv | cp   text|secret
 #   folio check vars
 #   folio tag add | rm | ls
+#   folio note set | edit | show | rm | ls
 #   folio ls | info | exec | shell | completion | version | help [command]
 #   (The kind can also come first: `folio text show` is `folio show text`.)
 #
@@ -83,6 +84,7 @@ Main() {
         ls)      Ls      "$@" ;;
         info)    Info    "$@" ;;
         tag)     Tag     "$@" ;;
+        note)    Note    "$@" ;;
         exec)    Exec    "$@" ;;
         shell)   Shell   "$@" ;;
         completion) Completion "$@" ;;
@@ -93,7 +95,7 @@ Main() {
                  case " $* " in *" -h "*|*" --help "*) kinds-help "$category" ; return 0 ;; esac
                  die "$category: a text or a secret? \`folio $category text …\` or \`folio $category secret …\`." ;;
         check)   die "check: check what? \`folio check vars <file>…\`." ;;
-        "")      echo    "Usage: folio <init|path|backup|restore|export|import|text|secret|vars|ls|info|tag|exec|shell|completion|version|help> [args...]" >&2 ; return 1 ;;
+        "")      echo    "Usage: folio <init|path|backup|restore|export|import|text|secret|vars|ls|info|tag|note|exec|shell|completion|version|help> [args...]" >&2 ; return 1 ;;
         *)       echo    "folio: unknown command: $category" >&2 ; return 1 ;;
     esac
 }
@@ -119,6 +121,12 @@ Help() {
         "tag add")         tag-add-help         ;;
         "tag rm")          tag-rm-help          ;;
         "tag ls")          tag-ls-help          ;;
+        "note")            note-help            ;;
+        "note set")        note-set-help        ;;
+        "note edit")       note-edit-help       ;;
+        "note show")       note-show-help       ;;
+        "note rm")         note-rm-help         ;;
+        "note ls")         note-ls-help         ;;
         "exec")            run-exec-help        ;;
         "shell")           run-shell-help       ;;
         "completion")      completion-help      ;;
@@ -175,6 +183,11 @@ Commands:
   tag add           Put tags (your own labels) on a text or a secret
   tag rm            Take tags off a text or a secret
   tag ls            List the tags (the items that carry one: ls --tag)
+  note set          Put a note (a first line, then Markdown) on a text or a secret
+  note edit         Edit the note of a text or a secret in $EDITOR
+  note show         Show the note of a text or a secret
+  note rm           Take the note off a text or a secret
+  note ls           List the items that have a note, with its first line
   find text         Find texts by name
   find secret       Find secrets by name
   grep text         Find texts by value
@@ -1355,6 +1368,8 @@ EOF
         fi
         # Its tags go with it, plain as in the store (a text and a secret of one name share them).
         [[ -z $(tags-of "$name") ]] || tags-of "$name" > "$pack/store/$name.tags"
+        # Its note too, plain as in the store.
+        [[ -z $(note-subject "$name") ]] || clean-note < "$STORE_PATH/$name.note" > "$pack/store/$name.note"
         show-answer "Copied" "$(item-label "$item")"
     done
 
@@ -1716,6 +1731,11 @@ EOF
         if [[ -n $(tags-of "$name" "$root") ]]; then
             tags-of "$name" "$root" | merge-tags "$name"
             commit-tags "Import the tags of $name."
+        fi
+        # Its note in the export takes the place of the one it has in the store.
+        if [[ -n $(note-subject "$name" "$root") ]]; then
+            save-note "$name" < "$root/$name.note"
+            commit-tags "Import the note of $name."
         fi
         show-answer "Imported" "$(item-label "$item")"
     done
@@ -2449,12 +2469,14 @@ TextRm() {
 
     if (( folder )); then
         find "$STORE_PATH/$path" -type f \( -name '*.txt' -o -name '*.txt.sig' \) -exec rm -f -- {} +
-        # The tags of each name that is no longer an item (no secret of that name either).
+        # The tags and the note of each name that is no longer an item (no secret of that name
+        # either).
         local file
         while IFS= read -r file; do
             file=${file#"$STORE_PATH"/}
-            drop-orphan-tags "${file%.tags}"
-        done < <(find "$STORE_PATH/$path" -type f -name '*.tags')
+            drop-orphan-tags "${file%.*}"
+            drop-orphan-note "${file%.*}"
+        done < <(find "$STORE_PATH/$path" -type f \( -name '*.tags' -o -name '*.note' \))
         find "$STORE_PATH/$path" -depth -type d -empty -exec rmdir -- {} \;
         # git's * matches across folders: every text under <path>.
         git -C "$STORE_PATH" rm -r -q --cached --ignore-unmatch -- "$path/*.txt" "$path/*.txt.sig"
@@ -2462,6 +2484,7 @@ TextRm() {
         rm -f -- "$STORE_PATH/$path.txt" "$STORE_PATH/$path.txt.sig"
         git -C "$STORE_PATH" rm -q --cached --ignore-unmatch -- "$path.txt" "$path.txt.sig"
         drop-orphan-tags "$path"
+        drop-orphan-note "$path"
     fi
     rmdir -p "$(dirname "$STORE_PATH/$path")" 2>/dev/null
     git -C "$STORE_PATH" diff --cached --quiet || git -C "$STORE_PATH" commit --quiet -m "Remove $path from store."
@@ -2500,7 +2523,7 @@ TextCp() { text-copy-move cp "$@" ; }
 
 # text-copy-move <mv|cp> [-f|--force] <old-name> <new-name>
 # As `pass mv` / `pass cp`, for texts. A signature covers the text, not its name, so it moves with
-# it and still verifies. Its tags go with it too (carry-tags).
+# it and still verifies. Its tags and its note go with it too (carry-tags, carry-note).
 function text-copy-move() {
     local how=$1 force=0 names=() arg ; shift
     while (( $# > 0 )); do
@@ -2552,6 +2575,7 @@ function text-copy-move() {
             git -C "$STORE_PATH" rm -q --cached --ignore-unmatch -- "${from[i]}.txt" "${from[i]}.txt.sig"
         fi
         carry-tags "$how" "${from[i]}" "${to[i]}"
+        carry-note "$how" "${from[i]}" "${to[i]}"
         [[ $how != mv ]] || rmdir -p "$(dirname "$STORE_PATH/${from[i]}")" 2>/dev/null
         git -C "$STORE_PATH" add -- "${to[i]}.txt"
         [[ -e $STORE_PATH/${to[i]}.txt.sig ]] && git -C "$STORE_PATH" add -- "${to[i]}.txt.sig"
@@ -2852,8 +2876,8 @@ EOF
 }
 
 # folio rm secret [-r|--recursive] [-f|--force] <name>
-# pass removes the secret (or the folder, whole); then the tags of a name that is no longer an
-# item go too.
+# pass removes the secret (or the folder, whole); then the tags and the note of a name that is no
+# longer an item go too.
 SecretRm() {
     local arg name="" dashes=0
     for arg in "$@"; do
@@ -2869,7 +2893,8 @@ SecretRm() {
     name=${name%/}
     [[ -n $name ]] || return 0
     drop-orphan-tags "$name"
-    commit-tags "Remove the tags of $name."
+    drop-orphan-note "$name"
+    commit-tags "Remove the tags and the note of $name."
 }
 
 # --- secret mv ----------------------------------------------------------------
@@ -2909,8 +2934,9 @@ EOF
 SecretCp() { secret-copy-move cp "$@" ; }
 
 # secret-copy-move <mv|cp> [-f|--force] <old-name> <new-name>
-# `pass mv` / `pass cp`, then the tags of the secret go with it (carry-tags), in a commit of their
-# own. Only for one secret: a folder pass moves or copies whole, its .tags files with it.
+# `pass mv` / `pass cp`, then the tags and the note of the secret go with it (carry-tags,
+# carry-note), in a commit of their own. Only for one secret: a folder pass moves or copies whole,
+# its .tags and .note files with it.
 function secret-copy-move() {
     local how=$1 arg names=() dashes=0 ; shift
     for arg in "$@"; do
@@ -2942,7 +2968,8 @@ function secret-copy-move() {
         [[ $(cksum < "$STORE_PATH/$new.gpg") != "$before" ]] || return 0
     fi
     carry-tags "$how" "$old" "$new"
-    commit-tags "Carry the tags of $old to $new."
+    carry-note "$how" "$old" "$new"
+    commit-tags "Carry the tags and the note of $old to $new."
 }
 
 #== Command: List ==============================================================
@@ -2999,7 +3026,8 @@ Show what is known about one text or secret, never its value: its file and size,
 exec and shell give it, when it was made and last changed (from the store's git history, which
 also gives its earlier names after an mv), whether it has changes not yet committed — and, for a
 text, who signed it and whether the signature verifies; for a secret, the keys it is encrypted to,
-each marked when it is not (or no longer) a key of the store. Its tags too (`folio tag add`).
+each marked when it is not (or no longer) a key of the store. Its tags too (`folio tag add`), and
+the first line of its note (`folio note set`).
 Nothing is decrypted and no passphrase is asked. A name that is both a text and a secret shows
 both.
 
@@ -3051,6 +3079,7 @@ function info-text() {
     info-var-line "$name"
     info-history-lines "$name.txt" "$name.txt" "$name.txt.sig"
     info-line "Tags:"      "$(tags-line "$name")"
+    info-line "Note:"      "$(note-line "$name")"
     info-line "Signed by:" "$(text-signature "$name")"
 }
 
@@ -3063,6 +3092,7 @@ function info-secret() {
     info-var-line "$name"
     info-history-lines "$name.gpg" "$name.gpg"
     info-line "Tags:"      "$(tags-line "$name")"
+    info-line "Note:"      "$(note-line "$name")"
     recipients=$(secret-recipients "$name")
     [[ -n $recipients ]] || recipients="no key found in the file"
     while IFS= read -r line; do
@@ -3493,6 +3523,302 @@ function carry-tags() {
 function drop-orphan-tags() {
     [[ -f $STORE_PATH/$1.tags ]] || return 0
     has-item "$1" || save-tags "$1" < /dev/null
+}
+
+#== Command: Note ==============================================================
+
+# The note of an item is your own words about it, kept in <name>.note next to <name>.txt and
+# <name>.gpg, plain and not signed — never a value. It is written as a git commit message is: a
+# first line of plain text, NOTE_FIRST_LINE_MAX characters at most, then an empty line, then as
+# much Markdown as wanted. A text and a secret of the same name share it.
+NOTE_FIRST_LINE_MAX=80
+
+function note-set-help() {
+    cat <<'EOF'
+Usage: folio note set [-m|--message <text>]... <name>
+
+Put a note on a text or a secret: your own words about it — what it is for, how to renew it. It
+is written as a git commit message is: a first line of plain text, 80 characters at most; then an
+empty line; then the rest, as long as wanted, in Markdown. The note it had is replaced.
+Without --message, the note is read from stdin, to its end (at a terminal: Ctrl-D).
+`folio info <name>` shows the first line, `folio note show <name>` all of it.
+A text and a secret of the same name share their note. The note goes with the item when it is
+moved or copied, into a backup, and into an export. It is kept plain, as the names are: never put
+a secret in one.
+
+Options:
+  -m, --message <text>
+                      The note, instead of stdin: its first line. Given more than once, each
+                      further one is a paragraph of the rest.
+  -h, --help          Show this help and stop.
+EOF
+}
+
+function note-edit-help() {
+    cat <<'EOF'
+Usage: folio note edit <name>
+
+Edit the note of a text or a secret in $EDITOR (vi if unset), or write one if it has none: a
+first line of plain text, 80 characters at most; then an empty line; then the rest, in Markdown.
+Saved empty, nothing is changed (to take a note off: `folio note rm`).
+
+Options:
+  -h, --help          Show this help and stop.
+EOF
+}
+
+function note-show-help() {
+    cat <<'EOF'
+Usage: folio note show <name>
+
+Show the note of a text or a secret, all of it, as it was written.
+
+Options:
+  -h, --help          Show this help and stop.
+EOF
+}
+
+function note-rm-help() {
+    cat <<'EOF'
+Usage: folio note rm <name>
+
+Take the note off a text or a secret. It stays in the store's git history.
+
+Options:
+  -h, --help          Show this help and stop.
+EOF
+}
+
+function note-ls-help() {
+    cat <<'EOF'
+Usage: folio note ls
+
+List every text and secret that has a note, with the note's first line.
+
+Options:
+  -h, --help          Show this help and stop.
+EOF
+}
+
+# note-help: the help of the five note commands, for `folio note --help` and `folio help note`.
+function note-help() {
+    note-set-help
+    echo
+    note-edit-help
+    echo
+    note-show-help
+    echo
+    note-rm-help
+    echo
+    note-ls-help
+}
+
+Note() {
+    local category="${1:-}" ; (( $# > 0 )) && shift
+    case "$category" in
+        set)       NoteSet  "$@" ;;
+        edit)      NoteEdit "$@" ;;
+        show)      NoteShow "$@" ;;
+        rm)        NoteRm   "$@" ;;
+        ls)        NoteLs   "$@" ;;
+        -h|--help) note-help ;;
+        "")        echo "Usage: folio note <set|edit|show|rm|ls> [args...]" >&2 ; return 1 ;;
+        *)         echo "folio note: unknown command: $category"          >&2 ; return 1 ;;
+    esac
+}
+
+# note-item <command> <usage> [arg...]: the one name a note command is given, checked — an item of
+# the store — in NOTE_NAME. Returns 1 when it showed the help instead.
+NOTE_NAME=""
+function note-item() {
+    local command=$1 usage=$2 names=() arg ; shift 2
+    while (( $# > 0 )); do
+        arg=$1 ; shift
+        case $arg in
+            -h|--help) "note-$command-help" ; return 1 ;;
+            --)        names+=("$@") ; break ;;
+            -*)        die "note $command: unknown option: $arg" ;;
+            *)         names+=("$arg") ;;
+        esac
+    done
+    (( ${#names[@]} == 1 )) || die "Usage: folio note $usage"
+    NOTE_NAME=${names[0]}
+    [[ -n $NOTE_NAME && $NOTE_NAME != */ && /$NOTE_NAME/ != */../* && /$NOTE_NAME/ != */./* ]] \
+        || die "note $command: '$NOTE_NAME' is not a valid name."
+    check-store
+    has-item "$NOTE_NAME" || die "note $command: '$NOTE_NAME' is not a text or a secret in the store."
+}
+
+# folio note set [-m|--message <text>]... <name>
+NoteSet() {
+    local args=() arg given=0 text="" content
+    while (( $# > 0 )); do
+        arg=$1 ; shift
+        case $arg in
+            -m|--message) (( $# > 0 )) || die "note set: $arg needs a value."
+                          text+=${text:+$EXTRA_LINE$EXTRA_LINE}$1 ; given=1 ; shift ;;
+            --message=*)  text+=${text:+$EXTRA_LINE$EXTRA_LINE}${arg#*=} ; given=1 ;;
+            --)           args+=(-- "$@") ; break ;;
+            *)            args+=("$arg") ;;
+        esac
+    done
+    note-item set "set [-m|--message <text>]... <name>" ${args[@]+"${args[@]}"} || return 0
+    if (( given )); then
+        content=$text
+    else
+        [[ ! -t 0 ]] || printf 'Enter the note of %s — a first line, an empty line, then the rest — and press Ctrl+D when finished:\n\n' "$NOTE_NAME" >&2
+        content=$(cat)
+    fi
+    content=$(printf '%s\n' "$content" | clean-note)
+    arg=$(check-note "$content") || die "note set: $arg"
+    printf '%s\n' "$content" | save-note "$NOTE_NAME"
+    commit-tags "Set the note of $NOTE_NAME."
+}
+
+# folio note edit <name>
+# As `folio edit text`: edit a copy, keep it only if it changed. A note that cannot be kept (its
+# first line too long) is opened again, when there is someone to ask.
+NoteEdit() {
+    note-item edit "edit <name>" "$@" || return 0
+    local name=$NOTE_NAME file tmp_dir tmp_file editor=${EDITOR:-vi} content problem
+    file=$STORE_PATH/$name.note
+    tmp_dir=$(mktemp -d) || die "Cannot make a temporary folder."
+    remove-on-exit "$tmp_dir"
+    tmp_file=$tmp_dir/${name//\//-}.note.md
+    [[ ! -f $file ]] || cp "$file" "$tmp_file"
+    while true; do
+        # Unquoted, as pass does: EDITOR may carry arguments, e.g. "code --wait".
+        # shellcheck disable=SC2086
+        $editor "$tmp_file"
+        [[ -f $tmp_file ]] || die "Note not saved."
+        content=$(clean-note < "$tmp_file")
+        [[ -n $content ]] || die "Note empty: nothing was changed. To take a note off: folio note rm $name"
+        problem=$(check-note "$content") && break
+        echo "folio: note edit: $problem" >&2
+        if [[ ! -t 0 ]] || ! confirm "Edit it again?"; then die "Note not saved." ; fi
+    done
+    [[ ! -f $file || $content != "$(cat "$file")" ]] || die "Note unchanged."
+    printf '%s\n' "$content" | save-note "$name"
+    commit-tags "Edit the note of $name using $editor."
+}
+
+# folio note show <name>
+NoteShow() {
+    note-item show "show <name>" "$@" || return 0
+    [[ -n $(note-subject "$NOTE_NAME") ]] || die "note show: '$NOTE_NAME' has no note."
+    cat "$STORE_PATH/$NOTE_NAME.note"
+}
+
+# folio note rm <name>
+NoteRm() {
+    note-item rm "rm <name>" "$@" || return 0
+    [[ -f $STORE_PATH/$NOTE_NAME.note ]] || die "note rm: '$NOTE_NAME' has no note."
+    save-note "$NOTE_NAME" < /dev/null
+    commit-tags "Remove the note of $NOTE_NAME."
+}
+
+# folio note ls
+NoteLs() {
+    local arg file name
+    for arg in "$@"; do
+        case $arg in
+            -h|--help) note-ls-help ; return 0 ;;
+            -*)        die "note ls: unknown option: $arg" ;;
+            *)         die "note ls: it takes no name; the note of an item: \`folio note show $arg\`." ;;
+        esac
+    done
+    check-store
+    # Notes left behind by an item removed outside Folio are not listed.
+    find -L "$STORE_PATH" -mindepth 1 -name '.*' -prune -o -type f -name '*.note' -print | LC_ALL=C sort \
+        | while IFS= read -r file; do
+            name=${file#"$STORE_PATH"/} ; name=${name%.note}
+            has-item "$name" || continue
+            arg=$(note-subject "$name")
+            [[ -z $arg ]] || printf '%s: %s\n' "$name" "$arg"
+        done
+}
+
+# clean-note < note: the note as it is kept — its first line (the first that is not empty, with no
+# spaces at its end), then, when there is more, an empty line and the rest, without the empty
+# lines before and after it. Nothing when the note is empty. A carriage return at a line's end
+# (a file from Windows) is dropped.
+function clean-note() {
+    awk '{ sub(/\r$/, "") }
+         !first { if ($0 ~ /^[ \t]*$/) next
+                  sub(/[ \t]+$/, "") ; print ; first = 1 ; next }
+         /^[ \t]*$/ { held++ ; next }
+         { if (!body) { print "" ; body = 1 } else while (held > 0) { print "" ; held-- }
+           held = 0 ; print }'
+}
+
+# check-note <note>: whether the cleaned note can be kept; if not, why (printed), and 1.
+function check-note() {
+    local first=${1%%"$EXTRA_LINE"*}
+    if [[ -z $first ]]; then
+        echo "the note is empty."
+    elif [[ $first == *[[:cntrl:]]* ]]; then
+        echo "the note's first line must be plain text: no tabs or other control characters."
+    elif (( ${#first} > NOTE_FIRST_LINE_MAX )); then
+        echo "the note's first line is ${#first} characters; it can be $NOTE_FIRST_LINE_MAX at most. Put the rest after an empty line."
+    else
+        return 0
+    fi
+    return 1
+}
+
+# note-subject <name> [<root>]: the first line of the note of <name> in the store (or under
+# <root>, an opened export); nothing when it has none. Cut to what a first line can be: the file is
+# plain, and may have been changed outside Folio.
+function note-subject() {
+    local file=${2:-$STORE_PATH}/$1.note first
+    [[ -f $file ]] || return 0
+    first=$(clean-note < "$file" | head -n 1 | LC_ALL=C tr -d '\000-\037\177')
+    printf '%s\n' "${first:0:NOTE_FIRST_LINE_MAX}"
+}
+
+# note-line <name>: for `folio info` — the first line of the note of <name>, and how many lines
+# follow it; or "none".
+function note-line() {
+    local name=$1 first more
+    first=$(note-subject "$name")
+    [[ -n $first ]] || { echo none ; return 0 ; }
+    more=$(clean-note < "$STORE_PATH/$name.note" | awk 'NR > 2 { n++ } END { print n + 0 }')
+    (( more == 0 )) || first+="  (+$more line$(plural "$more"): folio note show $name)"
+    printf '%s\n' "$first"
+}
+
+# save-note <name> < note: write <name>.note as the note given — or remove it when it is empty —
+# and stage it. Not committed: commit-tags does, or the commit of the change it is part of.
+function save-note() {
+    local name=$1 file=$STORE_PATH/$1.note content
+    content=$(clean-note)
+    if [[ -n $content ]]; then
+        umask "${PASSWORD_STORE_UMASK:-077}"
+        mkdir -p "$(dirname "$file")"
+        printf '%s\n' "$content" > "$file"
+        git -C "$STORE_PATH" add -- "$name.note"
+    else
+        rm -f -- "$file"
+        git -C "$STORE_PATH" rm -q --cached --ignore-unmatch -- "$name.note"
+    fi
+}
+
+# carry-note <mv|cp> <old> <new>: after the text or the secret <old> was moved or copied to <new>,
+# <new> gets the note of <old>, in place of its own; when <old> has none, <new> keeps its own.
+# After a move, <old> keeps its note only while it is still an item (its other kind stayed).
+# Staged, not committed.
+function carry-note() {
+    local how=$1 old=$2 new=$3
+    [[ $old != "$new" ]] || return 0
+    [[ ! -f $STORE_PATH/$old.note ]] || save-note "$new" < "$STORE_PATH/$old.note"
+    [[ $how != mv ]] || drop-orphan-note "$old"
+}
+
+# drop-orphan-note <name>: remove <name>.note when <name> is no longer a text or a secret. Staged,
+# not committed.
+function drop-orphan-note() {
+    [[ -f $STORE_PATH/$1.note ]] || return 0
+    has-item "$1" || save-note "$1" < /dev/null
 }
 
 #== Command: Exec ==============================================================
@@ -4042,12 +4368,12 @@ function check-use-prefix() {
 }
 
 # lay-in-view <view> <src> <dst>: copy the item named <src> in the source — its .txt and .txt.sig,
-# its .gpg, its .tags, whichever it has — to the name <dst> in <view>, over whatever item was there.
+# its .gpg, its .tags, its .note, whichever it has — to the name <dst> in <view>, over whatever item was there.
 function lay-in-view() {
     local view=$1 src=$2 dst=$3 ext i
     mkdir -p "$view/$(dirname "$dst")"
-    rm -f -- "$view/$dst.txt" "$view/$dst.txt.sig" "$view/$dst.gpg" "$view/$dst.tags"
-    for ext in .txt .txt.sig .gpg .tags; do
+    rm -f -- "$view/$dst.txt" "$view/$dst.txt.sig" "$view/$dst.gpg" "$view/$dst.tags" "$view/$dst.note"
+    for ext in .txt .txt.sig .gpg .tags .note; do
         [[ ! -f $VIEW_SOURCE/$src$ext ]] || cp -- "$VIEW_SOURCE/$src$ext" "$view/$dst$ext"
     done
     for (( i = 0; i < ${#VIEW_PATHS[@]}; i++ )); do
@@ -4756,7 +5082,7 @@ function complete-words() {
     cur=${words[${#words[@]}-1]}
     if (( ${#words[@]} == 1 )); then complete-commands "" "$cur" ; return 0 ; fi
     key=${words[0]}
-    if [[ $key == text || $key == secret || $key == vars || $key == tag ]]; then
+    if [[ $key == text || $key == secret || $key == vars || $key == tag || $key == note ]]; then
         if (( ${#words[@]} == 2 )); then complete-commands "$key" "$cur" ; return 0 ; fi
         key="$key ${words[1]}" at=2
     elif (( ${#words[@]} == 2 )) && is-action "$key" && [[ $key != ls || $cur != -* ]]; then
@@ -4819,7 +5145,7 @@ function complete-words() {
         shell)           printf 'words\nbash\tFor bash\nzsh\tFor zsh\n' | complete-matching "$cur" ;;
         help)
             if (( count == 0 )); then complete-commands "" "$cur"
-            elif (( count == 1 )) && { [[ $last == text || $last == secret || $last == vars || $last == tag ]] || is-action "$last" ; }; then
+            elif (( count == 1 )) && { [[ $last == text || $last == secret || $last == vars || $last == tag || $last == note ]] || is-action "$last" ; }; then
                 complete-commands "$last" "$cur"
             else echo none ; fi ;;
         *)               echo none ;;
@@ -4897,6 +5223,8 @@ function completion-args() {
         info)                         echo name ;;
         "tag add"|"tag rm")           echo "name tag..." ;;
         "tag ls")                     echo none ;;
+        "note set"|"note edit"|"note show"|"note rm") echo name ;;
+        "note ls")                    echo none ;;
         completion)                   echo shell ;;
         help)                         echo "help..." ;;
         "text ls")                    echo text-folder ;;
@@ -4954,11 +5282,12 @@ function complete-commands() {
             name=${names[i]} desc=${descs[i]}
             if [[ $name == *:* ]]; then
                 kind=${name%:*} action=${name#*:}
-                if [[ $kind == tag ]]; then
-                    # A group of its own, always typed first: `folio tag add`.
-                    if   [[ $group == tag ]]; then name=$action
-                    elif [[ -z $group ]];     then name=tag desc="add|rm|ls"
-                    else continue
+                if [[ $kind == tag || $kind == note ]]; then
+                    # A group of its own, always typed first: `folio tag add`, `folio note set`.
+                    if   [[ $group == "$kind" ]]; then name=$action
+                    elif [[ -n $group ]];         then continue
+                    elif [[ $kind == tag ]];      then name=tag  desc="add|rm|ls"
+                    else                               name=note desc="set|edit|show|rm|ls"
                     fi
                 elif [[ $group == "$kind" ]];   then name=$action
                 elif [[ $group == "$action" ]]; then name=$kind
@@ -5432,14 +5761,14 @@ function store-flat() {
 
 # store-tree <gpg|txt|all> <folder> [tree-option...]: the secrets (gpg), the texts (txt) or both
 # (all) under <folder> as a tree, names only. pass's own `tree` line (ls, find), plus leaving out
-# signatures, tags, the other kind, and folders left empty. With all, each name gets its mark in front.
+# signatures, tags, notes, the other kind, and folders left empty. With all, each name gets its mark in front.
 # Marks and colours as set-marks says; tree colours (its folders) only when there are colours.
 function store-tree() {
     local kind=$1 folder=$2 others color=-n s='' t='' esc=$'\e' ; shift 2
     case $kind in
-        gpg) others='*.txt|*.txt.sig|*.tags' ;;
-        txt) others='*.gpg|*.txt.sig|*.tags' ;;
-        all) others='*.txt.sig|*.tags'       ;;
+        gpg) others='*.txt|*.txt.sig|*.tags|*.note' ;;
+        txt) others='*.gpg|*.txt.sig|*.tags|*.note' ;;
+        all) others='*.txt.sig|*.tags|*.note'       ;;
     esac
     set-marks
     [[ $kind != all ]] || s="$SECRET_MARK" t="$TEXT_MARK"

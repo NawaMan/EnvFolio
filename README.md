@@ -133,6 +133,7 @@ accident.
 | `folio ls [text\|secret]` | List items, as a tree or flat — of the store, or with `--from`, of an export file; with `--tag`, those carrying a tag; with `--use`, a namespace's |
 | `folio info <name>` | What is known about one item, never its value: size, variable, created/modified (from git), its signature or the keys it is encrypted to |
 | `folio tag add` / `rm` / `ls` | Your own labels on items, like hashtags — kept plain, shown by `info`, listed by `ls --tag <tag>`, and carried by `mv`, `cp`, `backup` and `export` |
+| `folio note set` / `edit` / `show` / `rm` / `ls` | Your own words about an item, written like a git commit message: a first line (80 characters at most), then Markdown — kept plain, shown by `info`, and carried by `mv`, `cp`, `backup` and `export` |
 | `folio <action> text\|secret` | `show`, `insert`, `edit`, `generate`, `rm`, `mv`, `cp`, `find` (by name), `grep` (by value) |
 | `folio exec` | Run a command with items as environment variables |
 | `folio shell` | Start a shell with items as environment variables |
@@ -247,6 +248,7 @@ What Folio does:
   the message says how to see what changed.
 - **Tags are plain labels**, readable in the store as the names are, and not signed: never put a
   secret in one.
+- **Notes are plain too**, and not signed: say in one how to renew a secret, never the secret.
 - **The store folder is private** (`700`). Folio warns whenever it belongs to someone else or
   other users can get into it.
 - **The clipboard** is cleared after 45 seconds for a secret (`PASSWORD_STORE_CLIP_TIME`).
@@ -255,7 +257,7 @@ What Folio does:
   passphrase of its own too, if you say so when you export, and be post-quantum (`--key-type
   pqc`; classical by default, so any gpg opens the file).
 - **A backup holds the store's secret key** (still protected by its passphrase), the texts, the
-  tags and the names of the secrets. `--encrypt` locks the whole file with a passphrase of its
+  tags, the notes and the names of the secrets. `--encrypt` locks the whole file with a passphrase of its
   own. Keep it somewhere safe and offline.
 
 What it does not do: protect against someone who already runs code as you, or as root. The secrets

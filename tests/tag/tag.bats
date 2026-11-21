@@ -410,7 +410,7 @@ make-tagged() {
     [ "$status" -eq 0 ]
     [ "$(tags gh/pat)" = "work" ]
     [ ! -e "$FOLIO_STORE_DIR/gh/token.tags" ]
-    [ "$(git -C "$FOLIO_STORE_DIR" log -1 --format=%s)" = "Carry the tags of gh/token to gh/pat." ]
+    [ "$(git -C "$FOLIO_STORE_DIR" log -1 --format=%s)" = "Carry the tags and the note of gh/token to gh/pat." ]
     "$FOLIO" mv secret gh/pat web/
     [ "$(tags web/pat)" = "work" ]
     [ ! -e "$FOLIO_STORE_DIR/gh/pat.tags" ]
