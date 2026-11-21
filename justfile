@@ -75,52 +75,99 @@ claude *args:
     (( rc == 0 )) || cat "$err" >&2
     exit "$rc"
 
-# A todo's work, in three steps, on a git worktree named after it: its number, a dash, a word or
-# two (`299-note` is todo #299). The todo's text, in the todos app, is the task.
-#   just start <name>  in the booth: starts on the todo, and stops at a question or when the change
-#                      is ready for you to test. Interactive; leave and come back with
-#                      `just claude --worktree <name> -c`.
-#   just ready <name>  in the booth, once you have tested it: closes gaps (tests, docs), runs the
-#                      tests, commits on the branch.
-#   just land <name>   on the host: rebases onto main, merges, removes the worktree and the branch,
-#                      marks the todo done.
-# Words after the name are added to Claude's prompt. quiet=true works for ready and land as for
-# `just claude` (start is interactive).
+# A todo's work, on a git worktree named after it: its number, a dash, a word or two (`299-note`
+# is todo #299). The todo, in the todos app, is the task; each step moves its status along.
+#   any To do status --pickup--> Analyse --start--> Working --ready--> Wait for testing --land--> Done
+#   just pickup <name>    booth: makes the worktree (kept), writes the proposal into the todo's
+#                         description (## Plan), and stops; no code changes.
+#   just start [name]     booth: implements the plan and commits on the branch.
+#   just ready [name]     booth: closes gaps (tests, docs), runs the tests, commits.
+#                         Then you test it (set Testing by hand if you like).
+#   just land [name]      host: rebases onto main, merges, removes the worktree and the branch.
+#   just discuss [name]   booth, interactive, any status: catches up and talks it over with you;
+#                         adjusts the plan or the code, and sets whatever status you name
+#                         (Backlog, Rejected, …) — only when you ask.
+# Between steps: the todo holds what you read (## Plan, ## Work log); task-memory.md, gitignored
+# in the worktree, holds the steps' own working notes (land keeps what is worth it in the log).
+# All but discuss run unattended (claude -p). Without a name, the current checkout's branch is
+# used, or the only <number>-<word> worktree there is. Words after it are added to the prompt.
+# quiet=true works for all but discuss, as for `just claude`.
 
-# Start todo #N on worktree <N-word>, in the booth, interactively (the worktree is made if missing, and kept).
+# The todo name to work on: $1 when it is one, else the current branch, else the only todo worktree.
+[private]
 [positional-arguments]
-start name *words:
+todo-name *args:
     #!/usr/bin/env bash
     set -euo pipefail
-    [[ $1 =~ ^([0-9]+)-[A-Za-z0-9] ]] || { echo "just start: name it <todo number>-<word>, like 299-note" >&2; exit 2; }
-    name=$1 todo=${BASH_REMATCH[1]}; shift
-    prompt="Work on todo #$todo; read it with the todos MCP tools. This booth runs on git worktree and branch '$name', made for this todo: it is the linked checkout AGENTS.md asks for (Rule 0b), so work here and on this branch, not on main. Follow AGENTS.md: post the proposal and wait for my answer before editing. Once the change is implemented and its checks pass, commit it on this branch and stop, telling me it is ready for me to test.${*:+ $*}"
-    exec just claude --worktree "$name" --worktree-keep "$prompt"
+    re='^[0-9]+-[A-Za-z0-9]'
+    if [[ ${1:-} =~ $re ]]; then echo "$1"; exit 0; fi
+    branch=$(git branch --show-current 2>/dev/null || true)
+    if [[ $branch =~ $re ]]; then echo "$branch"; exit 0; fi
+    names=$(git worktree list --porcelain | sed -n 's|^branch refs/heads/||p' | grep -E "$re" || true)
+    case $(printf '%s' "$names" | grep -c .) in
+        1) echo "using worktree $names" >&2; echo "$names" ;;
+        0) echo "no <number>-<word> worktree here; name one (just pickup <name> makes it)" >&2; exit 2 ;;
+        *) echo "more than one todo worktree; name one of:" >&2; printf '%s\n' "$names" | sed 's/^/  /' >&2; exit 2 ;;
+    esac
 
-# Prepare worktree <N-word> to land, in the booth: close gaps in tests and docs, run the tests, commit.
+# Run a todo step: `todo-step <name> <interactive|unattended> <prompt>`, in the booth on that
+# worktree (made if missing, and kept), or right here when this booth is already on it.
+[private]
 [positional-arguments]
-ready name *words:
+todo-step name mode prompt:
     #!/usr/bin/env bash
     set -euo pipefail
-    [[ $1 =~ ^([0-9]+)-[A-Za-z0-9] ]] || { echo "just ready: name it <todo number>-<word>, like 299-note" >&2; exit 2; }
-    name=$1 todo=${BASH_REMATCH[1]}; shift
-    prompt="Todo #$todo, on this branch '$name': I have tested it and the work is done; don't ask me anything. Prepare it for landing. Audit it against the todo (read it with the todos MCP tools) and AGENTS.md for gaps: tests that should exist, docs (README, MANUAL, CHANGELOG, help text, tab completion) not updated, experiments not concluded, accidental changes. Fill them, run shellcheck and just test-all, and commit on this branch. A test that fails the same way on main is not from this branch: name it and carry on. Do not rebase, merge or change main: 'just land $name' does that on the host. End with what you changed and the test results.${*:+ $*}"
-    exec just quiet={{quiet}} claude --worktree "$name" --worktree-keep -p "$prompt"
+    name=$1 mode=$2 prompt=$3
+    todo=${name%%-*}
+    common="Todo #$todo is the task: read it with the todos MCP tools (get_item #$todo). This checkout is git worktree and branch '$name', made for it: it is the linked checkout AGENTS.md asks for (Rule 0b), so work here and commit on this branch, never on main. Statuses are set with update_item (codes: TRIAGE, BACKLOG, LATER, UNSURE, NEED_ANALYSIS, ON_HOLD, DEPENDING; ANALYSE, WORKING, WAIT_FOR_TESTING, TESTING, LANDING; DONE, REJECTED, CANCELLED, DUPLICATED). Notes go in the todo's description, which update_item replaces whole: read it first and keep what is there; the plan is its '## Plan' section, and step results go as dated lines under '## Work log' at the end. If the todos tools cannot be reached, say so and stop. Memory between steps: task-memory.md at the top of this checkout (gitignored, never committed). Read it first if it is there; before you stop, update it with what the next step should know (files involved, commands that worked, dead ends, causes found), short, and never a secret in it. It is for the steps; what I should read goes in the todo."
+    args=()
+    [[ $mode == unattended ]] && args+=(-p)
+    args+=("$common $prompt")
+    if [[ {{in_booth}} == true ]]; then
+        [[ $(git branch --show-current) == "$name" ]] || { echo "this booth is not on worktree $name; run it from the host" >&2; exit 2; }
+        exec just quiet={{quiet}} claude "${args[@]}"
+    fi
+    exec just quiet={{quiet}} claude --worktree "$name" --worktree-keep "${args[@]}"
 
-# Land worktree <N-word> into main, on the host: rebase, merge, remove the worktree and branch, mark the todo done.
+# Pick up todo #N (any To do status) on a new worktree <N-word>: write the proposal into the todo, set Analyse.
 [positional-arguments]
-land name *words:
+pickup name *words:
     #!/usr/bin/env bash
     set -euo pipefail
-    [[ $1 =~ ^([0-9]+)-[A-Za-z0-9] ]] || { echo "just land: name it <todo number>-<word>, like 299-note" >&2; exit 2; }
-    name=$1 todo=${BASH_REMATCH[1]}; shift
+    [[ $1 =~ ^[0-9]+-[A-Za-z0-9] ]] || { echo "just pickup: name it <todo number>-<word>, like 299-note" >&2; exit 2; }
+    name=$1; shift
+    exec just quiet={{quiet}} todo-step "$name" unattended "Step: pickup. Its status must be one of To do (TRIAGE … DEPENDING); otherwise say what it is and stop. Set it to ANALYSE. Then study the todo and the code read-only, and write the proposal AGENTS.md asks for (Problem · Diagnostic · Approach, the checkout being this worktree, any new dependency flagged) into the todo's description as its '## Plan' section, ending with the questions I need to answer, if any. Change no files but task-memory.md (start it with what you found) and commit nothing: 'just start' implements the plan once I agree (I adjust it with 'just discuss'). End with a short summary of the plan.${*:+ $*}"
+
+# Start the work on todo worktree [name] (Analyse): implement the plan and commit; status Working.
+[positional-arguments]
+start *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    name=$(just todo-name "$@"); [[ ${1:-} == "$name" ]] && shift
+    exec just quiet={{quiet}} todo-step "$name" unattended "Step: start. Its status must be ANALYSE, and its description must have a '## Plan' with no open questions; otherwise say what is missing and stop. The plan there is my approval of the proposal. Set the status to WORKING, implement the plan, run the checks that fit (shellcheck always; the bats tests it touches) and commit on this branch. If you get stuck on something the plan does not settle, write the question under '## Work log', keep WORKING, and stop. End with what you did.${*:+ $*}"
+
+# Get todo worktree [name] (Working) ready for you to test: close gaps, run all tests, commit; status Wait for testing.
+[positional-arguments]
+ready *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    name=$(just todo-name "$@"); [[ ${1:-} == "$name" ]] && shift
+    exec just quiet={{quiet}} todo-step "$name" unattended "Step: ready. Its status must be WORKING; otherwise say what it is and stop. Audit this branch against the todo, its plan and AGENTS.md for gaps: tests that should exist, docs (README, MANUAL, CHANGELOG, help text, tab completion) not updated, experiments not concluded, accidental changes. Fill them, run shellcheck and just test-all, and commit on this branch. A test that fails the same way on main is not from this branch: name it and carry on. When all is in, set the status to WAIT_FOR_TESTING and log the test results under '## Work log'; if something of this branch still fails, keep WORKING and log why. Do not rebase, merge or change main. End with what you changed and the test results.${*:+ $*}"
+
+# Land todo worktree [name] (Wait for testing or Testing), on the host: rebase, merge, remove the worktree and branch; status Done.
+[positional-arguments]
+land *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
     if [[ {{in_booth}} == true ]]; then
         echo "just land: run it on the host; a booth sees neither main's checkout nor the worktree's folder" >&2; exit 2
     fi
+    name=$(just todo-name "$@"); [[ ${1:-} == "$name" ]] && shift
+    todo=${name%%-*}
     # The worktree of branch <name>, wherever it is (worktree/<name>, or ../<repo>.worktrees/<name> from booth --worktree).
     path=$(git worktree list --porcelain | awk -v b="branch refs/heads/$name" '/^worktree /{p=substr($0,10)} $0==b{print p; exit}')
     [[ -n $path ]] || { echo "just land: no worktree has branch $name checked out" >&2; exit 2; }
-    prompt="Land todo #$todo: branch '$name' into main, as the land skill (.claude/skills/land/SKILL.md) says. I have tested it and the work is done, and 'just ready' has closed its gaps; don't ask me anything. Its worktree is $path (not under worktree/). If the preflight still finds gaps, stop and list them. Otherwise rebase it onto main there, and if the rebase changed anything run just test-all again; then merge, remove that worktree and delete the branch. Never --force: if git refuses, stop and tell me why. Do not push. Last, mark todo #$todo done with the todos MCP tools; if they cannot be reached, say so.${*:+ $*}"
+    prompt="Land todo #$todo: branch '$name' into main, as the land skill (.claude/skills/land/SKILL.md) says. Read the todo with the todos MCP tools (get_item #$todo); its status must be WAIT_FOR_TESTING or TESTING, otherwise say what it is and stop. I have tested it and the work is done, and 'just ready' has closed its gaps; don't ask me anything. Its worktree is $path (not under worktree/). Set the status to LANDING. If the preflight still finds gaps, stop and list them. Otherwise rebase it onto main there, and if the rebase changed anything run just test-all again; then merge. Before removing the worktree, read its task-memory.md (gitignored, the steps' working notes), if there is one, and add what is worth keeping to the todo's '## Work log'; then remove that worktree and delete the branch. Never --force: if git refuses, stop and tell me why. Do not push. Last, set the status to DONE and add the merge commit under '## Work log' in its description (update_item replaces the description whole: keep what is there). If something stopped the land, keep LANDING and log why. If the todos tools cannot be reached, say so.${*:+ $*}"
     cmd=(claude --add-dir "$path" --permission-mode acceptEdits
          --allowedTools 'Bash(git *)' 'Bash(just *)' 'Bash(./booth *)' mcp__todos
          -p "$prompt")
@@ -129,3 +176,11 @@ land name *words:
     rc=0; "${cmd[@]}" 2>"$err" || rc=$?
     (( rc == 0 )) || cat "$err" >&2
     exit "$rc"
+
+# Discuss todo worktree [name] with Claude, interactively, at any status: adjust the plan or the code, set any status you name.
+[positional-arguments]
+discuss *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    name=$(just todo-name "$@"); [[ ${1:-} == "$name" ]] && shift
+    exec just todo-step "$name" interactive "Step: discuss, with me, at whatever status the todo has. Catch up first: the todo (status, plan, work log), task-memory.md, and what this branch has (git log and diff against main, uncommitted changes). Give me a short summary of where it stands, then wait for me. As we agree changes: update the '## Plan' section, or change the code (proposal before code, as AGENTS.md says) and commit on this branch when I ask. Set the status only when I ask, to exactly the one I name; mention anything that step would normally have done and has not. When I close it (REJECTED, CANCELLED, DUPLICATED), remove nothing: tell me what is left (the worktree's path, commits not in main, uncommitted files) and the exact commands to throw it away. Back to a To do status, the worktree and branch stay.${*:+ $*}"

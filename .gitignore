@@ -24,3 +24,6 @@
 *--envfolio.gpg*
 *.envfolio
 *.envfolio.partial
+
+# Working notes between the `just pickup|start|ready|land|discuss` steps, kept in each worktree.
+/task-memory.md
