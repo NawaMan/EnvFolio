@@ -132,7 +132,7 @@ accident.
 | `folio export` / `import` | Some items, in one locked file and into another store |
 | `folio ls [text\|secret]` | List items, as a tree or flat — of the store, or with `--from`, of an export file; with `--tag`, those carrying a tag; with `--use`, a namespace's |
 | `folio info <name>` | What is known about one item, never its value: size, variable, created/modified (from git), its signature or the keys it is encrypted to |
-| `folio tag add` / `rm` / `ls` | Your own labels on items, like hashtags — kept plain, shown by `info`, listed by `ls --tag <tag>`, and carried by `mv`, `cp`, `backup` and `export` |
+| `folio tag add` / `rm` / `ls` | Your own labels on items, like hashtags — kept plain, shown by `info`, listed by `ls --tag <tag>`, picked by `exec`, `shell` and `export --tag <tag>`, and carried by `mv`, `cp`, `backup` and `export` |
 | `folio note set` / `edit` / `show` / `rm` / `ls` | Your own words about an item, written like a git commit message: a first line (80 characters at most), then Markdown — kept plain, shown by `info`, and carried by `mv`, `cp`, `backup` and `export` |
 | `folio <action> text\|secret` | `show`, `insert`, `edit`, `generate`, `rm`, `mv`, `cp`, `find` (by name), `grep` (by value) |
 | `folio exec` | Run a command with items as environment variables |

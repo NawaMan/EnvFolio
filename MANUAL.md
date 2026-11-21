@@ -532,7 +532,8 @@ folio tag rm gh/token old work
 
 Lists every tag in the store, with how many names carry it. Tags left behind by an item removed
 outside Folio (with `pass rm`) are not listed. The items that carry a tag are listed by
-[`folio ls --tag <tag>`](#list-the-items-with-a-tag).
+[`folio ls --tag <tag>`](#list-the-items-with-a-tag); `folio exec`, `folio shell` and
+`folio export` take them with [`--tag <tag>`](#every-entry-with-a-tag).
 
 ```
 folio tag ls
@@ -1546,7 +1547,7 @@ on a command line, into a file, or on the screen.
 
 ```
 folio exec [-s|--secrets] [-a|--all] [-n|--names|--debug|--confirm] [--plain]
-           [--use <@namespace>]... [--vars <file>]... [--store-passphrase-fd <n>]
+           [--tag <tag>]... [--use <@namespace>]... [--vars <file>]... [--store-passphrase-fd <n>]
            [--from <export> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]] <entry>... -- <command> [<arg>...]
 ```
 
@@ -1558,6 +1559,7 @@ folio exec [-s|--secrets] [-a|--all] [-n|--names|--debug|--confirm] [--plain]
 | `--debug` | Show the same as `--names`, on stderr, then run the command. The names are shown before any value is read. Not with `--names`. |
 | `--confirm` | Show the same as `--debug`, then ask `run <command>? [y/N]` and run it only on yes. Asked and answered on the terminal (`/dev/tty`), never stdin, which stays the command's; with no terminal it refuses. No value is read or decrypted, and the store key is not unlocked (`--store-passphrase-fd`), before the yes; a `--from` file is opened first, to show its names. |
 | `--plain` | With `--names`, `--debug` or `--confirm`: mark secrets (S) and texts (T), with no colour, even on a screen. |
+| `--tag <tag>` | Load every entry outside the namespaces that carries the tag ([`folio tag add`](#folio-tag-add)); a `#` in front is dropped. It is `--all`, with only those, where it is typed among the entries. Can be given more than once: the entries that carry any of them. With it, `<entry>` is optional. See [Every entry with a tag](#every-entry-with-a-tag). |
 | `--use <@namespace>` | Take every entry under `<@namespace>` as if it were not in the path: `@prod/server/user` is `server/user`. Only namespaces, from the front (`@app2/@prod`). Where it is typed among the entries; can be given more than once. With it, `<entry>` is optional. See [Peel a namespace with --use](#peel-a-namespace-with---use). Experimental: it may change. |
 | `--vars <file>` | Set the variables a vars file says: constants, values from your environment, entries, with fallbacks. Can be given more than once. With it, `<entry>` is optional, and the entries only feed it. See [From a vars file](#from-a-vars-file). |
 | `--from <export>` | Take the entries from a file made by `folio export`, not from the store: its path, ending in `.folio`, or its name in `FOLIO_FILE_DIR` (see [An export's path, or its name](#an-exports-path-or-its-name)). No store is needed, and none is made or touched. See [From an export file](#from-an-export-file). |
@@ -1574,7 +1576,7 @@ An `<entry>` is one of:
 | `<folder>` | Every text under the folder, at any depth; with `--secrets`, every secret too. |
 | `VAR=<name>` | One entry, as the variable `VAR`, exactly as written. |
 
-At least one `<entry>` is needed, unless `--all`, `--use` or `--vars` is given; the whole store is never loaded by
+At least one `<entry>` is needed, unless `--all`, `--tag`, `--use` or `--vars` is given; the whole store is never loaded by
 default. The `--` is
 needed, and everything after it is the command, which Folio never parses. It needs a ready store
 (`folio init`), unless the entries come from a file with `--from`.
@@ -1674,6 +1676,58 @@ folio exec --all --secrets @nawa -- ./deploy
 
 Loads every text and secret outside the namespaces, then `@nawa/` over them. Without
 `--secrets`, only the texts, with a note saying how many secrets were left out.
+
+### Every entry with a tag
+
+```
+gh/user            (T)  #work
+gh/note            (T)
+gh/token           (S)  #work
+web/home           (T)  #work #public
+web/user           (T)  #public
+@prod/server/user  (T)  #work
+@prod/server/db    (T)
+```
+
+`--tag <tag>` loads every entry that carries the tag: it is `--all`, with only those. Like
+`--all`, it stays outside the namespaces, and secrets load only with `--secrets`:
+
+```bash
+folio exec --tag work -- ./build.sh             # GH_USER and WEB_HOME
+folio exec --secrets --tag work -- ./build.sh   # and GH_TOKEN
+```
+
+```
+folio exec: left out 1 secret(s) with tag work in the store; add --secrets to load them.
+```
+
+It adds to the entries typed, and does not narrow them:
+
+```bash
+folio exec gh --tag public -- ./build.sh        # all of gh, and WEB_HOME and WEB_USER
+```
+
+Given more than once, the entries that carry any of the tags load:
+
+```bash
+folio exec --tag work --tag public -- ./build.sh   # GH_USER, WEB_HOME and WEB_USER
+```
+
+It is taken where it is typed among the entries, `--all` and `--use`, and the last one wins. With
+a `server/user` tagged `work` in the store too:
+
+```bash
+folio exec --tag work --use @prod -- ./deploy.sh   # SERVER_USER is @prod's
+folio exec --use @prod --tag work -- ./deploy.sh   # SERVER_USER is the store's own
+```
+
+Only the `.tags` files are read to tell, so `--names`, `--debug` and `--confirm` show the same
+entries without reading a value, and `--from <export>` works too: an export carries its items'
+tags. When nothing carries the tag, nothing runs:
+
+```
+folio: exec: the store has no entries with tag nope to load.
+```
 
 ### Peel a namespace with --use
 
@@ -1941,7 +1995,7 @@ Starts your shell (`$SHELL`, or `/bin/sh`) with entries from the Folio store as 
 variables. It is `folio exec <entry>... -- "$SHELL"`, plus a line saying what was loaded.
 
 ```
-folio shell [-s|--secrets] [-a|--all] [-n|--names|--debug|--confirm] [--plain] [--use <@namespace>]... [--vars <file>]... [--store-passphrase-fd <n>] [--from <export> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]] <entry>...
+folio shell [-s|--secrets] [-a|--all] [-n|--names|--debug|--confirm] [--plain] [--tag <tag>]... [--use <@namespace>]... [--vars <file>]... [--store-passphrase-fd <n>] [--from <export> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]] <entry>...
 ```
 
 | Option | Meaning |
@@ -1952,6 +2006,7 @@ folio shell [-s|--secrets] [-a|--all] [-n|--names|--debug|--confirm] [--plain] [
 | `--debug` | Show the same on stderr, then start the shell. |
 | `--confirm` | Show the same on stderr, and start the shell only when you say yes, as in `folio exec`. |
 | `--plain` | With `--names`, `--debug` or `--confirm`: mark secrets (S) and texts (T), with no colour, even on a screen. |
+| `--tag <tag>` | Load every entry outside the namespaces that carries the tag, as in [`folio exec`](#every-entry-with-a-tag); can be given more than once. |
 | `--use <@namespace>` | Take every entry under `<@namespace>`, named without it, as in `folio exec`; can be given more than once. Experimental: it may change. |
 | `--vars <file>` | Set the variables a vars file says, as in `folio exec`; can be given more than once. |
 | `--from <export>` | Take the entries from a file made by `folio export`, as in `folio exec`: a path ending in `.folio`, or a name in `FOLIO_FILE_DIR`. |
@@ -2223,18 +2278,19 @@ Copies some items into one file, to bring them into another store with `folio im
 a server, in a booth, or on another machine. Your store's key never leaves this machine.
 
 ```
-folio export [-s|--secrets] [--to <key>|--file-passphrase-stdin|--file-passphrase-fd <n>] [--key-type <pqc|classical>] [--key-passphrase-fd <n>] [--store-passphrase-fd <n>] [--use <@namespace>]... [--vars <file>]... [-o|--output <export>] [<name>...]
+folio export [-s|--secrets] [--to <key>|--file-passphrase-stdin|--file-passphrase-fd <n>] [--key-type <pqc|classical>] [--key-passphrase-fd <n>] [--store-passphrase-fd <n>] [--tag <tag>]... [--use <@namespace>]... [--vars <file>]... [-o|--output <export>] [<name>...]
 ```
 
 | Option | Meaning |
 | --- | --- |
 | `-s`, `--secrets` | Take the secrets in a folder, or under a `--use`, too. A secret named on its own always goes; one a vars file names needs it. |
 | `--to <key>` | Lock the file to this public key — a key file (`.asc`) or a key in your keyring (fingerprint, key id or email) — instead of a passphrase. Only its secret key can open the file. A key file is never added to your keyring. |
-| `--file-passphrase-stdin` | Read the file's passphrase from the first line of stdin instead of gpg's prompt. Not with `--to`. Needs a `<name>`, `--use` or `--vars`. An empty passphrase is refused. |
+| `--file-passphrase-stdin` | Read the file's passphrase from the first line of stdin instead of gpg's prompt. Not with `--to`. Needs a `<name>`, `--tag`, `--use` or `--vars`. An empty passphrase is refused. |
 | `--file-passphrase-fd <n>` | Read the file's passphrase from the first line of file descriptor `<n>`. Not with `--to`. stdin stays free, so the items can still be picked. An empty passphrase is refused. |
 | `--key-type <pqc\|classical>` | The export's own key: `classical` (one RSA-3072 key that signs and encrypts; any gpg opens the file) or `pqc` (post-quantum, ML-KEM-768 + ECC; opening the file needs gpg 2.5.21 or later, there too). Not given: classical, and asked when this gpg can make a post-quantum key and something else is asked too. |
 | `--key-passphrase-fd <n>` | Set a passphrase on the export's own key, from the first line of file descriptor `<n>`, instead of asking and gpg's prompt. Opening the file then needs it too. |
 | `--store-passphrase-fd <n>` | The store key's passphrase (to read the secrets), from the first line of file descriptor `<n>`, instead of gpg's prompt. See [Passphrases without a prompt](#passphrases-without-a-prompt). |
+| `--tag <tag>` | Take every item that carries the tag ([`folio tag add`](#folio-tag-add)), wherever it is in the store; a `#` in front is dropped. Its secrets go with `--secrets`. It adds to what the `<name>`s take. Can be given more than once: the items that carry any of them. See [Every item with a tag](#every-item-with-a-tag). |
 | `--use <@namespace>` | Take every item under `<@namespace>` (e.g. `@app2`, or `@app2/@prod`), named without it. Can be given more than once. See [One environment, with --use](#one-environment-with---use). Experimental: it may change. |
 | `--vars <file>` | Take the items a [vars file](#from-a-vars-file) names. Can be given more than once. See [The items a vars file names](#the-items-a-vars-file-names). |
 | `-o`, `--output <export>` | Where to write the file: a path ending in `.folio`, or a name in `FOLIO_FILE_DIR` (see [An export's path, or its name](#an-exports-path-or-its-name)). With no `-o`, Folio asks. |
@@ -2243,8 +2299,9 @@ folio export [-s|--secrets] [--to <key>|--file-passphrase-stdin|--file-passphras
 A `<name>` is a text or a secret, or a folder: every text under it, and its secrets with
 `--secrets`. With `--use`, the items under a namespace are taken, named without it, as
 [`folio exec --use`](#peel-a-namespace-with---use) does. With `--vars`, the items a vars file names
-are taken too. With no `<name>`, `--use` or `--vars`, Folio lists every item, numbered, and asks
-which ones (`1 3 5-7`, or `all`).
+are taken too. With no `<name>`, `--tag`, `--use` or `--vars`, Folio lists every item, numbered, and asks
+which ones (`1 3 5-7`, or `all`). With `--tag`, every item that carries the tag is taken too, and
+nothing is asked.
 
 When this gpg can make a post-quantum key (2.5.21 or later), Folio asks which kind the export's
 own key is: **classical** by default (Enter), as the file may be opened where gpg cannot use a
@@ -2372,6 +2429,40 @@ the file holds what feeds it:
 ```bash
 folio export -s --vars server.vars server --use @app2/@prod -o app2-prod.folio
 folio exec -s --from app2-prod.folio --vars server.vars --all -- ./deploy.sh
+```
+
+### Every item with a tag
+
+`--tag <tag>` takes every item that carries the tag, wherever it is in the store — inside a
+namespace too, under its full name — and Folio does not ask which ones. Secrets go only with
+`--secrets`, as in a folder:
+
+```bash
+folio export --tag work -o work.folio
+```
+
+```
+✓ Tags: work
+folio export: left out 1 secret(s) with tag work; add --secrets to take them.
+✓ Items: 3 (texts: 3, secrets: 0)
+    (T)@prod/server/user
+    (T)gh/user
+    (T)web/home
+```
+
+It adds to what the `<name>`s take, and does not narrow them. Given more than once, the items
+that carry any of the tags go:
+
+```bash
+folio export --tag public -o gh.folio gh               # all of gh, and every item tagged public
+folio export --tag work --tag public -o both.folio     # every item tagged work or public
+```
+
+The tags go into the file with the items, as always. When no item carries a tag, nothing is
+written:
+
+```
+folio: export: there are no items with tag nope.
 ```
 
 ### One environment, with --use

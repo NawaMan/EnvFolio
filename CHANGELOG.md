@@ -30,6 +30,14 @@ User-visible changes to EnvFolio (Folio for short). Newest first.
   tree or `--flat`, in a `<subfolder>` or an export (`--from`) too; given more than once, those
   that carry every one.
 
+- `folio exec --tag <tag>`, `folio shell --tag <tag>` and `folio export --tag <tag>`: take every
+  item that carries the tag, added to whatever else is named; given more than once, those that
+  carry any of them. Secrets still need `--secrets`. For `exec` and `shell` it is `--all` with
+  only those — outside the namespaces, and laid where it is typed among the entries, the last
+  one winning: `folio exec --tag work -- ./build.sh`. `folio export --tag work -o work.folio`
+  takes them from the whole store, namespaces too, without asking which ones. With `--from`, the
+  tags an export carries are used. Tab completes the tags.
+
 - `folio ls --use <@namespace>` (and `ls text`, `ls secret`): only what is under the namespace,
   named without it, as `exec --use` names it — with `--tag` too: `folio ls --tag public --use @local`.
 

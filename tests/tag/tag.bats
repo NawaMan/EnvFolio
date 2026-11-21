@@ -522,6 +522,12 @@ words() { "$FOLIO" __complete "$@" | tail -n +2 | cut -f1 | paste -s -d ' ' - ; 
     [ "$(words ls --tag w)" = "work" ]
     [ "$(words ls text --tag "")" = "rotate-2027 work" ]
     [ "$(words ls --t)" = "--tag" ]
+    # exec, shell and export --tag too.
+    [ "$(words exec --tag w)" = "work" ]
+    [ "$(words shell -s --tag "")" = "rotate-2027 work" ]
+    [ "$(words export --tag r)" = "rotate-2027" ]
+    [ "$(words exec --ta)" = "--tag" ]
+    [ "$(words export --ta)" = "--tag" ]
     # tag is not a kind of the actions: `folio rm <Tab>` and `folio ls <Tab>` do not offer it.
     [[ " $(words rm "") " != *" tag "* ]] || false
     [[ " $(words ls "") " != *" tag "* ]] || false

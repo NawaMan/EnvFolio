@@ -1001,7 +1001,8 @@ function store-export-usage() {
     cat <<'EOF'
 Usage: folio export [-s|--secrets] [--to <key>|--file-passphrase-stdin|--file-passphrase-fd <n>]
                     [--key-type <pqc|classical>] [--key-passphrase-fd <n>] [--store-passphrase-fd <n>]
-                    [--use <@namespace>]... [--vars <file>]... [-o|--output <export>] [<name>...]
+                    [--tag <tag>]... [--use <@namespace>]... [--vars <file>]...
+                    [-o|--output <export>] [<name>...]
 EOF
 }
 
@@ -1026,8 +1027,8 @@ A <name> is a text or secret, or a folder: every text under it, and its secrets 
 With --use @app2, every item under @app2 is taken as if @app2/ were not in its path, and the file
 has it so: @app2/@prod/server/user goes in as @prod/server/user. The <name>s and --use are laid
 in the order typed, and the last one wins where two give the same item. With --vars, the items a
-vars file names are taken too. With no <name>, --use or --vars, Folio lists every item and
-asks which ones.
+vars file names are taken too, and with --tag, every item that carries the tag. With no <name>,
+--tag, --use or --vars, Folio lists every item and asks which ones.
 
 <export> is the file's path, ending in .folio, or a name in $FOLIO_FILE_DIR: test is
 $FOLIO_FILE_DIR/test.folio. It is never inside the store, and an existing file is never replaced.
@@ -1041,8 +1042,8 @@ Options:
                       keyring (fingerprint, key id or email). Only its secret key can open it.
   --file-passphrase-stdin
                       Read the file's passphrase from the first line of stdin, instead of gpg's
-                      prompt. Not with --to. Needs a <name> or --vars. An empty passphrase is
-                      refused.
+                      prompt. Not with --to. Needs a <name>, --tag, --use or --vars. An empty
+                      passphrase is refused.
   --file-passphrase-fd <n>
                       Read the file's passphrase from the first line of file descriptor <n>,
                       e.g. --file-passphrase-fd 3 3< pass.txt. Not with --to. stdin stays free,
@@ -1059,6 +1060,9 @@ Options:
   --store-passphrase-fd <n>
                       The store key's passphrase (to read the secrets), from the first line of
                       file descriptor <n>, instead of gpg's prompt.
+  --tag <tag>         Take every item that carries the tag (see `folio tag add`), wherever it is
+                      in the store; its secrets with --secrets. Added to what the <name>s take.
+                      Can be given more than once: the items that carry any of them.
   --use <@namespace>  Take every item under <@namespace> (e.g. @app2, or @app2/@prod), named
                       without it; its secrets with --secrets. Can be given more than once.
                       Experimental: it may change in a later version.
@@ -1080,14 +1084,15 @@ EOF
 Export() {
     # Process the command-line options
     # layers: the <name>s and --use (--use=<@namespace>) in the order typed, for make-view.
-    local secrets=0 to="" passphrase_stdin=0 passphrase_fd="" key_type="" key_passphrase_fd="" target="" names=() uses=() layers=() vars_files=() arg
+    local secrets=0 to="" passphrase_stdin=0 passphrase_fd="" key_type="" key_passphrase_fd="" target="" tags=() names=() uses=() layers=() vars_files=() arg
     while (( $# > 0 )); do
         arg=$1 ; shift
         case $arg in
             -s|--secrets)       secrets=1 ;;
-            --to|-o|--output|--file-passphrase-fd|--key-passphrase-fd|--key-type|--vars|--use)
+            --to|-o|--output|--file-passphrase-fd|--key-passphrase-fd|--key-type|--vars|--use|--tag)
                                 [[ $# -gt 0 && -n $1 ]] || die "$arg needs a value."
                                 case $arg in
+                                    --tag)                clean-tag export "$1" ; tags+=("$TAG") ;;
                                     --to)                 to=$1 ;;
                                     --key-type)           key_type=$1 ;;
                                     --file-passphrase-fd) passphrase_fd=$1 ;;
@@ -1099,6 +1104,7 @@ Export() {
                                 shift ;;
             --vars=*)           read-vars-file export "${arg#*=}" ; vars_files+=("${arg#*=}") ;;
             --use=*)            arg=${arg#--use=} ; uses+=("${arg%/}") ; layers+=("--use=${arg%/}") ;;
+            --tag=*)            clean-tag export "${arg#*=}" ; tags+=("$TAG") ;;
             --to=*)             to=${arg#*=} ;;
             --key-type=*)       key_type=${arg#*=} ;;
             --output=*)         target=${arg#*=} ;;
@@ -1116,8 +1122,8 @@ Export() {
     fi
     [[ -z $to ]] || { (( ! passphrase_stdin )) && [[ -z $passphrase_fd ]] ; } \
         || die "--file-passphrase-stdin and --file-passphrase-fd are for a passphrase; a file locked --to needs none."
-    (( ! passphrase_stdin || ${#names[@]} + ${#uses[@]} + ${#vars_files[@]} > 0 )) \
-        || die "--file-passphrase-stdin needs the items named (or --use, --vars): stdin cannot also answer which ones."
+    (( ! passphrase_stdin || ${#names[@]} + ${#uses[@]} + ${#vars_files[@]} + ${#tags[@]} > 0 )) \
+        || die "--file-passphrase-stdin needs the items named (or --tag, --use, --vars): stdin cannot also answer which ones."
     [[ -z $passphrase_fd ]] || check-passphrase-fd --file-passphrase-fd "$passphrase_fd"
     [[ -z $key_passphrase_fd ]] || check-passphrase-fd --key-passphrase-fd "$key_passphrase_fd"
     [[ -z $key_passphrase_fd || $key_passphrase_fd != "$passphrase_fd" ]] \
@@ -1154,11 +1160,14 @@ EOF
     # picked from a list. With a --use, all are read from a view (make-view): the store with the
     # <name>s and --use laid over it in the order typed, the last one winning. The file has them
     # as they are named there.
-    local item texts=0 use
+    local item texts=0 use tag
     make-view export "$secrets" ${layers[@]+"${layers[@]}"}
-    if (( ${#vars_files[@]} == 0 && ${#uses[@]} == 0 )); then
+    if (( ${#vars_files[@]} + ${#uses[@]} + ${#tags[@]} == 0 )); then
         select-items export "$STORE_PATH" "$secrets" 0 "${names[@]}"
     else
+        if (( ${#tags[@]} > 0 )); then
+            show-answer "Tags" "$(printf '%s ' "${tags[@]}")"
+        fi
         if (( ${#uses[@]} > 0 )); then
             show-answer "Use" "$(printf '%s ' "${uses[@]}")"
         fi
@@ -1167,12 +1176,16 @@ EOF
             vars_list=$(printf ', %s' "${vars_files[@]}")
             show-answer "Vars files" "${vars_list#, }"
         fi
-        # The <name>s first, as select-items takes them; then each --use's; then each item the vars
-        # files name — each item once.
+        # The <name>s first, as select-items takes them; then the items that carry each --tag; then
+        # each --use's; then each item the vars files name — each item once.
         SELECTED=()
         if (( ${#names[@]} > 0 )); then
             select-items export "$STORE_PATH" "$secrets" 0 "${names[@]}"
         fi
+        for tag in ${tags[@]+"${tags[@]}"}; do
+            tagged-items export "$STORE_PATH" "$secrets" "$tag"
+            select-more "${TAGGED_ITEMS[@]}"
+        done
         for use in ${uses[@]+"${uses[@]}"}; do
             used-items export "$secrets" "$use"
             select-more "${USED_ITEMS[@]}"
@@ -1214,7 +1227,7 @@ EOF
     # Asked (classical or post-quantum) when this gpg can make a post-quantum key, and the items,
     # the file or the lock are asked too: a run with no prompts stays one.
     local key_algo=default asked=$ask_lock
-    (( ${#names[@]} + ${#uses[@]} + ${#vars_files[@]} > 0 )) || asked=1
+    (( ${#names[@]} + ${#uses[@]} + ${#vars_files[@]} + ${#tags[@]} > 0 )) || asked=1
     [[ -n $target ]] || (( passphrase_stdin )) || asked=1
     if [[ $key_type == pqc ]]; then
         key_algo=pqc
@@ -1960,6 +1973,21 @@ function select-items() {
         done
         for i in $picks; do SELECTED+=("${items[i - 1]}") ; done
     fi
+}
+
+# tagged-items <how> <root> <secrets:0|1> <tag>: for export --tag — TAGGED_ITEMS gets every item
+# file under <root> that carries <tag>, wherever it is; its secrets only with <secrets>, as in a
+# folder. Stop when there is none.
+function tagged-items() {
+    local how=$1 root=$2 secrets=$3 tag=$4 item left=0
+    TAGGED_ITEMS=()
+    while IFS= read -r item; do
+        if [[ $item == *.gpg ]] && (( ! secrets )); then left=$(( left + 1 )) ; continue ; fi
+        TAGGED_ITEMS+=("${item#"$root"/}")
+    done < <(TAGS_WANTED=$tag entries-under 1 "$root")
+    (( ${#TAGGED_ITEMS[@]} > 0 || ! left )) || die "$how: only secrets with tag $tag ($left); add --secrets to take them."
+    (( ${#TAGGED_ITEMS[@]} > 0 ))           || die "$how: there are no items with tag $tag."
+    (( ! left )) || printf "folio %s: left out %d secret(s) with tag %s; add --secrets to take them.\n" "$how" "$left" "$tag" >&2
 }
 
 # parse-picks <count> <answer>: the numbers (1..<count>) an answer like "1 3 5-7" or "all" picks,
@@ -3332,7 +3360,7 @@ function tag-ls-help() {
 Usage: folio tag ls
 
 List every tag in the store, with how many names carry it. The items that carry a tag:
-`folio ls --tag <tag>`.
+`folio ls --tag <tag>`; exec, shell and export take them with --tag <tag>.
 
 Options:
   -h, --help          Show this help and stop.
@@ -3458,6 +3486,28 @@ function tags-of() {
     local file=${2:-$STORE_PATH}/$1.tags
     [[ -f $file ]] || return 0
     LC_ALL=C grep -E '^[A-Za-z0-9_][A-Za-z0-9_.-]*$' "$file" | LC_ALL=C sort -u
+}
+
+# has-all-tags <path> <tags>: whether the item at <path> — its file without .txt or .gpg — carries
+# every one of <tags> (one per line, a # in front dropped). Only its .tags file is read.
+function has-all-tags() {
+    local has tag
+    has=$EXTRA_LINE$(tags-of "${1##*/}" "${1%/*}")$EXTRA_LINE
+    while IFS= read -r tag; do
+        [[ $has == *"$EXTRA_LINE${tag#\#}$EXTRA_LINE"* ]] || return 1
+    done <<< "$2"
+}
+
+# For exec, shell and export --tag <tag>, which takes every item that carries the tag: while
+# TAGS_WANTED is set — for the one call that takes them, `TAGS_WANTED=<tag> add-folder …` —
+# entries-under gives only the items that carry it. TAGS_SAID is how messages say it then:
+# " with tag work".
+TAGS_WANTED="" TAGS_SAID=""
+
+# clean-tag <command> <word>: TAG gets <word> as a tag, a # in front dropped; die when it is none.
+function clean-tag() {
+    TAG=${2#\#}
+    is-tag "$TAG" || die "$1: '$2' is not a tag."
 }
 
 # tags-line <name>: the tags of <name> on one line, "db, prod" — or "none".
@@ -3826,7 +3876,8 @@ function drop-orphan-note() {
 function run-exec-help() {
     cat <<'HELP'
 Usage: folio exec [-s|--secrets] [-a|--all] [-n|--names|--debug|--confirm] [--plain]
-                  [--use <@namespace>]... [--vars <file>]... [--store-passphrase-fd <n>]
+                  [--tag <tag>]... [--use <@namespace>]... [--vars <file>]...
+                  [--store-passphrase-fd <n>]
                   [--from <export> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]]
                   <entry>... -- <command> [<arg>...]
 
@@ -3840,8 +3891,9 @@ the variable's name. Otherwise the name comes from the entry's path: a top folde
 gh/api-key -> GH_API_KEY).
 --use @prod takes every entry under @prod as if @prod/ were not in its path: @prod/server/user
 is server/user, everywhere, also to a vars file. Only namespaces peel, from the front:
---use @app2/@prod. The entries, --all and --use are taken in the order typed, and the last one
-wins: in `server --use @prod`, @prod's server/user wins; in `--use @prod server`, server's does.
+--use @app2/@prod. The entries, --all, --tag and --use are taken in the order typed, and the
+last one wins: in `server --use @prod`, @prod's server/user wins; in `--use @prod server`,
+server's does.
 Then each VAR=<name>, wherever it is typed, takes <name> as it is after them (else from the
 store) and overrides them all; its entry keeps its own variable too.
 
@@ -3867,6 +3919,10 @@ Options:
                       unlocked, before the yes; a --from file is opened first, to show its names.
       --plain         With --names, --debug or --confirm: mark secrets (S) and texts (T), with no
                       colour, even on a screen.
+  --tag <tag>         Load every entry outside the @namespaces that carries the tag (see
+                      `folio tag add`), where it is typed among the entries: --all, with only
+                      those. Can be given more than once: the entries that carry any of them.
+                      <entry> is then optional.
   --use <@namespace>  Take every entry under <@namespace> (e.g. @prod, or @app2/@prod), named
                       without it, where it is typed among the entries; can be given more than
                       once. <entry> is then optional.
@@ -3896,7 +3952,8 @@ HELP
 function run-shell-help() {
     cat <<'HELP'
 Usage: folio shell [-s|--secrets] [-a|--all] [-n|--names|--debug|--confirm] [--plain]
-                   [--use <@namespace>]... [--vars <file>]... [--store-passphrase-fd <n>]
+                   [--tag <tag>]... [--use <@namespace>]... [--vars <file>]...
+                   [--store-passphrase-fd <n>]
                    [--from <export> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]] <entry>...
 
 Start your shell ($SHELL) with entries from the store as environment variables, and say which
@@ -3915,6 +3972,8 @@ Options:
                       unlocked, before the yes; a --from file is opened first, to show its names.
       --plain         With --names, --debug or --confirm: mark secrets (S) and texts (T), with no
                       colour, even on a screen.
+  --tag <tag>         Load every entry outside the @namespaces that carries the tag, as in
+                      `folio exec`; can be given more than once. <entry> is then optional.
   --use <@namespace>  Take every entry under <@namespace>, named without it, as in `folio exec`;
                       can be given more than once. <entry> is then optional.
                       Experimental: it may change in a later version.
@@ -3946,7 +4005,8 @@ ENTRIES_IN="the store"
 # while reading ever sees a value already loaded. With --from, the entries come from an export
 # file instead of the store, which is then not needed at all.
 function exec-with-entries() {
-    # The entries, --all ("") and --use (--use=<@namespace>) in the order typed: the last one wins.
+    # The entries, --all (""), --use (--use=<@namespace>) and --tag (--tag=<tag>) in the order
+    # typed: the last one wins.
     local how=$1 secrets=0 only_names=0 debug=0 confirm=0 dashes=0 from_file="" passphrase_fd="" key_passphrase_fd="" entries=() arg ; shift
     while (( $# > 0 )); do
         arg=$1 ; shift
@@ -3958,10 +4018,11 @@ function exec-with-entries() {
             --debug)      debug=1 ;;
             --confirm)    debug=1 confirm=1 ;;
             --plain)      PLAIN=1 ;;
-            --from|--file-passphrase-fd|--key-passphrase-fd|--vars|--use)
+            --from|--file-passphrase-fd|--key-passphrase-fd|--vars|--use|--tag)
                           [[ $# -gt 0 && -n $1 ]] || die "$arg needs a value."
                           case $arg in
                               --from) from_file=$1 ;;
+                              --tag)  clean-tag "$how" "$1" ; entries+=("--tag=$TAG") ;;
                               --vars) read-vars-file "$how" "$1" ;;
                               --use)  entries+=("--use=${1%/}") ;;
                               --key-passphrase-fd) key_passphrase_fd=$1 ;;
@@ -3970,6 +4031,7 @@ function exec-with-entries() {
                           shift ;;
             --vars=*)          read-vars-file "$how" "${arg#*=}" ;;
             --use=*)           arg=${arg#--use=} ; entries+=("--use=${arg%/}") ;;
+            --tag=*)           clean-tag "$how" "${arg#*=}" ; entries+=("--tag=$TAG") ;;
             --from=*)          from_file=${arg#*=} ;;
             --file-passphrase-fd=*) passphrase_fd=${arg#*=} ;;
             --key-passphrase-fd=*)  key_passphrase_fd=${arg#*=} ;;
@@ -3978,7 +4040,7 @@ function exec-with-entries() {
             *)            entries+=("$arg") ;;
         esac
     done
-    local from_usage="[--use <@namespace>]... [--vars <file>]... [--store-passphrase-fd <n>] [--from <export> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]]"
+    local from_usage="[--tag <tag>]... [--use <@namespace>]... [--vars <file>]... [--store-passphrase-fd <n>] [--from <export> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]]"
     (( ! (only_names && debug) )) \
         || die "$how: --names only shows the names; --debug and --confirm show them and go on."
     # --debug and --confirm show the names on stderr: marked for that screen, not stdout's.
@@ -4217,7 +4279,7 @@ function resolve-entries() {
     local how=$1 secrets=$2 entry var name exp_vars=() exp_files=() i
     shift 2
     for entry in "$@"; do
-        [[ $entry == --use=* ]] && continue
+        [[ $entry == --use=* || $entry == --tag=* ]] && continue
         is-explicit "$entry" || continue
         var=${entry%%=*} name=${entry#*=}
         [[ $var =~ $VAR_NAME_PATTERN ]] || die "$how: '$var' is not a valid variable name."
@@ -4232,6 +4294,13 @@ function resolve-entries() {
         if [[ $entry == --use=* ]]; then
             start-selection "--use ${entry#--use=}" "${entry#--use=}"
             add-used "$how" "$secrets" "${entry#--use=}"
+            continue
+        fi
+        if [[ $entry == --tag=* ]]; then
+            # As --all, with only the entries that carry the tag.
+            start-selection "--tag ${entry#--tag=}"
+            TAGS_WANTED=${entry#--tag=} TAGS_SAID=" with tag ${entry#--tag=}" STORE_PATH=$source \
+                add-folder "$how" "$secrets" ""
             continue
         fi
         is-explicit "$entry" && continue
@@ -4264,8 +4333,8 @@ function add-folder() {
         (( secrets )) || note-skipped-secrets "$how" "$entry" "$found"
     fi
     if (( ! found )); then
-        [[ -n $entry ]] && die "$how: '$entry' has no entries to load."
-        die "$how: $ENTRIES_IN has no entries to load."
+        [[ -n $entry ]] && die "$how: '$entry' has no entries$TAGS_SAID to load."
+        die "$how: $ENTRIES_IN has no entries$TAGS_SAID to load."
     fi
 }
 
@@ -4294,7 +4363,7 @@ function used-items() {
         [[ -f $STORE_PATH/$file ]] && USED_ITEMS+=("$file")
     done < <(entries-under "$secrets" "$VIEW_SOURCE/$prefix")
     (( secrets )) || STORE_PATH=$VIEW_SOURCE note-skipped-secrets "$how" "$prefix" "${#USED_ITEMS[@]}"
-    (( ${#USED_ITEMS[@]} > 0 )) || die "$how: '$prefix' has no entries to load."
+    (( ${#USED_ITEMS[@]} > 0 )) || die "$how: '$prefix' has no entries$TAGS_SAID to load."
 }
 
 # --- The view (--use) ---------------------------------------------------------
@@ -4304,6 +4373,7 @@ function used-items() {
 # source (the store, or an opened export), its .git left out, with each layer laid over it in the
 # order given, the last one winning:
 #   ""                 (--all) every item outside the @namespaces, where it is
+#   --tag=<tag>        every item outside the @namespaces that carries the tag, where it is
 #   <name>, <folder>   the item, or every item under the folder, where it is
 # A VAR=<name> is no layer: it picks from the view once it is made (resolve-entries).
 #   --use=<@ns>[/<@ns>]...  every item under it, with that much peeled off the front of its path
@@ -4336,6 +4406,14 @@ function make-view() {
                 name=${file#"$VIEW_SOURCE"/} name=${name%.*}
                 lay-in-view "$view" "$name" "${name#"$prefix"/}"
             done < <(entries-under "$secrets" "$VIEW_SOURCE/$prefix")
+            continue
+        fi
+        if [[ $entry == --tag=* ]]; then
+            while IFS= read -r file; do
+                file=${file#"$VIEW_SOURCE"/}
+                [[ $file != @* ]] || continue
+                lay-in-view "$view" "${file%.*}" "${file%.*}"
+            done < <(TAGS_WANTED=${entry#--tag=} entries-under "$secrets" "$VIEW_SOURCE")
             continue
         fi
         is-explicit "$entry" && continue
@@ -4458,25 +4536,36 @@ function entry-file() {
 }
 
 # entries-under <secrets> <folder>: the texts (and with secrets, the secrets) under <folder>,
-# sorted, leaving out hidden ones like .git.
+# sorted, leaving out hidden ones like .git. While TAGS_WANTED is set, only those that carry every
+# tag given.
 function entries-under() {
-    local kinds=(-name '*.txt')
+    local kinds=(-name '*.txt') file
     (( $1 )) && kinds+=(-o -name '*.gpg')
-    find "$2" -mindepth 1 -name '.*' -prune -o -type f \( "${kinds[@]}" \) -print | LC_ALL=C sort
+    find "$2" -mindepth 1 -name '.*' -prune -o -type f \( "${kinds[@]}" \) -print | LC_ALL=C sort \
+        | if [[ -z $TAGS_WANTED ]]; then
+            cat
+        else
+            while IFS= read -r file; do
+                ! has-all-tags "${file%.*}" "$TAGS_WANTED" || printf '%s\n' "$file"
+            done
+        fi
 }
 
 # note-skipped-secrets <how> <folder> <found:0|1>: say on stderr how many secrets were left out
 # for want of --secrets (names and values never shown). With nothing else found, that is the error.
-# An empty <folder> is the store's root (--all), its @namespaces left out.
+# An empty <folder> is the store's root (--all), its @namespaces left out. With --tag, only the
+# secrets that carry the tags count.
 function note-skipped-secrets() {
     local how=$1 entry=$2 found=$3 file count=0 where
     while IFS= read -r file; do
-        [[ -n $entry || ${file#"$STORE_PATH"/} != @* ]] && count=$(( count + 1 ))
+        [[ -n $entry || ${file#"$STORE_PATH"/} != @* ]] || continue
+        [[ -z $TAGS_WANTED ]] || has-all-tags "${file%.gpg}" "$TAGS_WANTED" || continue
+        count=$(( count + 1 ))
     done < <(find "$STORE_PATH${entry:+/${entry%/}}" -mindepth 1 -name '.*' -prune -o -type f -name '*.gpg' -print)
     (( count > 0 )) || return 0
     where="under '$entry'" ; [[ -n $entry ]] || where="in $ENTRIES_IN"
-    (( found )) || die "$how: only secrets $where ($count); add --secrets to load them."
-    printf "folio %s: left out %d secret(s) %s; add --secrets to load them.\n" "$how" "$count" "$where" >&2
+    (( found )) || die "$how: only secrets$TAGS_SAID $where ($count); add --secrets to load them."
+    printf "folio %s: left out %d secret(s)%s %s; add --secrets to load them.\n" "$how" "$count" "$TAGS_SAID" "$where" >&2
 }
 
 # add-derived <how> <file>: name <file> by its path — @nawa/gh/token.gpg -> GH_TOKEN, / - and .
@@ -4860,12 +4949,12 @@ function check-vars-entries() {
                 name=${name%/\*}
                 [[ -d $STORE_PATH/$name ]] || die "$how: ${VARS_AT[i]}: '$name' is not a folder in $ENTRIES_IN."
                 # The file asks for all of it: secrets without --secrets stop it (typed, they are
-                # left out with a note).
+                # left out with a note). With --tag, only the ones that carry the tags.
                 if (( ! secrets )); then
-                    count=$(find "$STORE_PATH/$name" -mindepth 1 -name '.*' -prune -o -type f -name '*.gpg' -print | wc -l)
+                    count=$(entries-under 1 "$STORE_PATH/$name" | grep -c '\.gpg$')
                     count=${count//[[:blank:]]/}
                     (( count == 0 )) \
-                        || die "$how: ${VARS_AT[i]}: '$name' has $count secret(s); add --secrets to load them."
+                        || die "$how: ${VARS_AT[i]}: '$name' has $count secret(s)$TAGS_SAID; add --secrets to load them."
                 fi
             else
                 [[ -f $STORE_PATH/$name.txt || -f $STORE_PATH/$name.gpg ]] \
@@ -5723,17 +5812,12 @@ function list-store() {
 # files, names only — the items under STORE_PATH that carry every one of <tags> (one per line, a #
 # in front dropped). Nothing is read but the .tags files. Removed when Folio exits.
 function only-tagged() {
-    local wanted=$1 view file name has tag all
+    local wanted=$1 view file name
     view=$(umask 077 && mktemp -d) || die "Cannot make a temporary folder."
     remove-on-exit "$view"
     while IFS= read -r file; do
         name=${file#"$STORE_PATH"/}
-        has=$EXTRA_LINE$(tags-of "${name%.*}")$EXTRA_LINE
-        all=1
-        while IFS= read -r tag; do
-            [[ $has == *"$EXTRA_LINE${tag#\#}$EXTRA_LINE"* ]] || all=0
-        done <<< "$wanted"
-        (( all )) || continue
+        has-all-tags "${file%.*}" "$wanted" || continue
         mkdir -p "$view/$(dirname "$name")"
         : > "$view/$name"
     done < <(find -L "$STORE_PATH" -mindepth 1 -name '.*' -prune -o -type f \( -name '*.gpg' -o -name '*.txt' \) -print)
