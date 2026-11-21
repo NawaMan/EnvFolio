@@ -1,13 +1,11 @@
 # syntax=codingbooth/boothfile:1
-# Configured by: booth config --no-tui --overwrite --variant terminal --set silence-build --set writable-booth --select host-agent/tty-owner/apt-pkg:bats,pass,shellcheck,tmux/gh+token/bash/git-credential/shell-history/homebrew/envfolio+store-host/claude-code+auto-accept+credential+settings-cache
+# Configured by: booth config --no-tui --overwrite --variant terminal --set silence-build --set writable-booth --select tty-owner/apt-pkg:bats,pass,shellcheck,tmux/gh+token/bash/git-credential/shell-history/homebrew/gnupg/envfolio/claude-code+auto-accept+credential+settings-cache
 
 env APT_SNAPSHOT=20261025T000000Z
 
 arg APT_PKGS=bats,pass,shellcheck,tmux
 arg CLAUDE_CODE_VERSION=latest
 arg ENVFOLIO_VERSION=2.0.0
-arg FOLIO_HOST_GNUPG=~/.gnupg
-arg FOLIO_HOST_STORE=~/.folio
 arg GH_VERSION=latest
 arg GNU_BASH_VERSION=3.2.57
 
