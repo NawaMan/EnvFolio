@@ -85,6 +85,8 @@ claude *args:
 #   just ready <name>     booth: closes gaps (tests, docs), runs the tests, commits.
 #                         Then you test it (set Testing by hand if you like).
 #   just land <name>      host: rebases onto main, merges, removes the worktree and the branch.
+#   just close <name>     host, no Claude: removes the worktree and the branch of a todo that ended
+#                         without land (done elsewhere, rejected, cancelled …), never forced.
 #   just discuss <name>   booth, interactive, any status: catches up and talks it over with you;
 #                         adjusts the plan or the code, and sets whatever status you name
 #                         (Backlog, Rejected, …) — only when you ask.
@@ -182,6 +184,39 @@ land name *words:
     rc=0; "${cmd[@]}" 2>"$err" || rc=$?
     (( rc == 0 )) || cat "$err" >&2
     exit "$rc"
+
+# Remove todo worktree <name> and its branch, on the host, never forced: for a todo that ended without land.
+[positional-arguments]
+close name:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [[ {{in_booth}} == true ]]; then
+        echo "just close: run it on the host; a booth sees neither main's checkout nor the worktree's folder" >&2; exit 2
+    fi
+    name=$(just todo-worktree "$1")
+    path=$(git worktree list --porcelain | awk -v b="branch refs/heads/$name" '/^worktree /{p=substr($0,10)} $0==b{print p; exit}')
+    # The exact commands that would throw the work away, for the user to run by hand if they mean it.
+    by-hand() {
+        echo "To throw it away anyway, by hand:" >&2
+        if [[ -n $path ]]; then echo "  git worktree remove --force $(printf '%q' "$path")" >&2; fi
+        echo "  git branch -D $name" >&2
+    }
+    # Commits not in main: refuse before touching anything, so the worktree stays for a look.
+    commits=$(git log --oneline "main..$name")
+    if [[ -n $commits ]]; then
+        echo "just close: branch $name has commits not in main; nothing removed:" >&2
+        printf '%s\n' "$commits" | sed 's/^/  /' >&2
+        by-hand; exit 1
+    fi
+    if [[ -n $path ]]; then
+        if ! git worktree remove "$path"; then
+            echo "just close: git kept the worktree $path; its changes:" >&2
+            git -C "$path" status --short | sed 's/^/  /' >&2
+            by-hand; exit 1
+        fi
+        echo "Removed worktree $path"
+    fi
+    git branch -d "$name"
 
 # Discuss todo worktree <name> with Claude, interactively, at any status: adjust the plan or the code, set any status you name.
 [positional-arguments]
