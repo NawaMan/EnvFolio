@@ -74,3 +74,58 @@ claude *args:
     rc=0; "${booth[@]}" "${quoted[@]}" 2>"$err" || rc=$?
     (( rc == 0 )) || cat "$err" >&2
     exit "$rc"
+
+# A todo's work, in three steps, on a git worktree named after it: its number, a dash, a word or
+# two (`299-note` is todo #299). The todo's text, in the todos app, is the task.
+#   just start <name>  in the booth: starts on the todo, and stops at a question or when the change
+#                      is ready for you to test. Interactive; leave and come back with
+#                      `just claude --worktree <name> -c`.
+#   just ready <name>  in the booth, once you have tested it: closes gaps (tests, docs), runs the
+#                      tests, commits on the branch.
+#   just land <name>   on the host: rebases onto main, merges, removes the worktree and the branch,
+#                      marks the todo done.
+# Words after the name are added to Claude's prompt. quiet=true works for ready and land as for
+# `just claude` (start is interactive).
+
+# Start todo #N on worktree <N-word>, in the booth, interactively (the worktree is made if missing, and kept).
+[positional-arguments]
+start name *words:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    [[ $1 =~ ^([0-9]+)-[A-Za-z0-9] ]] || { echo "just start: name it <todo number>-<word>, like 299-note" >&2; exit 2; }
+    name=$1 todo=${BASH_REMATCH[1]}; shift
+    prompt="Work on todo #$todo; read it with the todos MCP tools. This booth runs on git worktree and branch '$name', made for this todo: it is the linked checkout AGENTS.md asks for (Rule 0b), so work here and on this branch, not on main. Follow AGENTS.md: post the proposal and wait for my answer before editing. Once the change is implemented and its checks pass, commit it on this branch and stop, telling me it is ready for me to test.${*:+ $*}"
+    exec just claude --worktree "$name" --worktree-keep "$prompt"
+
+# Prepare worktree <N-word> to land, in the booth: close gaps in tests and docs, run the tests, commit.
+[positional-arguments]
+ready name *words:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    [[ $1 =~ ^([0-9]+)-[A-Za-z0-9] ]] || { echo "just ready: name it <todo number>-<word>, like 299-note" >&2; exit 2; }
+    name=$1 todo=${BASH_REMATCH[1]}; shift
+    prompt="Todo #$todo, on this branch '$name': I have tested it and the work is done; don't ask me anything. Prepare it for landing. Audit it against the todo (read it with the todos MCP tools) and AGENTS.md for gaps: tests that should exist, docs (README, MANUAL, CHANGELOG, help text, tab completion) not updated, experiments not concluded, accidental changes. Fill them, run shellcheck and just test-all, and commit on this branch. A test that fails the same way on main is not from this branch: name it and carry on. Do not rebase, merge or change main: 'just land $name' does that on the host. End with what you changed and the test results.${*:+ $*}"
+    exec just quiet={{quiet}} claude --worktree "$name" --worktree-keep -p "$prompt"
+
+# Land worktree <N-word> into main, on the host: rebase, merge, remove the worktree and branch, mark the todo done.
+[positional-arguments]
+land name *words:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    [[ $1 =~ ^([0-9]+)-[A-Za-z0-9] ]] || { echo "just land: name it <todo number>-<word>, like 299-note" >&2; exit 2; }
+    name=$1 todo=${BASH_REMATCH[1]}; shift
+    if [[ {{in_booth}} == true ]]; then
+        echo "just land: run it on the host; a booth sees neither main's checkout nor the worktree's folder" >&2; exit 2
+    fi
+    # The worktree of branch <name>, wherever it is (worktree/<name>, or ../<repo>.worktrees/<name> from booth --worktree).
+    path=$(git worktree list --porcelain | awk -v b="branch refs/heads/$name" '/^worktree /{p=substr($0,10)} $0==b{print p; exit}')
+    [[ -n $path ]] || { echo "just land: no worktree has branch $name checked out" >&2; exit 2; }
+    prompt="Land todo #$todo: branch '$name' into main, as the land skill (.claude/skills/land/SKILL.md) says. I have tested it and the work is done, and 'just ready' has closed its gaps; don't ask me anything. Its worktree is $path (not under worktree/). If the preflight still finds gaps, stop and list them. Otherwise rebase it onto main there, and if the rebase changed anything run just test-all again; then merge, remove that worktree and delete the branch. Never --force: if git refuses, stop and tell me why. Do not push. Last, mark todo #$todo done with the todos MCP tools; if they cannot be reached, say so.${*:+ $*}"
+    cmd=(claude --add-dir "$path" --permission-mode acceptEdits
+         --allowedTools 'Bash(git *)' 'Bash(just *)' 'Bash(./booth *)' mcp__todos
+         -p "$prompt")
+    if [[ {{quiet}} != true ]]; then exec "${cmd[@]}"; fi
+    umask 077; err=$(mktemp); trap 'rm -f "$err"' EXIT
+    rc=0; "${cmd[@]}" 2>"$err" || rc=$?
+    (( rc == 0 )) || cat "$err" >&2
+    exit "$rc"
