@@ -37,8 +37,8 @@ jobs:
     # The limit is there to stop a hang (see test-linux-bash5). macOS runners are slower, and vary:
     # serially the whole suite took 11 to 18 minutes there in October 2026 and about 35 in
     # November, with no test slower on Linux. Run 3 at a time (bats --jobs, GNU parallel) it took
-    # 12 to 16 (#162).
-    timeout-minutes: 25
+    # 12 to 16 on one runner, and about 30 on a slower one an hour later (#162).
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
       # coreutils for `timeout` only (some tests use it), linked alone so the tests still run
@@ -101,8 +101,8 @@ jobs:
     # The limit is there to stop a hang (see test-linux-bash5). macOS runners are slower, and vary:
     # serially the whole suite took 11 to 18 minutes there in October 2026 and about 35 in
     # November, with no test slower on Linux. Run 3 at a time (bats --jobs, GNU parallel) it took
-    # 12 to 16 (#162).
-    timeout-minutes: 25
+    # 12 to 16 on one runner, and about 30 on a slower one an hour later (#162).
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
       - name: Install dependencies
