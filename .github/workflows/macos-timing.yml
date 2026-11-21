@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [macos-latest, macos-15]
+        image: [macos-latest]
     runs-on: ${{ matrix.image }}
     timeout-minutes: 45
     steps:
@@ -53,15 +53,24 @@ jobs:
           t bash -c 'printf "s3cr3t\n" | ./folio insert secret -m web/github'
           t ./folio show secret web/github
           gpgconf --kill all; rm -rf "$d"
-      - name: text + secret tests, serial
+      # Where `folio init` spends its ~3 s on macOS (315 ms on Linux): each traced line with a
+      # timestamp, then the steps that took longest. No secret is involved: a no-passphrase test key.
+      - name: Trace folio init
         if: ${{ !cancelled() }}
         run: |
-          s=$(date +%s)
-          PATH="/bin:$PATH" perl -e '$SIG{PIPE} = "DEFAULT"; exec @ARGV' bats --timing tests/text tests/secret | tail -n 3
-          echo "serial: $(( $(date +%s) - s )) s"
-      - name: text + secret tests, --jobs 3
-        if: ${{ !cancelled() }}
-        run: |
-          s=$(date +%s)
-          PATH="/bin:$PATH" perl -e '$SIG{PIPE} = "DEFAULT"; exec @ARGV' bats --jobs 3 tests/text tests/secret | tail -n 3
-          echo "jobs 3: $(( $(date +%s) - s )) s"
+          d=$(mktemp -d)
+          export HOME="$d/home" GNUPGHOME="$d/g" FOLIO_STORE_DIR="$d/store" XDG_STATE_HOME="$d/state"
+          export PASSWORD_STORE_DIR="$FOLIO_STORE_DIR" GIT_CONFIG_GLOBAL="$d/no-gitconfig" GIT_CONFIG_NOSYSTEM=1
+          mkdir -p "$HOME" && mkdir -m 700 "$GNUPGHOME"
+          gpg --batch --passphrase '' --quick-generate-key "T <t@example.com>" default default never 2>/dev/null
+          export PS4='+ $(gdate +%s%3N) ${FUNCNAME[0]:-main}:${LINENO} '
+          /bin/bash -x ./folio init --key t@example.com </dev/null >/dev/null 2>"$d/trace" || true
+          echo "lines traced: $(wc -l < "$d/trace")"
+          awk '$1=="+" || $1 ~ /^\++$/ { t=$2; if (p) printf "%6d ms  %s\n", t-p, prev; p=t; prev=$0 }' "$d/trace" \
+              | sort -rn | head -n 25 | cut -c1-200
+          # The same with no tracing overhead, three times.
+          for i in 1 2 3; do
+              rm -rf "$FOLIO_STORE_DIR"; s=$(gdate +%s%3N)
+              PS4='+ ' ./folio init --key t@example.com </dev/null >/dev/null 2>&1; echo "init: $(( $(gdate +%s%3N) - s )) ms"
+          done
+          gpgconf --kill all; rm -rf "$d"
