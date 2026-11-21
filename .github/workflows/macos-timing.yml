@@ -1,0 +1,67 @@
+# Experiment for todo #162 (macOS tests 1.4–2.5× slower since the November runner image).
+# Not for main: times gpg itself, then part of the suite serially and with --jobs 3, on the
+# current image and the older macos-15 one.
+name: macOS timing (experiment)
+
+on:
+  push:
+    branches: ['162-macos-timing']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  timing:
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [macos-latest, macos-15]
+    runs-on: ${{ matrix.image }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install dependencies
+        run: |
+          brew update
+          brew install bats-core pass coreutils gnupg parallel
+          mkdir -p "$RUNNER_TEMP/bin"
+          ln -s "$(brew --prefix)/bin/gtimeout" "$RUNNER_TEMP/bin/timeout"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: Runner
+        run: |
+          sw_vers; sysctl -n machdep.cpu.brand_string hw.ncpu hw.memsize
+          echo "ImageVersion=${ImageVersion:-?}"
+          gpg --version | head -n 1
+      # One test's fixed costs, in a throwaway GNUPGHOME: key, agent, a store.
+      - name: gpg and folio, one at a time
+        run: |
+          ms() { perl -MTime::HiRes=time -e 'printf "%d\n", time*1000'; }
+          t() { local s e; s=$(ms); "$@" >/dev/null 2>&1; e=$(ms); echo "$(( e - s )) ms  $*"; }
+          d=$(mktemp -d)
+          export HOME="$d/home" GNUPGHOME="$d/g" FOLIO_STORE_DIR="$d/store" XDG_STATE_HOME="$d/state"
+          export PASSWORD_STORE_DIR="$FOLIO_STORE_DIR" GIT_CONFIG_GLOBAL="$d/no-gitconfig" GIT_CONFIG_NOSYSTEM=1
+          mkdir -p "$HOME" && mkdir -m 700 "$GNUPGHOME"
+          for i in 1 2 3 4 5; do
+              t gpg --batch --passphrase '' --quick-generate-key "T$i <t$i@example.com>" default default never
+          done
+          for i in 1 2 3; do t gpgconf --kill all; t gpg-connect-agent /bye; done
+          t cp -R "$GNUPGHOME" "$d/g-copy"
+          t ./folio init --key t1@example.com
+          t ./folio insert text -t jane web/user
+          t ./folio show text web/user
+          t bash -c 'printf "s3cr3t\n" | ./folio insert secret -m web/github'
+          t ./folio show secret web/github
+          gpgconf --kill all; rm -rf "$d"
+      - name: text + secret tests, serial
+        if: ${{ !cancelled() }}
+        run: |
+          s=$(date +%s)
+          PATH="/bin:$PATH" perl -e '$SIG{PIPE} = "DEFAULT"; exec @ARGV' bats --timing tests/text tests/secret | tail -n 3
+          echo "serial: $(( $(date +%s) - s )) s"
+      - name: text + secret tests, --jobs 3
+        if: ${{ !cancelled() }}
+        run: |
+          s=$(date +%s)
+          PATH="/bin:$PATH" perl -e '$SIG{PIPE} = "DEFAULT"; exec @ARGV' bats --jobs 3 tests/text tests/secret | tail -n 3
+          echo "jobs 3: $(( $(date +%s) - s )) s"
