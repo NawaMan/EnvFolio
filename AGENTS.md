@@ -300,7 +300,8 @@ Starting style, not law — deviate explicitly (say so and why) rather than sile
   `wl-copy` / `xclip`, whichever `pass` itself uses on the machine — for `folio text show -c`.
   The script's `ensure-requirements` is the authoritative list. Anything
   beyond bash builtins and POSIX coreutils needs a stated reason and the user's OK — flag it with
-  the **⚠ New dependency** line in the proposal (Rule 0), never slip it in. Dev-only tools (`shellcheck`, `bats`, `tmux`) are fine.
+  the **⚠ New dependency** line in the proposal (Rule 0), never slip it in. Dev-only tools (`shellcheck`, `bats`, `tmux`, and GNU `parallel` for
+  `bats --jobs` on macOS CI) are fine.
 - **The approved-dependency list lives in the script itself**, in `ensure-requirements` — one
   place that is both the record and the check.
 
