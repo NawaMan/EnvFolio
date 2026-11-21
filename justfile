@@ -93,8 +93,8 @@ claude *args:
 # All but discuss run unattended (claude -p). Words after the name are added to the prompt.
 # quiet=true works for all but discuss, as for `just claude`.
 
-# The worktree branch for a todo name: `299-note` as given, or `299` for the one worktree whose
-# branch is 299 or 299-<word>. With `new`, a name no worktree has yet is fine (pickup makes it).
+# The branch for a todo name: `299-note` as given, or `299` for the one branch named 299 or
+# 299-<word>. With `new`, a name no branch has yet is fine (pickup makes it).
 [private]
 [positional-arguments]
 todo-worktree name *new:
@@ -102,7 +102,9 @@ todo-worktree name *new:
     set -euo pipefail
     name=$1
     [[ $name =~ ^[0-9]+(-[A-Za-z0-9].*)?$ ]] || { echo "name it <todo number> or <todo number>-<word>, like 299 or 299-note" >&2; exit 2; }
-    branches=$(git worktree list --porcelain | sed -n 's|^branch refs/heads/||p')
+    # Local branches, so a branch whose worktree is gone counts too: booth --worktree makes it again
+    # on that branch.
+    branches=$(git for-each-ref --format='%(refname:short)' refs/heads)
     if [[ $name =~ ^[0-9]+$ ]]; then
         found=$(printf '%s\n' "$branches" | grep -E "^$name(-|$)" || true)
     else
@@ -111,8 +113,8 @@ todo-worktree name *new:
     case $(printf '%s' "$found" | grep -c .) in
         1) echo "$found" ;;
         0) if [[ ${2:-} == new ]]; then echo "$name"; exit 0; fi
-           echo "no worktree for $name; just pickup $name makes it" >&2; exit 2 ;;
-        *) echo "more than one worktree for $name; name one of:" >&2; printf '%s\n' "$found" | sed 's/^/  /' >&2; exit 2 ;;
+           echo "no branch or worktree for $name; just pickup $name makes them" >&2; exit 2 ;;
+        *) echo "more than one branch for $name; name one of:" >&2; printf '%s\n' "$found" | sed 's/^/  /' >&2; exit 2 ;;
     esac
 
 # Run a todo step: `todo-step <name> <interactive|unattended> <prompt>`, in the booth on that
@@ -170,7 +172,7 @@ land name *words:
     todo=${name%%-*}
     # The worktree of branch <name>, wherever it is (worktree/<name>, or ../<repo>.worktrees/<name> from booth --worktree).
     path=$(git worktree list --porcelain | awk -v b="branch refs/heads/$name" '/^worktree /{p=substr($0,10)} $0==b{print p; exit}')
-    [[ -n $path ]] || { echo "just land: no worktree has branch $name checked out" >&2; exit 2; }
+    [[ -n $path ]] || { echo "just land: branch $name has no worktree; just discuss $name makes it again" >&2; exit 2; }
     prompt="Land todo #$todo: branch '$name' into main, as the land skill (.claude/skills/land/SKILL.md) says. Read the todo with the todos MCP tools (get_item #$todo); its status must be WAIT_FOR_TESTING or TESTING, otherwise say what it is and stop. I have tested it and the work is done, and 'just ready' has closed its gaps; don't ask me anything. Its worktree is $path (not under worktree/). Set the status to LANDING. If the preflight still finds gaps, stop and list them. Otherwise rebase it onto main there, and if the rebase changed anything run just test-all again; then merge. Before removing the worktree, read its task-memory.md (gitignored, the steps' working notes), if there is one, and add what is worth keeping to the todo's '## Work log'; then remove that worktree and delete the branch. Never --force: if git refuses, stop and tell me why. Do not push. Last, set the status to DONE and add the merge commit under '## Work log' in its description (update_item replaces the description whole: keep what is there). If something stopped the land, keep LANDING and log why. If the todos tools cannot be reached, say so.${*:+ $*}"
     cmd=(claude --add-dir "$path" --permission-mode acceptEdits
          --allowedTools 'Bash(git *)' 'Bash(just *)' 'Bash(./booth *)' mcp__todos
