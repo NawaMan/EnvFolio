@@ -115,7 +115,7 @@ EOF
 # --- Commands and options --------------------------------------------------------
 
 @test "completion: commands, the action first, then the kinds it is for" {
-    [ "$(words "")" = "init,path,backup,restore,export,import,ls,info,tag,find,grep,show,insert,edit,generate,rm,mv,cp,check,exec,shell,completion,version,help" ]
+    [ "$(words "")" = "init,path,backup,restore,export,import,ls,info,tag,note,find,grep,show,insert,edit,generate,rm,mv,cp,check,exec,shell,completion,version,help" ]
     words "" >/dev/null ; [ "$how" = words ]
     [ "$(words sh)" = "show,shell" ]
     [ "$(words show "")" = "text,secret" ]

@@ -15,6 +15,17 @@ User-visible changes to EnvFolio (Folio for short). Newest first.
   `backup` holds them, and `export` puts them in the file for `import` to add to the store. Tab
   completes the commands, the names and the tags.
 
+- Notes: `folio note set <name>` puts your own words on a text or a secret — what it is for, how
+  to renew it — written as a git commit message is: a first line of plain text (80 characters at
+  most), an empty line, then the rest, as long as wanted, in Markdown. Give it with `-m` (more
+  than once: paragraphs) or on stdin; `folio note edit` opens it in `$EDITOR`, `folio note show`
+  prints it, `folio note rm` takes it off, and `folio note ls` lists the items that have one,
+  with its first line. `folio info` shows the first line too. It is kept plain in `<name>.note`
+  next to the item (not signed, no passphrase needed — never put a secret in one), shared by a
+  text and a secret of the same name, and goes with the item: `mv` and `cp` carry it, `rm`
+  removes it, `backup` holds it, and `export` puts it in the file for `import` to put in the
+  store. Tab completes the commands and the names.
+
 - `folio ls --tag <tag>` (and `ls text`, `ls secret`): only the items that carry the tag, as a
   tree or `--flat`, in a `<subfolder>` or an export (`--from`) too; given more than once, those
   that carry every one.

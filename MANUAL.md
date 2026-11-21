@@ -8,6 +8,8 @@ keyboard has a matching test in `tests/` named `MANUAL: <command> — <example>`
 - **Start:** [`help`](#folio-help) · [`init`](#folio-init) · [`path`](#folio-path) ·
   [`ls`](#folio-ls) · [`info`](#folio-info)
 - **Tags:** [`tag add`](#folio-tag-add) · [`tag rm`](#folio-tag-rm) · [`tag ls`](#folio-tag-ls)
+- **Notes:** [`note set`](#folio-note-set) · [`note edit`](#folio-note-edit) ·
+  [`note show`](#folio-note-show) · [`note rm`](#folio-note-rm) · [`note ls`](#folio-note-ls)
 - **Texts:** [`ls text`](#folio-ls-text) · [`find text`](#folio-find-text) ·
   [`grep text`](#folio-grep-text) · [`show text`](#folio-show-text) ·
   [`insert text`](#folio-insert-text) · [`edit text`](#folio-edit-text) ·
@@ -236,7 +238,7 @@ terminal (it writes 🔑, asks where the cursor went, and wipes the line), so a 
 draw them keeps (S)/(T), as does `TERM=linux` or a locale that is not UTF-8. Sent to a pipe or a
 file, with `TERM=dumb`, or with `--plain`, there are neither colours nor emoji (`NO_COLOR` takes
 only the colours away) — what scripts and the examples below see.
-Signatures (`.txt.sig`) and tags (`.tags`) are left out.
+Signatures (`.txt.sig`), tags (`.tags`) and notes (`.note`) are left out.
 
 ```
 folio ls [--flat] [--plain] [--tag <tag>]... [--use <@namespace>] [--from <export> [--file-passphrase-fd <n>] [--key-passphrase-fd <n>]] [<subfolder>]
@@ -374,8 +376,9 @@ folio info <name>
 
 For either kind: the file and its size, the variable `exec` and `shell` give it, when it was
 created and last modified, how many commits changed it and the names it had before an `mv`, and
-whether it has changes not yet committed, and its tags ([`folio tag add`](#folio-tag-add)) or
-`none`. The times come from the store's git history (every
+whether it has changes not yet committed, its tags ([`folio tag add`](#folio-tag-add)) or
+`none`, and the first line of its note ([`folio note set`](#folio-note-set)) — with how many
+lines follow it — or `none`. The times come from the store's git history (every
 change is a commit), in local time, not from the file: `restore` and `import` make files anew.
 A text also shows who signed it and when, and whether the signature verifies with the store's key
 — a text changed outside Folio is reported, not refused as `show text` does. A secret shows the
@@ -401,6 +404,7 @@ gh/token  (secret)
   Changes:      2 commits;  was named: github/token
   Uncommitted:  no
   Tags:         rotate-2027, work
+  Note:         Renew before March 2027  (+4 lines: folio note show gh/token)
   Encrypted to: 3965E1B66F05078C Jane Doe <jane@example.com>   (the store's key; never expires)
 ```
 
@@ -420,6 +424,7 @@ gh/user  (text)
   Changes:      1 commit
   Uncommitted:  no
   Tags:         none
+  Note:         none
   Signed by:    Jane Doe <jane@example.com>, 2026-09-02 14:10 — valid
 ```
 
@@ -546,6 +551,196 @@ folio tag ls
 ```
 rotate-2027 (1)
 work (3)
+```
+
+---
+
+## `folio note set`
+
+Puts a note on a text or a secret: your own words about it — what it is for, where it came from,
+how to renew it. It is written as a git commit message is:
+
+- the **first line**: plain text, 80 characters at most — what `info` and `note ls` show;
+- then an empty line;
+- then **the rest**: as long as you want, in Markdown.
+
+```
+folio note set [-m|--message <text>]... <name>
+```
+
+| Option | Meaning |
+| --- | --- |
+| `-m`, `--message <text>` | The note, instead of stdin: its first line. Given more than once, each further one is a paragraph of the rest. |
+| `-h`, `--help` | Show the options and stop. Works without a store. |
+
+Without `--message`, the note is read from stdin, to its end (at a terminal: Ctrl-D). The note
+the item had is replaced. Empty lines before and after the note are dropped, and an empty line is
+put after the first line when there is none. A first line longer than 80 characters, or with a tab
+or another control character in it, is refused, and nothing is changed.
+
+The note is kept in `<name>.note` next to the item and committed to the store's git history. It
+is **plain and not signed**, as the names are: never put a secret in one. No passphrase is needed.
+A text and a secret of the same name share their note. `<name>` is one item, not a folder.
+[`folio info`](#folio-info) shows its first line, [`folio note show`](#folio-note-show) all of it.
+
+The note goes with the item: `mv` and `cp` (of a text or a secret) carry it to the new name, in
+place of the note that one had; `rm` removes it once no item of that name is left. `folio backup`
+holds it, and `folio export` puts it in the file, plain, for `folio import` to put in the store in
+place of the note the item has there. Notes are not loaded by `exec` and `shell`.
+
+### Put a note on an item
+
+```bash
+folio note set gh/token -m "Renew before March 2027"
+folio info gh/token
+```
+
+```
+gh/token  (secret)
+  ...
+  Note:         Renew before March 2027
+  ...
+```
+
+### A first line, then the rest in Markdown
+
+```bash
+folio note set gh/token <<'NOTE'
+Renew before March 2027
+
+1. Open **Settings → Developer settings → Tokens**.
+2. Regenerate, scope `repo`.
+
+Ask Ana when it fails.
+NOTE
+folio info gh/token
+```
+
+```
+gh/token  (secret)
+  ...
+  Note:         Renew before March 2027  (+4 lines: folio note show gh/token)
+  ...
+```
+
+### The note goes into an export, and comes back with import
+
+```bash
+folio export --secrets -o items.folio gh     # here
+folio import --all items.folio               # there
+folio note ls
+```
+
+```
+gh/token: Renew before March 2027
+```
+
+### The note is in a backup, and comes back with restore
+
+```bash
+folio backup /media/usb
+# ... on the new machine:
+folio restore /media/usb/backup-…--folio.tar.gz
+folio info gh/token                          # its Note: line is as it was
+```
+
+---
+
+## `folio note edit`
+
+Opens the note of a text or a secret in `$EDITOR` (`vi` if unset) — or an empty file, when it has
+none — and keeps what you save: a first line of plain text, 80 characters at most; an empty line;
+then the rest, in Markdown. Saved unchanged or empty, nothing is changed (to take a note off:
+[`folio note rm`](#folio-note-rm)). When the first line is too long, Folio says so and asks
+whether to edit it again.
+
+```
+folio note edit <name>
+```
+
+| Option | Meaning |
+| --- | --- |
+| `-h`, `--help` | Show the options and stop. Works without a store. |
+
+### Write or change a note in your editor
+
+```bash
+folio note edit gh/token
+```
+
+---
+
+## `folio note show`
+
+Prints the note of a text or a secret, all of it, as it was written.
+
+```
+folio note show <name>
+```
+
+| Option | Meaning |
+| --- | --- |
+| `-h`, `--help` | Show the options and stop. Works without a store. |
+
+### Show a note
+
+```bash
+folio note show gh/token
+```
+
+```
+Renew before March 2027
+
+1. Open **Settings → Developer settings → Tokens**.
+2. Regenerate, scope `repo`.
+
+Ask Ana when it fails.
+```
+
+---
+
+## `folio note rm`
+
+Takes the note off a text or a secret. It stays in the store's git history.
+
+```
+folio note rm <name>
+```
+
+| Option | Meaning |
+| --- | --- |
+| `-h`, `--help` | Show the options and stop. Works without a store. |
+
+### Take a note off
+
+```bash
+folio note rm gh/token
+```
+
+---
+
+## `folio note ls`
+
+Lists every text and secret that has a note, with the note's first line. A note left behind by an
+item removed outside Folio (with `pass rm`) is not listed.
+
+```
+folio note ls
+```
+
+| Option | Meaning |
+| --- | --- |
+| `-h`, `--help` | Show the options and stop. Works without a store. |
+
+### List the notes
+
+```bash
+folio note ls
+```
+
+```
+gh/token: Renew before March 2027
+web/home: The site's address
 ```
 
 ---
