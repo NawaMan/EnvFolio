@@ -1,18 +1,13 @@
-# Configured by: booth config --no-tui --overwrite --variant terminal --set silence-build --set writable-booth --select host-agent/tty-owner/apt-pkg:bats,pass,shellcheck,tmux/gh+token/bash/git-credential/shell-history/homebrew/envfolio+store-host/claude-code+auto-accept+credential+settings-cache
+# Configured by: booth config --no-tui --overwrite --variant terminal --set silence-build --set writable-booth --select tty-owner/apt-pkg:bats,pass,shellcheck,tmux/gh+token/bash/git-credential/shell-history/homebrew/envfolio/claude-code+auto-accept+credential+settings-cache
 
 variant = "terminal"
 
 run-args = [
-    "-v", "${XDG_RUNTIME_DIR}/gnupg/S.gpg-agent:${XDG_RUNTIME_DIR}/gnupg/S.gpg-agent",
     "-e", "GH_TOKEN",
     "-e", "GITHUB_TOKEN",
     "-e", "GH_ENTERPRISE_TOKEN",
     "-e", "GH_HOST",
     "-v", "~/.gitconfig:/etc/cb-home-seed/.gitconfig:ro",
-    "-v", "~/.folio:/home/coder/.folio",
-    "-v", "~/.gnupg:/home/coder/.gnupg",
-    "-e", "FOLIO_STORE_DIR=/home/coder/.folio",
-    "-e", "CB_FOLIO_HOST=1",
     "-v", "~/.claude.json:/etc/cb-home-seed/.claude.json:ro",
     "-v", "~/.claude/.credentials.json:/etc/cb-home/.claude/.credentials.json:ro"
 ]
