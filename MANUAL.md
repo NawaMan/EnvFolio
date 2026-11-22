@@ -1029,6 +1029,9 @@ folio generate text --as <uuid|hex|int> [-i|--in-place|-f|--force] [--store-pass
 There is no `-c`/`--clip`. **An existing text is only asked about at a terminal.** From a script or
 pipe, it is overwritten (the old one stays in the git history).
 
+**Only the value goes to stdout.** The line `The generated … for <name> is:` goes to stderr (and
+`-q` leaves it out), so a script gets the value alone: `port=$(folio generate text --as int 1024-65535 app/port)`.
+
 ### Generate a text
 
 ```bash
@@ -1373,9 +1376,9 @@ folio edit secret web/github
 ## `folio generate secret`
 
 Generates a random secret, saves and commits it, then prints it, or copies it with `-c`. It is
-`pass generate` — or with `--as`, a UUID, hex or a number that Folio makes and gives to
-`pass insert` (see [Generate a UUID, hex or a number](#generate-a-uuid-hex-or-a-number)). How it
-was made is kept with it, so [`folio rotate`](#folio-rotate) can make a new one.
+made as `pass generate` makes one (the same characters and default length) — or with `--as`, a
+UUID, hex or a number (see [Generate a UUID, hex or a number](#generate-a-uuid-hex-or-a-number)) —
+and Folio gives it to `pass insert`. How it was made is kept with it, so [`folio rotate`](#folio-rotate) can make a new one.
 
 ```
 folio generate secret [-n|--no-symbols] [-c|--clip] [-i|--in-place|-f|--force] [--store-passphrase-fd <n>] <name> [<length>]
@@ -1395,6 +1398,9 @@ folio generate secret --as <uuid|hex|int> [-c|--clip] [-i|--in-place|-f|--force]
 
 `pass`'s `--qrcode` is not offered (`-q` is [`--quiet`](#just-the-output)). **An existing secret is only asked about at a
 terminal.** From a script or pipe, it is overwritten (the old one stays in the git history).
+
+**Only the value goes to stdout.** The line `The generated … for <name> is:` goes to stderr (and
+`-q` leaves it out), so a script gets the value alone: `key=$(folio generate secret --as hex app/key)`.
 
 ### Generate a secret
 
@@ -1434,6 +1440,8 @@ characters. What the type takes comes before `<name>`:
 | `uuid` | `3:<namespace>:<name>` or `5:<namespace>:<name>` | The name-based UUID of `<name>` (MD5 for 3, SHA-1 for 5). `<namespace>` is `dns`, `url`, `oid`, `x500` or a UUID. Always the same for the same two, so it is never rotated. |
 | `hex` | `[<bytes>]`: 1 to 1024, default 32 | That many random bytes, written as hex (twice as many digits). |
 | `int` | `<min>-<max>`: whole numbers from 0 | A whole number from `<min>` to `<max>`, both included, each as likely. |
+
+The `<name>` is always needed: `--as uuid 4` alone is refused, not saved as a UUID named `4`.
 
 ```bash
 folio generate text   --as uuid 7 order/id
@@ -2843,7 +2851,7 @@ export FOLIO_FRESH_PASSPHRASE=1     # 0, or unset, to turn it off
 
 What a command gives you — a text, a secret, a list — goes to **stdout**; everything Folio says
 about it goes to **stderr**: the picture of an export's locks, the note before gpg asks for a
-passphrase, `Copied … to clipboard`, `folio shell: loaded …`, warnings and errors. So
+passphrase, `The generated … is:`, `Copied … to clipboard`, `folio shell: loaded …`, warnings and errors. So
 `user=$(folio show text --from app2-prod gh/user)` gets only the text, and `2>/dev/null` hides
 the rest.
 

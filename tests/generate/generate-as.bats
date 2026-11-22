@@ -1,5 +1,7 @@
 #!/usr/bin/env bats
 
+bats_require_minimum_version 1.5.0    # run --separate-stderr
+
 # folio generate text|secret --as uuid|hex|int, and the recipe each generate keeps — through the
 # real ./folio, against a throwaway GPG home and store; the value makers also by sourcing it.
 
@@ -33,6 +35,18 @@ make-store() {
 recipe() { cat "$FOLIO_STORE_DIR/$2.$1.gen" ; }
 
 UUID_RE='^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+
+@test "generate --as: only the value on stdout, for a text and a secret" {
+    make-store
+    run --separate-stderr "$FOLIO" generate text --as int 1-6 app/die < /dev/null
+    [ "$status" -eq 0 ]
+    [ "$output" = "$(cat "$FOLIO_STORE_DIR/app/die.txt")" ]
+    [ "$stderr" = "The generated text for app/die is:" ]
+    run --separate-stderr "$FOLIO" generate secret --as hex 8 app/key < /dev/null
+    [ "$status" -eq 0 ]
+    [ "$output" = "$(pass show app/key)" ]
+    [ "$stderr" = "The generated secret for app/key is:" ]
+}
 
 @test "MANUAL: generate text — a UUID" {
     make-store
@@ -98,6 +112,10 @@ UUID_RE='^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
 --as int 0-99999999999999999 x|too wide
 --as uuid -n x|--no-symbols is for characters
 --as uuid a b c|Usage: folio generate text
+--as uuid 4|no <name>: '4' is the argument of --as uuid
+--as uuid 5:dns:example.com|no <name>: '5:dns:example.com' is the argument
+--as hex 16|no <name>: '16' is the argument of --as hex
+--as int 1-6|no <name>: '1-6' is the argument of --as int
 EOF
     [ -z "$(find "$FOLIO_STORE_DIR" -name '*.txt' -o -name '*.gen')" ]
 }

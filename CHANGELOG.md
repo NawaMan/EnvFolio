@@ -11,9 +11,10 @@ User-visible changes to EnvFolio (Folio for short). Newest first.
   7 hold the time (in seconds, with 3 random digits as milliseconds) and a random node, never the
   MAC address; `3:<namespace>:<name>` and `5:<namespace>:<name>` give the name-based ones (the
   namespace `dns`, `url`, `oid`, `x500` or a UUID). `--as hex [<bytes>]` gives random bytes as hex
-  (32 by default), and `--as int <min>-<max>` a whole number in that range. `generate secret` with
-  `--as` makes the value in Folio and gives it to `pass insert`; without, it is `pass generate`
-  as before. `generate secret` now also takes short options run together (`-nf`) itself.
+  (32 by default), and `--as int <min>-<max>` a whole number in that range. A lone word that would be
+  the type's argument (`--as uuid 4`) is refused as a missing name, not taken as one. `generate secret` with
+  `--as` makes the value in Folio and gives it to `pass insert`. `generate secret` now also takes
+  short options run together (`-nf`) itself.
 
 - `folio rotate [text|secret] <name>`: a new value for an item made by `folio generate`, made
   the way it was made then; only the first line is replaced, and a secret's can be copied with
@@ -56,6 +57,14 @@ User-visible changes to EnvFolio (Folio for short). Newest first.
 
 - `folio ls --use <@namespace>` (and `ls text`, `ls secret`): only what is under the namespace,
   named without it, as `exec --use` names it — with `--tag` too: `folio ls --tag public --use @local`.
+
+### Changed
+
+- `folio generate text|secret` (and `folio rotate`) print only the value on stdout; the line
+  `The generated … for <name> is:` goes to stderr, and `-q` leaves it out. So `id=$(folio generate text --as uuid app/id)`
+  gets the UUID alone. `generate secret` without `--as` no longer runs `pass generate`: Folio makes
+  the characters the same way (from `/dev/urandom`, the same set and length) and gives them to
+  `pass insert`, so its message is Folio's and its commit is pass's "Add given password for …".
 
 ## 2.1.0 — 2026-11-19
 

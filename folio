@@ -2464,7 +2464,9 @@ function generate-text() {
     else
         printf '%s\n' "$text" | save-text "$name" "Add generated text for $name." "$recipe" || exit 1
     fi
-    printf 'The generated text for %s is:\n%s\n' "$name" "$text"
+    # The heading is a note (stderr; none with -q): stdout holds the value alone.
+    note "The generated text for $name is:"
+    printf '%s\n' "$text"
 }
 
 #== Generating values ==========================================================
@@ -2514,6 +2516,10 @@ function generate-args() {
     if (( with_as )); then
         (( ! nosymbols )) || die "$command: --no-symbols is for characters, not with --as."
         GEN_NAME=${args[${#args[@]} - 1]}
+        # One word that is also an argument of the type (--as uuid 4) is a forgotten name, not one.
+        if (( ${#args[@]} == 1 )) && ( as-recipe "$command" "$as" "$GEN_NAME" ) >/dev/null 2>&1; then
+            die "$command: no <name>: '$GEN_NAME' is the argument of --as $as — --as $as $GEN_NAME <name>."
+        fi
         local argument="" ; (( ${#args[@]} == 1 )) || argument=${args[0]}
         GEN_RECIPE=$(as-recipe "$command" "$as" "$argument") || exit 1
     else
@@ -3306,8 +3312,8 @@ EOF
 
 # folio generate secret [-n|--no-symbols] [-c|--clip] [-i|--in-place|-f|--force] <name> [<length>]
 # folio generate secret --as <uuid|hex|int> [-c|--clip] [-i|--in-place|-f|--force] [<argument>] <name>
-# Characters go to `pass generate`; --as values Folio makes and gives to `pass insert`. Either way
-# the recipe is kept, for `folio rotate`. No --qrcode: it needs qrencode.
+# Folio makes the value — characters as `pass generate` would, or by --as — and gives it to
+# `pass insert`. The recipe is kept, for `folio rotate`. No --qrcode: it needs qrencode.
 SecretGenerate() {
     generate-args "generate secret" secret "$@"
     (( ! GEN_HELP )) || { secret-generate-help ; return 0 ; }
@@ -3319,37 +3325,29 @@ SecretGenerate() {
 # to the clipboard; then keep the recipe, in a commit of its own.
 function generate-secret() {
     local command=$1 name=$2 recipe=$3 inplace=$4 force=$5 to_clip=$6 file=$STORE_PATH/$2.gpg
-    if [[ $recipe == "chars "* ]]; then
-        # As pass makes it: its own prompt, message and clipboard. The set is the recipe's, so a
-        # rotate makes it the same way whatever PASSWORD_STORE_CHARACTER_SET says now.
-        local rest=${recipe#chars } opts=()
-        (( ! inplace )) || opts+=(--in-place)
-        (( ! force ))   || opts+=(--force)
-        (( ! to_clip )) || opts+=(--clip)
-        drop-typeahead
-        PASSWORD_STORE_CHARACTER_SET=${rest#* } \
-            pass generate ${opts[@]+"${opts[@]}"} -- "$name" "${rest%% *}" || exit 1
-    else
-        local value rest=""
-        if [[ -e $file ]] && (( ! inplace && ! force )) && [[ -t 0 ]]; then
-            confirm "An entry already exists for $name. Overwrite it?" || exit 1
-        fi
-        value=$(recipe-value "$recipe") || die "$command: could not generate a secret from /dev/urandom."
-        if (( inplace )) && [[ -f $file ]]; then
-            # Its other lines are kept: read first, so a failed read never loses them.
-            rest=$(pass show -- "$name") || die "$command: could not read '$name' to keep its other lines."
-            if [[ $rest == *$'\n'* ]]; then rest=${rest#*$'\n'} ; else rest="" ; fi
-        fi
-        { printf '%s\n' "$value" ; [[ -z $rest ]] || printf '%s\n' "$rest" ; } \
-            | pass insert --multiline --force -- "$name" >/dev/null || exit 1
-        unset rest
-        if (( to_clip )); then
-            pass show --clip -- "$name" || exit 1
-        else
-            printf 'The generated secret for %s is:\n%s\n' "$name" "$value"
-        fi
-        unset value
+    local value rest=""
+    if [[ -e $file ]] && (( ! inplace && ! force )) && [[ -t 0 ]]; then
+        confirm "An entry already exists for $name. Overwrite it?" || exit 1
     fi
+    # Characters too are Folio's (as pass makes them: tr -dc over /dev/urandom), so only the value
+    # goes to stdout. The set is the recipe's, whatever PASSWORD_STORE_CHARACTER_SET says now.
+    value=$(recipe-value "$recipe") || die "$command: could not generate a secret from /dev/urandom."
+    if (( inplace )) && [[ -f $file ]]; then
+        # Its other lines are kept: read first, so a failed read never loses them.
+        rest=$(pass show -- "$name") || die "$command: could not read '$name' to keep its other lines."
+        if [[ $rest == *$'\n'* ]]; then rest=${rest#*$'\n'} ; else rest="" ; fi
+    fi
+    { printf '%s\n' "$value" ; [[ -z $rest ]] || printf '%s\n' "$rest" ; } \
+        | pass insert --multiline --force -- "$name" >/dev/null || exit 1
+    unset rest
+    if (( to_clip )); then
+        pass show --clip -- "$name" || exit 1
+    else
+        # The heading is a note (stderr; none with -q): stdout holds the value alone.
+        note "The generated secret for $name is:"
+        printf '%s\n' "$value"
+    fi
+    unset value
     save-recipe gpg "$name" "$recipe"
     commit-tags "Keep how $name is generated."
 }

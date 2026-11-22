@@ -1,5 +1,7 @@
 #!/usr/bin/env bats
 
+bats_require_minimum_version 1.5.0    # run --separate-stderr
+
 # folio generate text, through the real ./folio, against a throwaway GPG home and store.
 
 setup() {
@@ -39,6 +41,18 @@ make-store() {
     [ "${lines[1]}" = "$text" ]
     [ "$("$FOLIO" show text id/session)" = "$text" ]
     [ "$(git -C "$FOLIO_STORE_DIR" log -1 --format=%s)" = "Add generated text for id/session." ]
+}
+
+@test "generate text: only the value on stdout, the heading on stderr; -q leaves the heading out" {
+    make-store
+    run --separate-stderr "$FOLIO" generate text -n id/session 12 < /dev/null
+    [ "$status" -eq 0 ]
+    [ "$output" = "$(cat "$FOLIO_STORE_DIR/id/session.txt")" ]
+    [ "$stderr" = "The generated text for id/session is:" ]
+    run --separate-stderr "$FOLIO" -q generate text -f id/session < /dev/null
+    [ "$status" -eq 0 ]
+    [ "$output" = "$(cat "$FOLIO_STORE_DIR/id/session.txt")" ]
+    [ -z "$stderr" ]
 }
 
 @test "generate text: 25 characters by default, symbols allowed" {

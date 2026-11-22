@@ -1,5 +1,7 @@
 #!/usr/bin/env bats
 
+bats_require_minimum_version 1.5.0    # run --separate-stderr
+
 # folio generate secret, through the real ./folio, against a throwaway GPG home and store.
 
 setup() {
@@ -63,6 +65,24 @@ EOF
     local value ; value=$(pass show api)
     [[ $value =~ ^[A-Za-z0-9]{12}$ ]] || false
     [[ $output == *"$value"* ]] || false
+}
+
+@test "generate secret: only the value on stdout, the heading on stderr; -q leaves the heading out" {
+    make-store
+    run --separate-stderr "$FOLIO" generate secret -n api 12 < /dev/null
+    [ "$status" -eq 0 ]
+    [ "$output" = "$(pass show api)" ]
+    [ "$stderr" = "The generated secret for api is:" ]
+    run --separate-stderr "$FOLIO" --quiet generate secret -f api < /dev/null
+    [ "$status" -eq 0 ]
+    [ "$output" = "$(pass show api)" ]
+    [ -z "$stderr" ]
+}
+
+@test "generate secret: the set comes from PASSWORD_STORE_CHARACTER_SET, as pass generate's" {
+    make-store
+    PASSWORD_STORE_CHARACTER_SET='ab' "$FOLIO" generate secret api 40 < /dev/null >/dev/null
+    [[ $(pass show api) =~ ^[ab]{40}$ ]] || false
 }
 
 @test "generate secret: 25 characters by default" {
