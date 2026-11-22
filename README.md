@@ -135,6 +135,8 @@ accident.
 | `folio tag add` / `rm` / `ls` | Your own labels on items, like hashtags — kept plain, shown by `info`, listed by `ls --tag <tag>`, picked by `exec`, `shell` and `export --tag <tag>`, and carried by `mv`, `cp`, `backup` and `export` |
 | `folio note set` / `edit` / `show` / `rm` / `ls` | Your own words about an item, written like a git commit message: a first line (80 characters at most), then Markdown — kept plain, shown by `info`, and carried by `mv`, `cp`, `backup` and `export` |
 | `folio <action> text\|secret` | `show`, `insert`, `edit`, `generate`, `rm`, `mv`, `cp`, `find` (by name), `grep` (by value) |
+| `folio generate text\|secret --as uuid\|hex\|int` | A UUID (any version), random hex or a number in a range, instead of random characters |
+| `folio rotate [text\|secret] <name>` | A new value for a generated item, made the way it was made then (kept in `<name>.txt.gen` / `.gpg.gen`) |
 | `folio exec` | Run a command with items as environment variables |
 | `folio shell` | Start a shell with items as environment variables |
 | `folio check vars` | Check how vars files are written |

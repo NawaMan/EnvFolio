@@ -93,6 +93,22 @@ left-clean() {
     left-clean
 }
 
+@test "export, import: the recipe of a generated item goes with it, so it can be rotated there" {
+    make-store
+    "$FOLIO" generate text   --as int 1-6 gen/dice < /dev/null >/dev/null
+    "$FOLIO" generate secret --as hex 8   gen/key  < /dev/null >/dev/null
+    "$FOLIO" export -o "$SANDBOX/out/items.folio" --file-passphrase-stdin gen/dice gen/key < <(printf 'p\n') >/dev/null 2>&1
+    go-there
+    run "$FOLIO" import --all --key server@example.com --file-passphrase-stdin "$(export-file)" < <(printf 'p\n')
+    [ "$status" -eq 0 ]
+    [ "$(cat "$FOLIO_STORE_DIR/gen/dice.txt.gen")" = "int 1-6" ]
+    [ "$(cat "$FOLIO_STORE_DIR/gen/key.gpg.gen")"  = "hex 8" ]
+    [ -z "$(git -C "$FOLIO_STORE_DIR" status --porcelain)" ]
+    run "$FOLIO" rotate gen/key < /dev/null
+    [ "$status" -eq 0 ]
+    [[ $("$FOLIO" show secret gen/key) =~ ^[0-9a-f]{16}$ ]] || false
+}
+
 @test "MANUAL: export — lock it to the server's public key" {
     make-store
     GNUPGHOME="$SANDBOX/there-gnupg" gpg --batch --passphrase '' \

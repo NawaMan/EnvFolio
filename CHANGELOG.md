@@ -6,6 +6,22 @@ User-visible changes to EnvFolio (Folio for short). Newest first.
 
 ### Added
 
+- `folio generate text|secret --as <type>`: a value other than random characters, its argument
+  before the name. `--as uuid [<version>]` gives a UUID of any version — 4 by default; 1, 2, 6 and
+  7 hold the time (in seconds, with 3 random digits as milliseconds) and a random node, never the
+  MAC address; `3:<namespace>:<name>` and `5:<namespace>:<name>` give the name-based ones (the
+  namespace `dns`, `url`, `oid`, `x500` or a UUID). `--as hex [<bytes>]` gives random bytes as hex
+  (32 by default), and `--as int <min>-<max>` a whole number in that range. `generate secret` with
+  `--as` makes the value in Folio and gives it to `pass insert`; without, it is `pass generate`
+  as before. `generate secret` now also takes short options run together (`-nf`) itself.
+
+- `folio rotate [text|secret] <name>`: a new value for an item made by `folio generate`, made
+  the way it was made then; only the first line is replaced, and a secret's can be copied with
+  `-c`. Every `generate` now keeps how it made the value — its recipe — in `<name>.txt.gen` (a
+  text) or `<name>.gpg.gen` (a secret): one line, plain, never the value. It goes with the item
+  (`mv`, `cp`, `rm`, `backup`, `export`/`import`) and `folio info` shows it. Refused for an item
+  with no recipe, and for a name-based UUID, which is always the same.
+
 - Tags: `folio tag add <name> <tag>...` puts your own labels on a text or a secret, like hashtags
   (letters, digits, `_`, `-` and `.`; a `#` in front is dropped), `folio tag rm` takes them off,
   and `folio tag ls` lists every tag with how many names carry it. `<name>` can be a folder: every

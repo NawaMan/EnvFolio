@@ -66,8 +66,9 @@ Main() {
     # --store-passphrase-fd <n> means the same for every command that may need the store key's
     # passphrase, so it is taken here; require-store unlocks the key with it.
     case "$category ${1:-}" in
-        "backup "*|"export "*|"import "*|"exec "*|"shell "*|"text insert"|"text edit"|"text generate"|\
-        "secret show"|"secret grep"|"secret edit"|"secret generate")
+        "backup "*|"export "*|"import "*|"exec "*|"shell "*|"rotate "*|"text insert"|"text edit"|\
+        "text generate"|"text rotate"|"secret show"|"secret grep"|"secret edit"|"secret generate"|\
+        "secret rotate")
             take-store-passphrase-fd "$@"
             set -- "${ARGS[@]}" ;;
     esac
@@ -85,6 +86,7 @@ Main() {
         info)    Info    "$@" ;;
         tag)     Tag     "$@" ;;
         note)    Note    "$@" ;;
+        rotate)  Rotate  "$@" ;;
         exec)    Exec    "$@" ;;
         shell)   Shell   "$@" ;;
         completion) Completion "$@" ;;
@@ -95,7 +97,7 @@ Main() {
                  case " $* " in *" -h "*|*" --help "*) kinds-help "$category" ; return 0 ;; esac
                  die "$category: a text or a secret? \`folio $category text …\` or \`folio $category secret …\`." ;;
         check)   die "check: check what? \`folio check vars <file>…\`." ;;
-        "")      echo    "Usage: folio <init|path|backup|restore|export|import|text|secret|vars|ls|info|tag|note|exec|shell|completion|version|help> [args...]" >&2 ; return 1 ;;
+        "")      echo    "Usage: folio <init|path|backup|restore|export|import|text|secret|vars|ls|info|tag|note|rotate|exec|shell|completion|version|help> [args...]" >&2 ; return 1 ;;
         *)       echo    "folio: unknown command: $category" >&2 ; return 1 ;;
     esac
 }
@@ -127,6 +129,7 @@ Help() {
         "note show")       note-show-help       ;;
         "note rm")         note-rm-help         ;;
         "note ls")         note-ls-help         ;;
+        "rotate")          rotate-help          ;;
         "exec")            run-exec-help        ;;
         "shell")           run-shell-help       ;;
         "completion")      completion-help      ;;
@@ -137,6 +140,7 @@ Help() {
         "text insert")     text-insert-help     ;;
         "text edit")       text-edit-help       ;;
         "text generate")   text-generate-help   ;;
+        "text rotate")     text-rotate-help     ;;
         "text rm")         text-rm-help         ;;
         "text mv")         text-mv-help         ;;
         "text cp")         text-cp-help         ;;
@@ -147,6 +151,7 @@ Help() {
         "secret insert")   secret-insert-help   ;;
         "secret edit")     secret-edit-help     ;;
         "secret generate") secret-generate-help ;;
+        "secret rotate")   secret-rotate-help   ;;
         "secret rm")       secret-rm-help       ;;
         "secret mv")       secret-mv-help       ;;
         "secret cp")       secret-cp-help       ;;
@@ -200,6 +205,9 @@ Commands:
   edit secret       Edit a secret in $EDITOR
   generate text     Generate a random text
   generate secret   Generate a random secret
+  rotate            Make a new value for a generated text or secret, the way it was made
+  rotate text       Make a new value for a generated text
+  rotate secret     Make a new value for a generated secret
   rm text           Remove a text
   rm secret         Remove a secret
   mv text           Rename or move a text
@@ -241,7 +249,7 @@ EXTRA_LINE=$'\n'
 # a command still works.
 function is-action-first() {
     case $2 in
-        text|secret) [[ " ls find grep show insert edit generate rm mv cp " == *" $1 "* ]] ;;
+        text|secret) [[ " ls find grep show insert edit generate rotate rm mv cp " == *" $1 "* ]] ;;
         vars)        [[ $1 == check ]] ;;
         *)           return 1 ;;
     esac
@@ -1383,6 +1391,8 @@ EOF
         [[ -z $(tags-of "$name") ]] || tags-of "$name" > "$pack/store/$name.tags"
         # Its note too, plain as in the store.
         [[ -z $(note-subject "$name") ]] || clean-note < "$STORE_PATH/$name.note" > "$pack/store/$name.note"
+        # And its recipe, plain as in the store, so it can be rotated where it is imported.
+        [[ -z $(recipe-of "${item##*.}" "$name") ]] || recipe-of "${item##*.}" "$name" > "$out.gen"
         show-answer "Copied" "$(item-label "$item")"
     done
 
@@ -1722,7 +1732,7 @@ EOF
     require-store
 
     section "Import the items (gpg may ask for your store key's passphrase)"
-    local secrets=0 skipped=0
+    local secrets=0 skipped=0 recipe
     texts=0
     for item in "${SELECTED[@]}"; do
         name=${item%.*}
@@ -1749,6 +1759,12 @@ EOF
         if [[ -n $(note-subject "$name" "$root") ]]; then
             save-note "$name" < "$root/$name.note"
             commit-tags "Import the note of $name."
+        fi
+        # Its recipe in the export (only one Folio knows) takes the place of the one in the store.
+        recipe=$(recipe-of "${item##*.}" "$name" "$root")
+        if [[ -n $recipe ]] && check-recipe "$recipe"; then
+            save-recipe "${item##*.}" "$name" "$recipe"
+            commit-tags "Import how $name is generated."
         fi
         show-answer "Imported" "$(item-label "$item")"
     done
@@ -2030,10 +2046,11 @@ Text() {
         insert)   TextInsert    "$@" ;;
         edit)     TextEdit      "$@" ;;
         generate) TextGenerate  "$@" ;;
+        rotate)   TextRotate    "$@" ;;
         rm)       TextRm        "$@" ;;
         mv)       TextMv        "$@" ;;
         cp)       TextCp        "$@" ;;
-        "")       echo "Usage: folio text <ls|find|grep|show|insert|edit|generate|rm|mv|cp> [args...]" >&2 ; return 1 ;;
+        "")       echo "Usage: folio text <ls|find|grep|show|insert|edit|generate|rotate|rm|mv|cp> [args...]" >&2 ; return 1 ;;
         *)        echo "folio text: unknown command: $category"                                        >&2 ; return 1 ;;
     esac
 }
@@ -2041,11 +2058,12 @@ Text() {
 # A text is a plain file in the store, laid out like the secrets: <name>.txt next to <name>.gpg,
 # with <name>.txt.sig — a detached signature by the store's key, so a changed text can be told.
 
-# save-text <name> <commit-message> < content: write, sign and commit <name>.txt.
+# save-text <name> <commit-message> [<recipe>] < content: write, sign and commit <name>.txt — with
+# <recipe>, its recipe too (save-recipe), in the same commit.
 # The text and its signature are written beside the old ones and swapped in only once signing
 # worked, so a failed signature leaves the old text as it was.
 function save-text() {
-    local name=$1 message=$2 file=$STORE_PATH/$1.txt key
+    local name=$1 message=$2 recipe=${3:-} file=$STORE_PATH/$1.txt key
     umask "${PASSWORD_STORE_UMASK:-077}"
     key=$(head -n 1 "$STORE_PATH/.gpg-id")
     mkdir -p "$(dirname "$file")"
@@ -2055,6 +2073,7 @@ function save-text() {
         die "signing failed; nothing was saved."
     fi
     mv "$file.new" "$file" && mv "$file.sig.new" "$file.sig"
+    [[ -z $recipe ]] || save-recipe txt "$name" "$recipe"
 
     git -C "$STORE_PATH" add -- "$name.txt" "$name.txt.sig"
     git -C "$STORE_PATH" diff --cached --quiet || git -C "$STORE_PATH" commit --quiet -m "$message"
@@ -2392,11 +2411,21 @@ function text-generate-help() {
     cat <<'EOF'
 Usage: folio generate text [-n|--no-symbols] [-i|--in-place|-f|--force] [--store-passphrase-fd <n>]
                            <name> [<length>]
+       folio generate text --as <type> [-i|--in-place|-f|--force] [--store-passphrase-fd <n>]
+                           [<version|bytes|min-max>] <name>
 
 Generate a random text (25 characters unless <length> is given), save and sign it, and print it.
 It is a text, kept plain — for a random password, use `folio generate secret`.
+With --as, it is instead:
+  uuid [<version>]    A UUID, version 4 unless one of 1 to 8 is given. 3 and 5 are made from a
+                      namespace and a name: 5:<namespace>:<name>, the namespace dns, url, oid,
+                      x500 or a UUID (e.g. --as uuid 5:dns:example.com).
+  hex [<bytes>]       Random bytes (32 unless given, up to 1024), written as hex.
+  int <min>-<max>     A whole number from <min> to <max>.
+How it was made is kept with it, so `folio rotate` can make a new one the same way.
 
 Options:
+  --as <type>         uuid, hex or int, as above.
   -n, --no-symbols    Letters and digits only.
   -i, --in-place      Replace only the first line of an existing text; keep the rest.
   -f, --force         Overwrite an existing text without asking (only asked at a terminal).
@@ -2408,44 +2437,434 @@ EOF
 }
 
 # folio generate text [-n|--no-symbols] [-i|--in-place|-f|--force] <name> [<length>]
-# As `pass generate`, for a text: the same characters and length, then saved and signed.
+# folio generate text --as <uuid|hex|int> [-i|--in-place|-f|--force] [<argument>] <name>
+# As `pass generate`, for a text: the same characters and length, then saved and signed — or, with
+# --as, a UUID, hex or a number. The recipe is kept, for `folio rotate`.
 TextGenerate() {
-    local chars=${PASSWORD_STORE_CHARACTER_SET:-[:punct:][:alnum:]} inplace=0 force=0 args=() arg
-    while (( $# > 0 )); do
-        arg=$1 ; shift
-        case $arg in
-            -h|--help)       text-generate-help ; return 0 ;;
-            -n|--no-symbols) chars=${PASSWORD_STORE_CHARACTER_SET_NO_SYMBOLS:-[:alnum:]} ;;
-            -i|--in-place)   inplace=1 ;;
-            -f|--force)      force=1 ;;
-            --)              args+=("$@") ; break ;;
-            -*)              die "generate text: unknown option: $arg" ;;
-            *)               args+=("$arg") ;;
-        esac
-    done
-    (( (${#args[@]} == 1 || ${#args[@]} == 2) && !(inplace && force) )) \
-        || die "Usage: folio generate text [-n|--no-symbols] [-i|--in-place|-f|--force] <name> [<length>]"
-    local name=${args[0]} length=${args[1]:-${PASSWORD_STORE_GENERATED_LENGTH:-25}} file text
-    [[ -n $name && $name != */ && /$name/ != */../* ]] || die "generate text: '$name' is not a valid name."
-    [[ $length =~ ^[0-9]+$ && $length -gt 0 ]] || die "generate text: the length must be a number above 0."
+    generate-args "generate text" text "$@"
+    (( ! GEN_HELP )) || { text-generate-help ; return 0 ; }
     require-store
-    file=$STORE_PATH/$name.txt
+    generate-text "generate text" "$GEN_NAME" "$GEN_RECIPE" "$GEN_INPLACE" "$GEN_FORCE"
+}
 
+# generate-text <command> <name> <recipe> <inplace> <force>: make a value by <recipe>, save it as
+# the text <name> — in place, only its first line — with the recipe, and print it.
+function generate-text() {
+    local command=$1 name=$2 recipe=$3 inplace=$4 force=$5 file=$STORE_PATH/$2.txt text
     if [[ -e $file ]] && (( ! inplace && ! force )) && [[ -t 0 ]]; then
         confirm "An entry already exists for $name. Overwrite it?" || exit 1
     fi
-    read -r -n "$length" text < <(LC_ALL=C tr -dc "$chars" < /dev/urandom 2>/dev/null)
-    [[ ${#text} -eq $length ]] || die "generate text: could not generate a text from /dev/urandom."
+    text=$(recipe-value "$recipe") || die "$command: could not generate a text from /dev/urandom."
 
     if (( inplace )) && [[ -f $file ]]; then
         # The rest of the text is kept, so it must be the one Folio signed.
         verify-text "$name"
         { printf '%s\n' "$text" ; tail -n +2 "$file" ; } \
-            | save-text "$name" "Replace generated text for $name." || exit 1
+            | save-text "$name" "Replace generated text for $name." "$recipe" || exit 1
     else
-        printf '%s\n' "$text" | save-text "$name" "Add generated text for $name." || exit 1
+        printf '%s\n' "$text" | save-text "$name" "Add generated text for $name." "$recipe" || exit 1
     fi
     printf 'The generated text for %s is:\n%s\n' "$name" "$text"
+}
+
+#== Generating values ==========================================================
+
+# A generated item keeps how its value was made — its recipe — in <name>.txt.gen (a text) or
+# <name>.gpg.gen (a secret), so `folio rotate` can make a new one the same way. One line, plain and
+# not signed: it says how a value is made, never the value. One per kind, unlike tags and notes: a
+# text and a secret of one name may be made differently. A recipe is one of:
+#   chars <length> <set>             <length> characters from tr's <set> (generate without --as)
+#   hex <bytes>                      <bytes> random bytes, written as hex          (--as hex)
+#   int <min>-<max>                  a whole number from <min> to <max>            (--as int)
+#   uuid <1|2|4|6|7|8>               a UUID of that version                        (--as uuid)
+#   uuid <3|5>:<namespace>:<name>    the name-based UUID of <name> in <namespace>  (--as uuid)
+
+# generate-args <command> <text|secret> [args...]: read the arguments of `generate text|secret` into
+# GEN_NAME, GEN_RECIPE, GEN_INPLACE, GEN_FORCE and GEN_CLIP (secrets only); GEN_HELP=1 for -h. Dies
+# on a mistake. Short options may be run together (-nf), as pass takes them.
+function generate-args() {
+    local command=$1 kind=$2 ; shift 2
+    GEN_HELP=0 GEN_INPLACE=0 GEN_FORCE=0 GEN_CLIP=0 GEN_NAME="" GEN_RECIPE=""
+    local nosymbols=0 as="" with_as=0 args=() more=() arg i
+    while (( $# > 0 )); do
+        arg=$1 ; shift
+        case $arg in
+            -h|--help)       GEN_HELP=1 ; return 0 ;;
+            -n|--no-symbols) nosymbols=1 ;;
+            -i|--in-place)   GEN_INPLACE=1 ;;
+            -f|--force)      GEN_FORCE=1 ;;
+            -c|--clip)       [[ $kind == secret ]] || die "$command: unknown option: $arg"
+                             GEN_CLIP=1 ;;
+            -q|--qrcode)     [[ $kind == secret ]] || die "$command: unknown option: $arg"
+                             die "$command: --qrcode is not offered." ;;
+            --as)            [[ $# -gt 0 ]] || die "$command: --as needs a type: uuid, hex or int."
+                             as=$1 with_as=1 ; shift ;;
+            --as=*)          as=${arg#*=} with_as=1 ;;
+            --)              args+=("$@") ; break ;;
+            -[!-]?*)         more=()
+                             for (( i = 1; i < ${#arg}; i++ )); do more+=("-${arg:i:1}") ; done
+                             set -- "${more[@]}" "$@" ;;
+            -*)              die "$command: unknown option: $arg" ;;
+            *)               args+=("$arg") ;;
+        esac
+    done
+    local usage="Usage: folio $command [-n|--no-symbols] [-i|--in-place|-f|--force] <name> [<length>]"
+    usage+="${EXTRA_LINE}       folio $command --as <uuid|hex|int> [-i|--in-place|-f|--force] [<version|bytes|min-max>] <name>"
+    (( (${#args[@]} == 1 || ${#args[@]} == 2) && !(GEN_INPLACE && GEN_FORCE) )) || die "$usage"
+    if (( with_as )); then
+        (( ! nosymbols )) || die "$command: --no-symbols is for characters, not with --as."
+        GEN_NAME=${args[${#args[@]} - 1]}
+        local argument="" ; (( ${#args[@]} == 1 )) || argument=${args[0]}
+        GEN_RECIPE=$(as-recipe "$command" "$as" "$argument") || exit 1
+    else
+        GEN_NAME=${args[0]}
+        local length=${args[1]:-${PASSWORD_STORE_GENERATED_LENGTH:-25}} chars
+        [[ $length =~ ^[0-9]{1,6}$ && $(( 10#$length )) -gt 0 ]] \
+            || die "$command: the length must be a number above 0."
+        chars=${PASSWORD_STORE_CHARACTER_SET:-[:punct:][:alnum:]}
+        (( ! nosymbols )) || chars=${PASSWORD_STORE_CHARACTER_SET_NO_SYMBOLS:-[:alnum:]}
+        GEN_RECIPE="chars $(( 10#$length )) $chars"
+    fi
+    [[ -n $GEN_NAME && $GEN_NAME != */ && $GEN_NAME != -* && /$GEN_NAME/ != */../* ]] \
+        || die "$command: '$GEN_NAME' is not a valid name."
+}
+
+# as-recipe <command> <type> [<argument>]: the recipe for `--as <type> [<argument>]`, or die
+# saying what is wrong with it.
+function as-recipe() {
+    local command=$1 type=$2 arg=${3:-} rest ns name min max
+    case $type in
+        uuid)
+            case $arg in
+                "")          echo "uuid 4" ;;
+                1|2|4|6|7|8) echo "uuid $arg" ;;
+                [35]:*:?*)   rest=${arg#?:} ; ns=${rest%%:*} name=${rest#*:}
+                             uuid-namespace "$ns" >/dev/null \
+                                 || die "$command: '$ns' is not a UUID namespace: dns, url, oid, x500 or a UUID."
+                             [[ $name != *$'\n'* ]] || die "$command: the name of a UUID is one line."
+                             echo "uuid $arg" ;;
+                3|5|[35]:*)  die "$command: a UUID v${arg:0:1} is made from a namespace and a name: --as uuid ${arg:0:1}:<namespace>:<name>, the namespace dns, url, oid, x500 or a UUID." ;;
+                *)           die "$command: '$arg' is not a UUID version: 1 to 8." ;;
+            esac ;;
+        hex)
+            [[ -n $arg ]] || arg=32
+            if ! [[ $arg =~ ^[0-9]{1,4}$ ]] || (( 10#$arg < 1 || 10#$arg > 1024 )); then
+                die "$command: the number of bytes for --as hex must be 1 to 1024."
+            fi
+            echo "hex $(( 10#$arg ))" ;;
+        int)
+            [[ $arg =~ ^[0-9]{1,18}-[0-9]{1,18}$ ]] \
+                || die "$command: --as int needs a range, <min>-<max>, of whole numbers from 0."
+            min=$(( 10#${arg%-*} )) max=$(( 10#${arg#*-} ))
+            (( min <= max )) || die "$command: the range $arg goes down: the smaller number first."
+            (( max - min < 1 << 56 )) || die "$command: the range $arg is too wide: at most 2^56 numbers."
+            echo "int $min-$max" ;;
+        "")   die "$command: --as needs a type: uuid, hex or int." ;;
+        *)    die "$command: '$type' is not a type for --as: uuid, hex or int." ;;
+    esac
+}
+
+# check-recipe <recipe>: whether it is a recipe Folio knows (a .gen file is plain, and may have
+# been changed outside Folio).
+function check-recipe() {
+    local type=${1%% *} rest=${1#* }
+    case $1 in
+        "chars "*" "?*)           [[ ${rest%% *} =~ ^[1-9][0-9]{0,5}$ ]] ;;
+        "hex "*|"int "*|"uuid "*) [[ $(as-recipe check "$type" "$rest" 2>/dev/null) == "$1" ]] ;;
+        *)                        return 1 ;;
+    esac
+}
+
+# recipe-value <recipe>: a new value made by <recipe>, from /dev/urandom. Fails when it cannot.
+function recipe-value() {
+    local type=${1%% *} rest=${1#* } length set text n
+    case $type in
+        chars) length=${rest%% *} set=${rest#* }
+               read -r -n "$length" text < <(LC_ALL=C tr -dc "$set" < /dev/urandom 2>/dev/null)
+               [[ ${#text} -eq $length ]] || return 1
+               printf '%s\n' "$text" ;;
+        hex)   random-hex "$rest" ;;
+        int)   n=$(random-below $(( ${rest#*-} - ${rest%-*} + 1 ))) || return 1
+               echo $(( ${rest%-*} + n )) ;;
+        uuid)  make-uuid "$rest" ;;
+        *)     return 1 ;;
+    esac
+}
+
+# random-hex <bytes>: that many random bytes, as lowercase hex.
+function random-hex() {
+    local hex
+    hex=$(od -An -tx1 -N "$1" /dev/urandom 2>/dev/null | tr -d ' \n')
+    [[ ${#hex} -eq $(( $1 * 2 )) ]] || return 1
+    printf '%s\n' "$hex"
+}
+
+# random-below <n>: a whole number from 0 to <n> - 1, <n> at most 2^56, each as likely: 7 random
+# bytes, tried again when they fall in the last part of 2^56 that <n> does not fill evenly.
+function random-below() {
+    local n=$1 limit r
+    limit=$(( (1 << 56) - (1 << 56) % n ))
+    while :; do
+        r=$(random-hex 7) || return 1
+        r=$(( 16#$r ))
+        (( r >= limit )) || { echo $(( r % n )) ; return 0 ; }
+    done
+}
+
+# make-uuid <version>[:<namespace>:<name>]: a UUID of that version, laid out as RFC 9562 says.
+# The time ones (1, 2, 6, 7) take the time in seconds, with 3 random digits as its milliseconds
+# (`date` gives no finer time on macOS) and random ones below them. Their node is random, with the
+# multicast bit set as the RFC allows, so it never gives away the machine's MAC address.
+function make-uuid() {
+    local version=${1%%:*} now ms sub ticks clock node hex
+    case $version in
+        1|2|6)
+            now=$(date +%s) && ms=$(random-below 1000) && sub=$(random-below 10000) || return 1
+            clock=$(random-hex 2) && node=$(random-hex 6) || return 1
+            # 100-nanosecond steps since the Gregorian calendar began (15 October 1582).
+            ticks=$(( (now + 12219292800) * 10000000 + ms * 10000 + sub ))
+            clock=$(( (16#$clock & 0x3FFF) | 0x8000 ))
+            node=$(printf '%02x%s' $(( 16#${node:0:2} | 1 )) "${node:2}")
+            case $version in
+                1) printf '%08x-%04x-%04x-%04x-%s\n' $(( ticks & 0xFFFFFFFF )) $(( (ticks >> 32) & 0xFFFF )) \
+                          $(( ((ticks >> 48) & 0x0FFF) | 0x1000 )) "$clock" "$node" ;;
+                # DCE Security: the user's id in place of the low time; domain 0, a person.
+                2) printf '%08x-%04x-%04x-%02x00-%s\n' $(( $(id -u) & 0xFFFFFFFF )) $(( (ticks >> 32) & 0xFFFF )) \
+                          $(( ((ticks >> 48) & 0x0FFF) | 0x2000 )) $(( clock >> 8 )) "$node" ;;
+                # v1's time, the high part first, so they sort by time.
+                6) printf '%08x-%04x-%04x-%04x-%s\n' $(( (ticks >> 28) & 0xFFFFFFFF )) $(( (ticks >> 12) & 0xFFFF )) \
+                          $(( (ticks & 0x0FFF) | 0x6000 )) "$clock" "$node" ;;
+            esac ;;
+        # Milliseconds since 1970, then random bits.
+        7)  now=$(date +%s) && ms=$(random-below 1000) && hex=$(random-hex 10) || return 1
+            uuid-layout "$(printf '%012x' $(( now * 1000 + ms )))$hex" 7 ;;
+        4|8) hex=$(random-hex 16) || return 1
+             uuid-layout "$hex" "$version" ;;
+        3|5) name-uuid "$version" "${1#?:}" ;;
+        *)   return 1 ;;
+    esac
+}
+
+# uuid-layout <32 hex digits> <version>: those as a UUID, with its version and variant put in.
+function uuid-layout() {
+    local hex=$1
+    printf '%s-%s-%s%s-%x%s-%s\n' "${hex:0:8}" "${hex:8:4}" "$2" "${hex:13:3}" \
+           $(( (16#${hex:16:1} & 3) | 8 )) "${hex:17:3}" "${hex:20:12}"
+}
+
+# name-uuid <3|5> <namespace>:<name>: the UUID of <name> in <namespace> — v3 from its MD5, v5 from
+# its SHA-1, both worked out by gpg — so always the same one for the same two.
+function name-uuid() {
+    local version=$1 ns=${2%%:*} name=${2#*:} hex bytes="" algo=MD5 i
+    hex=$(uuid-namespace "$ns") || return 1
+    for (( i = 0; i < 32; i += 2 )); do bytes+="\\x${hex:i:2}" ; done
+    [[ $version == 3 ]] || algo=SHA1
+    # shellcheck disable=SC2059  # the format is the namespace's bytes, made just above
+    hex=$({ printf "$bytes" ; printf '%s' "$name" ; } | gpg --batch --print-md "$algo" 2>/dev/null \
+              | tr -d ' \n' | tr 'A-F' 'a-f')
+    [[ $hex =~ ^[0-9a-f]{32} ]] || return 1
+    uuid-layout "${hex:0:32}" "$version"
+}
+
+# uuid-namespace <dns|url|oid|x500|uuid>: the namespace as 32 hex digits; fails for anything else.
+function uuid-namespace() {
+    case $1 in
+        dns)  echo 6ba7b8109dad11d180b400c04fd430c8 ;;
+        url)  echo 6ba7b8119dad11d180b400c04fd430c8 ;;
+        oid)  echo 6ba7b8129dad11d180b400c04fd430c8 ;;
+        x500) echo 6ba7b8149dad11d180b400c04fd430c8 ;;
+        *)    [[ $1 =~ ^[0-9A-Fa-f]{8}(-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}$ ]] || return 1
+              printf '%s\n' "$1" | tr -d - | tr 'A-F' 'a-f' ;;
+    esac
+}
+
+# recipe-of <txt|gpg> <name> [<root>]: the recipe of the text (txt) or the secret (gpg) <name> in
+# the store (or under <root>, an opened export); nothing when it has none.
+function recipe-of() {
+    local file=${3:-$STORE_PATH}/$2.$1.gen
+    [[ ! -f $file ]] || head -n 1 "$file"
+}
+
+# recipe-line <txt|gpg> <name>: the recipe of <name> in words, for `folio info`.
+function recipe-line() {
+    local recipe rest
+    recipe=$(recipe-of "$1" "$2") ; rest=${recipe#* }
+    case $recipe in
+        "")            echo "no (not made by folio generate)" ;;
+        "chars "*)     echo "${rest%% *} characters of ${rest#* }" ;;
+        "hex "*)       echo "$rest random bytes, as hex" ;;
+        "int "*)       echo "a whole number from ${rest%-*} to ${rest#*-}" ;;
+        "uuid "[35]:*) rest=${rest#?:}
+                       echo "UUID v${recipe:5:1} of '${rest#*:}' in ${rest%%:*} (always the same; not rotated)" ;;
+        "uuid "*)      echo "UUID v$rest" ;;
+        *)             echo "not one Folio knows: $recipe" ;;
+    esac
+}
+
+# save-recipe <txt|gpg> <name> <recipe>: write <name>.<txt|gpg>.gen as <recipe> — or remove it when
+# <recipe> is empty — and stage it. Not committed.
+function save-recipe() {
+    local kind=$1 name=$2 recipe=$3 file=$STORE_PATH/$2.$1.gen
+    if [[ -n $recipe ]]; then
+        umask "${PASSWORD_STORE_UMASK:-077}"
+        mkdir -p "$(dirname "$file")"
+        printf '%s\n' "$recipe" > "$file"
+        git -C "$STORE_PATH" add -- "$name.$kind.gen"
+    elif [[ -f $file ]]; then
+        rm -f -- "$file"
+        git -C "$STORE_PATH" rm -q --cached --ignore-unmatch -- "$name.$kind.gen"
+    fi
+}
+
+# carry-recipe <txt|gpg> <mv|cp> <old> <new>: after the text or the secret <old> was moved or copied
+# to <new>, <new> has the recipe of <old>, or none when <old> had none. Staged, not committed.
+function carry-recipe() {
+    local kind=$1 how=$2 old=$3 new=$4
+    [[ $old != "$new" ]] || return 0
+    save-recipe "$kind" "$new" "$(recipe-of "$kind" "$old")"
+    [[ $how != mv ]] || save-recipe "$kind" "$old" ""
+}
+
+# drop-orphan-recipe <txt|gpg> <name>: remove the recipe of <name> when it is no longer a text (txt)
+# or a secret (gpg). Staged, not committed.
+function drop-orphan-recipe() {
+    [[ -f $STORE_PATH/$2.$1.gen && ! -f $STORE_PATH/$2.$1 ]] || return 0
+    save-recipe "$1" "$2" ""
+}
+
+#== Command: Rotate ============================================================
+
+function rotate-help() {
+    cat <<'EOF'
+Usage: folio rotate [-c|--clip] [--store-passphrase-fd <n>] <name>
+
+Make a new value for a text or a secret made by `folio generate`, the way it was made then (its
+recipe: the characters and length, or --as uuid, hex or int). Only its first line is replaced; the
+rest is kept. It prints the new value, or with --clip (a secret only), copies it to the clipboard,
+which is cleared after 45 seconds (PASSWORD_STORE_CLIP_TIME).
+A name that is both a text and a secret needs its kind: `folio rotate text|secret <name>`.
+A name-based UUID (v3, v5) is always the same, so it is not rotated.
+
+Options:
+  -c, --clip          Copy the new secret to the clipboard; do not print it.
+  --store-passphrase-fd <n>
+                      The store key's passphrase, from the first line of file descriptor <n>,
+                      instead of gpg's prompt.
+  -h, --help          Show this help and stop.
+EOF
+}
+
+# folio rotate [-c|--clip] <name>: `rotate text` or `rotate secret`, whichever <name> is.
+Rotate() {
+    local arg name="" dashes=0
+    for arg in "$@"; do
+        if (( dashes )); then name=$arg ; continue ; fi
+        case $arg in
+            --)        dashes=1 ;;
+            -h|--help) rotate-help ; return 0 ;;
+            -*)        ;;
+            *)         name=$arg ;;
+        esac
+    done
+    [[ -n $name ]] || die "Usage: folio rotate [text|secret] [-c|--clip] <name>"
+    [[ /$name/ != */../* ]] || die "rotate: '$name' is not a valid name."
+    require-store
+    if [[ -f $STORE_PATH/$name.txt && -f $STORE_PATH/$name.gpg ]]; then
+        die "rotate: '$name' is both a text and a secret: \`folio rotate text $name\` or \`folio rotate secret $name\`."
+    elif [[ -f $STORE_PATH/$name.txt ]]; then
+        TextRotate "$@"
+    elif [[ -f $STORE_PATH/$name.gpg ]]; then
+        SecretRotate "$@"
+    else
+        die "rotate: '$name' is not a text or a secret in the store."
+    fi
+}
+
+function text-rotate-help() {
+    cat <<'EOF'
+Usage: folio rotate text [--store-passphrase-fd <n>] <name>
+
+Make a new value for a text made by `folio generate text`, the way it was made then; only its
+first line is replaced. Saved, signed and printed, as `generate text` does.
+
+Options:
+  --store-passphrase-fd <n>
+                      The store key's passphrase (to sign), from the first line of file
+                      descriptor <n>, instead of gpg's prompt.
+  -h, --help          Show this help and stop.
+EOF
+}
+
+# folio rotate text <name>
+TextRotate() {
+    local names=() arg recipe
+    while (( $# > 0 )); do
+        arg=$1 ; shift
+        case $arg in
+            -h|--help) text-rotate-help ; return 0 ;;
+            --)        names+=("$@") ; break ;;
+            -*)        die "rotate text: unknown option: $arg" ;;
+            *)         names+=("$arg") ;;
+        esac
+    done
+    (( ${#names[@]} == 1 )) || die "Usage: folio rotate text <name>"
+    require-store
+    recipe=$(rotate-recipe "rotate text" txt "${names[0]}") || exit 1
+    generate-text "rotate text" "${names[0]%/}" "$recipe" 1 0
+}
+
+function secret-rotate-help() {
+    cat <<'EOF'
+Usage: folio rotate secret [-c|--clip] [--store-passphrase-fd <n>] <name>
+
+Make a new value for a secret made by `folio generate secret`, the way it was made then; only its
+first line is replaced. Printed, or with --clip copied to the clipboard, which is cleared after
+45 seconds (PASSWORD_STORE_CLIP_TIME).
+
+Options:
+  -c, --clip          Copy the new secret to the clipboard; do not print it.
+  --store-passphrase-fd <n>
+                      The store key's passphrase (to keep the other lines), from the first line
+                      of file descriptor <n>, instead of gpg's prompt.
+  -h, --help          Show this help and stop.
+EOF
+}
+
+# folio rotate secret [-c|--clip] <name>
+SecretRotate() {
+    local names=() clip=0 arg recipe
+    while (( $# > 0 )); do
+        arg=$1 ; shift
+        case $arg in
+            -h|--help) secret-rotate-help ; return 0 ;;
+            -c|--clip) clip=1 ;;
+            --)        names+=("$@") ; break ;;
+            -*)        die "rotate secret: unknown option: $arg" ;;
+            *)         names+=("$arg") ;;
+        esac
+    done
+    (( ${#names[@]} == 1 )) || die "Usage: folio rotate secret [-c|--clip] <name>"
+    require-store
+    recipe=$(rotate-recipe "rotate secret" gpg "${names[0]}") || exit 1
+    generate-secret "rotate secret" "${names[0]%/}" "$recipe" 1 0 "$clip"
+}
+
+# rotate-recipe <command> <txt|gpg> <name>: the recipe <name> was generated by — or die saying why
+# it cannot be rotated.
+function rotate-recipe() {
+    local command=$1 kind=$2 name=${3%/} recipe what=text
+    [[ $kind == txt ]] || what=secret
+    [[ -n $name && /$name/ != */../* ]] || die "$command: '$3' is not a valid name."
+    [[ -f $STORE_PATH/$name.$kind ]] || die "$command: '$name' is not a $what in the store."
+    recipe=$(recipe-of "$kind" "$name")
+    [[ -n $recipe ]] || die "$command: '$name' has no recipe: it was not made by \`folio generate\`.${EXTRA_LINE}To make one, generate it once, keeping its other lines: folio generate $what [--as <uuid|hex|int>] -i $name"
+    check-recipe "$recipe" \
+        || die "$command: the recipe of '$name' is not one Folio knows: $recipe${EXTRA_LINE}It is in $(tilde-path "$STORE_PATH/$name.$kind.gen")."
+    case $recipe in
+        "uuid 3:"*|"uuid 5:"*)
+            die "$command: '$name' is a name-based UUID (v${recipe:5:1}): the same namespace and name always give the same one, so there is nothing to rotate." ;;
+    esac
+    printf '%s\n' "$recipe"
 }
 
 # --- text rm ------------------------------------------------------------------
@@ -2496,7 +2915,7 @@ TextRm() {
     (( force )) || [[ ! -t 0 ]] || confirm "Are you sure you would like to delete $path?" || exit 1
 
     if (( folder )); then
-        find "$STORE_PATH/$path" -type f \( -name '*.txt' -o -name '*.txt.sig' \) -exec rm -f -- {} +
+        find "$STORE_PATH/$path" -type f \( -name '*.txt' -o -name '*.txt.sig' -o -name '*.txt.gen' \) -exec rm -f -- {} +
         # The tags and the note of each name that is no longer an item (no secret of that name
         # either).
         local file
@@ -2507,10 +2926,10 @@ TextRm() {
         done < <(find "$STORE_PATH/$path" -type f \( -name '*.tags' -o -name '*.note' \))
         find "$STORE_PATH/$path" -depth -type d -empty -exec rmdir -- {} \;
         # git's * matches across folders: every text under <path>.
-        git -C "$STORE_PATH" rm -r -q --cached --ignore-unmatch -- "$path/*.txt" "$path/*.txt.sig"
+        git -C "$STORE_PATH" rm -r -q --cached --ignore-unmatch -- "$path/*.txt" "$path/*.txt.sig" "$path/*.txt.gen"
     else
-        rm -f -- "$STORE_PATH/$path.txt" "$STORE_PATH/$path.txt.sig"
-        git -C "$STORE_PATH" rm -q --cached --ignore-unmatch -- "$path.txt" "$path.txt.sig"
+        rm -f -- "$STORE_PATH/$path.txt" "$STORE_PATH/$path.txt.sig" "$STORE_PATH/$path.txt.gen"
+        git -C "$STORE_PATH" rm -q --cached --ignore-unmatch -- "$path.txt" "$path.txt.sig" "$path.txt.gen"
         drop-orphan-tags "$path"
         drop-orphan-note "$path"
     fi
@@ -2551,7 +2970,8 @@ TextCp() { text-copy-move cp "$@" ; }
 
 # text-copy-move <mv|cp> [-f|--force] <old-name> <new-name>
 # As `pass mv` / `pass cp`, for texts. A signature covers the text, not its name, so it moves with
-# it and still verifies. Its tags and its note go with it too (carry-tags, carry-note).
+# it and still verifies. Its tags, its note and its recipe go with it too (carry-tags, carry-note,
+# carry-recipe).
 function text-copy-move() {
     local how=$1 force=0 names=() arg ; shift
     while (( $# > 0 )); do
@@ -2604,6 +3024,7 @@ function text-copy-move() {
         fi
         carry-tags "$how" "${from[i]}" "${to[i]}"
         carry-note "$how" "${from[i]}" "${to[i]}"
+        carry-recipe txt "$how" "${from[i]}" "${to[i]}"
         [[ $how != mv ]] || rmdir -p "$(dirname "$STORE_PATH/${from[i]}")" 2>/dev/null
         git -C "$STORE_PATH" add -- "${to[i]}.txt"
         [[ -e $STORE_PATH/${to[i]}.txt.sig ]] && git -C "$STORE_PATH" add -- "${to[i]}.txt.sig"
@@ -2633,10 +3054,11 @@ Secret() {
         insert)   SecretInsert    "$@" ;;
         edit)     SecretEdit      "$@" ;;
         generate) SecretGenerate  "$@" ;;
+        rotate)   SecretRotate    "$@" ;;
         rm)       SecretRm        "$@" ;;
         mv)       SecretMv        "$@" ;;
         cp)       SecretCp        "$@" ;;
-        "")       echo "Usage: folio secret <ls|find|grep|show|insert|edit|generate|rm|mv|cp> [args...]" >&2 ; return 1 ;;
+        "")       echo "Usage: folio secret <ls|find|grep|show|insert|edit|generate|rotate|rm|mv|cp> [args...]" >&2 ; return 1 ;;
         *)        echo "folio secret: unknown command: $category"                                        >&2 ; return 1 ;;
     esac
 }
@@ -2854,12 +3276,22 @@ function secret-generate-help() {
     cat <<'EOF'
 Usage: folio generate secret [-n|--no-symbols] [-c|--clip] [-i|--in-place|-f|--force]
                              [--store-passphrase-fd <n>] <name> [<length>]
+       folio generate secret --as <type> [-c|--clip] [-i|--in-place|-f|--force]
+                             [--store-passphrase-fd <n>] [<version|bytes|min-max>] <name>
 
 Generate a random secret (25 characters unless <length> is given), save it, and print it.
 With --clip, copy it to the clipboard instead of printing it; the clipboard is cleared after
 45 seconds (PASSWORD_STORE_CLIP_TIME).
+With --as, it is instead:
+  uuid [<version>]    A UUID, version 4 unless one of 1 to 8 is given. 3 and 5 are made from a
+                      namespace and a name: 5:<namespace>:<name>, the namespace dns, url, oid,
+                      x500 or a UUID (e.g. --as uuid 5:dns:example.com).
+  hex [<bytes>]       Random bytes (32 unless given, up to 1024), written as hex.
+  int <min>-<max>     A whole number from <min> to <max>.
+How it was made is kept with it, so `folio rotate` can make a new one the same way.
 
 Options:
+  --as <type>         uuid, hex or int, as above.
   -n, --no-symbols    Letters and digits only.
   -c, --clip          Copy the secret to the clipboard; do not print it.
   -i, --in-place      Replace only the first line of an existing secret; keep the rest.
@@ -2873,17 +3305,53 @@ EOF
 }
 
 # folio generate secret [-n|--no-symbols] [-c|--clip] [-i|--in-place|-f|--force] <name> [<length>]
-# Everything goes to `pass generate` — except --help, and --qrcode (it needs qrencode).
+# folio generate secret --as <uuid|hex|int> [-c|--clip] [-i|--in-place|-f|--force] [<argument>] <name>
+# Characters go to `pass generate`; --as values Folio makes and gives to `pass insert`. Either way
+# the recipe is kept, for `folio rotate`. No --qrcode: it needs qrencode.
 SecretGenerate() {
-    local arg
-    for arg in "$@"; do
-        case $arg in
-            --)                     break ;;
-            -h|--help)              break ;;
-            --qrcode|-q*|-[!-]*q*)  die "generate secret: --qrcode is not offered." ;;
-        esac
-    done
-    call-pass secret-generate-help generate "$@"
+    generate-args "generate secret" secret "$@"
+    (( ! GEN_HELP )) || { secret-generate-help ; return 0 ; }
+    generate-secret "generate secret" "$GEN_NAME" "$GEN_RECIPE" "$GEN_INPLACE" "$GEN_FORCE" "$GEN_CLIP"
+}
+
+# generate-secret <command> <name> <recipe> <inplace> <force> <clip>: make a value by <recipe>, save
+# it as the secret <name> — in place, only its first line — and print it or, with <clip>, copy it
+# to the clipboard; then keep the recipe, in a commit of its own.
+function generate-secret() {
+    local command=$1 name=$2 recipe=$3 inplace=$4 force=$5 to_clip=$6 file=$STORE_PATH/$2.gpg
+    if [[ $recipe == "chars "* ]]; then
+        # As pass makes it: its own prompt, message and clipboard. The set is the recipe's, so a
+        # rotate makes it the same way whatever PASSWORD_STORE_CHARACTER_SET says now.
+        local rest=${recipe#chars } opts=()
+        (( ! inplace )) || opts+=(--in-place)
+        (( ! force ))   || opts+=(--force)
+        (( ! to_clip )) || opts+=(--clip)
+        drop-typeahead
+        PASSWORD_STORE_CHARACTER_SET=${rest#* } \
+            pass generate ${opts[@]+"${opts[@]}"} -- "$name" "${rest%% *}" || exit 1
+    else
+        local value rest=""
+        if [[ -e $file ]] && (( ! inplace && ! force )) && [[ -t 0 ]]; then
+            confirm "An entry already exists for $name. Overwrite it?" || exit 1
+        fi
+        value=$(recipe-value "$recipe") || die "$command: could not generate a secret from /dev/urandom."
+        if (( inplace )) && [[ -f $file ]]; then
+            # Its other lines are kept: read first, so a failed read never loses them.
+            rest=$(pass show -- "$name") || die "$command: could not read '$name' to keep its other lines."
+            if [[ $rest == *$'\n'* ]]; then rest=${rest#*$'\n'} ; else rest="" ; fi
+        fi
+        { printf '%s\n' "$value" ; [[ -z $rest ]] || printf '%s\n' "$rest" ; } \
+            | pass insert --multiline --force -- "$name" >/dev/null || exit 1
+        unset rest
+        if (( to_clip )); then
+            pass show --clip -- "$name" || exit 1
+        else
+            printf 'The generated secret for %s is:\n%s\n' "$name" "$value"
+        fi
+        unset value
+    fi
+    save-recipe gpg "$name" "$recipe"
+    commit-tags "Keep how $name is generated."
 }
 
 # --- secret rm ----------------------------------------------------------------
@@ -2904,8 +3372,8 @@ EOF
 }
 
 # folio rm secret [-r|--recursive] [-f|--force] <name>
-# pass removes the secret (or the folder, whole); then the tags and the note of a name that is no
-# longer an item go too.
+# pass removes the secret (or the folder, whole); then its recipe goes too, and the tags and the
+# note of a name that is no longer an item.
 SecretRm() {
     local arg name="" dashes=0
     for arg in "$@"; do
@@ -2920,6 +3388,7 @@ SecretRm() {
     call-pass secret-rm-help rm "$@" || return
     name=${name%/}
     [[ -n $name ]] || return 0
+    drop-orphan-recipe gpg "$name"
     drop-orphan-tags "$name"
     drop-orphan-note "$name"
     commit-tags "Remove the tags and the note of $name."
@@ -2962,9 +3431,9 @@ EOF
 SecretCp() { secret-copy-move cp "$@" ; }
 
 # secret-copy-move <mv|cp> [-f|--force] <old-name> <new-name>
-# `pass mv` / `pass cp`, then the tags and the note of the secret go with it (carry-tags,
-# carry-note), in a commit of their own. Only for one secret: a folder pass moves or copies whole,
-# its .tags and .note files with it.
+# `pass mv` / `pass cp`, then the tags, the note and the recipe of the secret go with it
+# (carry-tags, carry-note, carry-recipe), in a commit of their own. Only for one secret: a folder
+# pass moves or copies whole, its .tags, .note and .gen files with it.
 function secret-copy-move() {
     local how=$1 arg names=() dashes=0 ; shift
     for arg in "$@"; do
@@ -2997,6 +3466,7 @@ function secret-copy-move() {
     fi
     carry-tags "$how" "$old" "$new"
     carry-note "$how" "$old" "$new"
+    carry-recipe gpg "$how" "$old" "$new"
     commit-tags "Carry the tags and the note of $old to $new."
 }
 
@@ -3054,8 +3524,8 @@ Show what is known about one text or secret, never its value: its file and size,
 exec and shell give it, when it was made and last changed (from the store's git history, which
 also gives its earlier names after an mv), whether it has changes not yet committed — and, for a
 text, who signed it and whether the signature verifies; for a secret, the keys it is encrypted to,
-each marked when it is not (or no longer) a key of the store. Its tags too (`folio tag add`), and
-the first line of its note (`folio note set`).
+each marked when it is not (or no longer) a key of the store. Its tags too (`folio tag add`), the
+first line of its note (`folio note set`), and how `folio generate` made it, if it did.
 Nothing is decrypted and no passphrase is asked. A name that is both a text and a secret shows
 both.
 
@@ -3108,6 +3578,7 @@ function info-text() {
     info-history-lines "$name.txt" "$name.txt" "$name.txt.sig"
     info-line "Tags:"      "$(tags-line "$name")"
     info-line "Note:"      "$(note-line "$name")"
+    info-line "Generated:" "$(recipe-line txt "$name")"
     info-line "Signed by:" "$(text-signature "$name")"
 }
 
@@ -3121,6 +3592,7 @@ function info-secret() {
     info-history-lines "$name.gpg" "$name.gpg"
     info-line "Tags:"      "$(tags-line "$name")"
     info-line "Note:"      "$(note-line "$name")"
+    info-line "Generated:" "$(recipe-line gpg "$name")"
     recipients=$(secret-recipients "$name")
     [[ -n $recipients ]] || recipients="no key found in the file"
     while IFS= read -r line; do
@@ -5174,10 +5646,13 @@ function complete-words() {
     if [[ $key == text || $key == secret || $key == vars || $key == tag || $key == note ]]; then
         if (( ${#words[@]} == 2 )); then complete-commands "$key" "$cur" ; return 0 ; fi
         key="$key ${words[1]}" at=2
-    elif (( ${#words[@]} == 2 )) && is-action "$key" && [[ $key != ls || $cur != -* ]]; then
-        # The kinds it is for; ls also lists both together, so its folders too (and its options).
+    elif (( ${#words[@]} == 2 )) && is-action "$key" && [[ ( $key != ls && $key != rotate ) || $cur != -* ]]; then
+        # The kinds it is for; ls also lists both together, so its folders too (and its options);
+        # rotate also takes a name of either kind (and its options).
         if [[ $key == ls ]]; then
             { complete-commands ls "$cur" ; complete-entries all "$cur" folders | tail -n +2 ; }
+        elif [[ $key == rotate ]]; then
+            { complete-commands rotate "$cur" ; complete-entries all "$cur" | tail -n +2 ; }
         else
             complete-commands "$key" "$cur"
         fi
@@ -5309,7 +5784,7 @@ function completion-args() {
         import)                       echo "exports none..." ;;
         export|exec|shell)            echo "entry..." ;;
         ls)                           echo entry-folder ;;
-        info)                         echo name ;;
+        info|rotate)                  echo name ;;
         "tag add"|"tag rm")           echo "name tag..." ;;
         "tag ls")                     echo none ;;
         "note set"|"note edit"|"note show"|"note rm") echo name ;;
@@ -5320,11 +5795,13 @@ function completion-args() {
         "text find"|"text grep")      echo none ;;
         "text show"|"text insert"|"text edit"|"text rm") echo text ;;
         "text generate")              echo "text none" ;;
+        "text rotate")                echo text ;;
         "text mv"|"text cp")          echo "text text" ;;
         "secret ls")                  echo secret-folder ;;
         "secret find"|"secret grep")  echo none ;;
         "secret show"|"secret insert"|"secret edit"|"secret rm") echo secret ;;
         "secret generate")            echo "secret none" ;;
+        "secret rotate")              echo secret ;;
         "secret mv"|"secret cp")      echo "secret secret" ;;
         "vars check")                 echo "files..." ;;
         *)                            return 1 ;;
@@ -5845,14 +6322,14 @@ function store-flat() {
 
 # store-tree <gpg|txt|all> <folder> [tree-option...]: the secrets (gpg), the texts (txt) or both
 # (all) under <folder> as a tree, names only. pass's own `tree` line (ls, find), plus leaving out
-# signatures, tags, notes, the other kind, and folders left empty. With all, each name gets its mark in front.
+# signatures, tags, notes, recipes, the other kind, and folders left empty. With all, each name gets its mark in front.
 # Marks and colours as set-marks says; tree colours (its folders) only when there are colours.
 function store-tree() {
     local kind=$1 folder=$2 others color=-n s='' t='' esc=$'\e' ; shift 2
     case $kind in
-        gpg) others='*.txt|*.txt.sig|*.tags|*.note' ;;
-        txt) others='*.gpg|*.txt.sig|*.tags|*.note' ;;
-        all) others='*.txt.sig|*.tags|*.note'       ;;
+        gpg) others='*.txt|*.txt.sig|*.tags|*.note|*.gen' ;;
+        txt) others='*.gpg|*.txt.sig|*.tags|*.note|*.gen' ;;
+        all) others='*.txt.sig|*.tags|*.note|*.gen'       ;;
     esac
     set-marks
     [[ $kind != all ]] || s="$SECRET_MARK" t="$TEXT_MARK"
@@ -5942,8 +6419,9 @@ function ensure-requirements() {
         lines     "gzip   " "Compresses backups" "brew install gzip        "
     fi
 
-    # Clipboard: only the tool `show -c` and `generate -c` use on this platform; none without a display.
-    if [[ "$*" =~ ^(secret|text)\ (show|generate)\ (.*\ )?(--clip|-[a-z]*c) ]]; then
+    # Clipboard: only the tool `show -c`, `generate -c` and `rotate -c` use on this platform; none
+    # without a display.
+    if [[ "$*" =~ ^((secret|text)\ (show|generate|rotate)|rotate)\ (.*\ )?(--clip|-[a-z]*c) ]]; then
         if   [[ "$(uname -s)" == "Darwin" ]]; then : # pbcopy - should be built-in in Mac.
         elif [[ -n "${WAYLAND_DISPLAY:-}" ]]; then lines "wl-copy" "Clipboard copy    " "brew install wl-clipboard"
         elif [[ -n "${DISPLAY:-}"         ]]; then lines "xclip  " "Clipboard copy    " "brew install xclip       "

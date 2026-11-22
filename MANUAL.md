@@ -20,6 +20,8 @@ keyboard has a matching test in `tests/` named `MANUAL: <command> — <example>`
   [`insert secret`](#folio-insert-secret) · [`edit secret`](#folio-edit-secret) ·
   [`generate secret`](#folio-generate-secret) · [`rm secret`](#folio-rm-secret) ·
   [`mv secret`](#folio-mv-secret) · [`cp secret`](#folio-cp-secret)
+- **Generated values:** [`generate … --as`](#generate-a-uuid-hex-or-a-number) ·
+  [`rotate`](#folio-rotate)
 - **Running commands:** [Feeding a command](#feeding-a-command-contract-store-and-namespaces) ·
   [`exec`](#folio-exec) · [`shell`](#folio-shell) · [`check vars`](#folio-check-vars)
 - **Tab completion:** [`completion`](#folio-completion)
@@ -405,6 +407,7 @@ gh/token  (secret)
   Uncommitted:  no
   Tags:         rotate-2027, work
   Note:         Renew before March 2027  (+4 lines: folio note show gh/token)
+  Generated:    no (not made by folio generate)
   Encrypted to: 3965E1B66F05078C Jane Doe <jane@example.com>   (the store's key; never expires)
 ```
 
@@ -425,6 +428,7 @@ gh/user  (text)
   Uncommitted:  no
   Tags:         none
   Note:         none
+  Generated:    no (not made by folio generate)
   Signed by:    Jane Doe <jane@example.com>, 2026-09-02 14:10 — valid
 ```
 
@@ -1002,16 +1006,20 @@ folio edit text web/user
 ## `folio generate text`
 
 Generates a random text, saves, signs and commits it, then prints it. It mirrors
-`folio generate secret` (`pass generate`): the same characters and default length. It is kept
-plain, so use it for things like IDs, not passwords. Signing may ask for the key's passphrase.
+`folio generate secret` (`pass generate`): the same characters and default length. With `--as`,
+it is a UUID, hex or a number instead (see [Generate a UUID, hex or a number](#generate-a-uuid-hex-or-a-number)).
+It is kept plain, so use it for things like IDs, not passwords. Signing may ask for the key's
+passphrase. How it was made is kept with it, so [`folio rotate`](#folio-rotate) can make a new one.
 
 ```
 folio generate text [-n|--no-symbols] [-i|--in-place|-f|--force] [--store-passphrase-fd <n>] <name> [<length>]
+folio generate text --as <uuid|hex|int> [-i|--in-place|-f|--force] [--store-passphrase-fd <n>] [<version|bytes|min-max>] <name>
 ```
 
 | Option | Meaning |
 | --- | --- |
 | `<length>` | How many characters. Default 25 (`PASSWORD_STORE_GENERATED_LENGTH`). |
+| `--as <type>` | A UUID, hex or a number instead of characters; its argument comes before `<name>`. See [Generate a UUID, hex or a number](#generate-a-uuid-hex-or-a-number). Not with `-n`. |
 | `-n`, `--no-symbols` | Letters and digits only. |
 | `-i`, `--in-place` | Replace only the first line of an existing text and keep the rest. Its signature is checked first. |
 | `-f`, `--force` | Overwrite an existing text without asking. |
@@ -1028,6 +1036,22 @@ folio generate text -n id/session 12
 ```
 
 Saves a 12-character text of letters and digits as `id/session`, and prints it.
+
+### A UUID
+
+```bash
+folio generate text --as uuid app/id
+```
+
+Saves a random UUID (version 4) as `app/id`, and prints it.
+
+### A number in a range
+
+```bash
+folio generate text --as int 1024-65535 app/port
+```
+
+Saves a whole number from 1024 to 65535 as `app/port`, and prints it.
 
 ---
 
@@ -1349,15 +1373,19 @@ folio edit secret web/github
 ## `folio generate secret`
 
 Generates a random secret, saves and commits it, then prints it, or copies it with `-c`. It is
-`pass generate`.
+`pass generate` — or with `--as`, a UUID, hex or a number that Folio makes and gives to
+`pass insert` (see [Generate a UUID, hex or a number](#generate-a-uuid-hex-or-a-number)). How it
+was made is kept with it, so [`folio rotate`](#folio-rotate) can make a new one.
 
 ```
 folio generate secret [-n|--no-symbols] [-c|--clip] [-i|--in-place|-f|--force] [--store-passphrase-fd <n>] <name> [<length>]
+folio generate secret --as <uuid|hex|int> [-c|--clip] [-i|--in-place|-f|--force] [--store-passphrase-fd <n>] [<version|bytes|min-max>] <name>
 ```
 
 | Option | Meaning |
 | --- | --- |
 | `<length>` | How many characters. Default 25 (`PASSWORD_STORE_GENERATED_LENGTH`). |
+| `--as <type>` | A UUID, hex or a number instead of characters; its argument comes before `<name>`. See [Generate a UUID, hex or a number](#generate-a-uuid-hex-or-a-number). Not with `-n`. |
 | `-n`, `--no-symbols` | Letters and digits only. |
 | `-c`, `--clip` | Copy the secret to the clipboard instead of printing it. It is cleared after 45 seconds. Needs `pbcopy`, `wl-copy` or `xclip`. |
 | `-i`, `--in-place` | Replace only the first line of an existing secret and keep the rest. |
@@ -1383,6 +1411,89 @@ folio generate secret -c api
 ```
 
 Saves the new secret and copies it without showing it.
+
+### A hex key
+
+```bash
+folio generate secret --as hex 32 app/session
+```
+
+Saves 32 random bytes, written as 64 hex digits (as `openssl rand -hex 32` gives), as
+`app/session`, and prints them.
+
+---
+
+## Generate a UUID, hex or a number
+
+`folio generate text` and `folio generate secret` take `--as <type>` for a value other than random
+characters. What the type takes comes before `<name>`:
+
+| `--as` | Its argument | Gives |
+| --- | --- | --- |
+| `uuid` | `[<version>]`: `1`, `2`, `4` (the default), `6`, `7` or `8` | A UUID of that version. |
+| `uuid` | `3:<namespace>:<name>` or `5:<namespace>:<name>` | The name-based UUID of `<name>` (MD5 for 3, SHA-1 for 5). `<namespace>` is `dns`, `url`, `oid`, `x500` or a UUID. Always the same for the same two, so it is never rotated. |
+| `hex` | `[<bytes>]`: 1 to 1024, default 32 | That many random bytes, written as hex (twice as many digits). |
+| `int` | `<min>-<max>`: whole numbers from 0 | A whole number from `<min>` to `<max>`, both included, each as likely. |
+
+```bash
+folio generate text   --as uuid 7 order/id
+folio generate text   --as uuid 5:dns:example.com site/id
+folio generate secret --as hex 16 app/salt
+folio generate text   --as int 1-6 dice
+```
+
+The time-based UUIDs (1, 2, 6, 7) take the time in seconds, with 3 random digits as its
+milliseconds (`date` gives no finer time on macOS), so two made in the same second do not sort in
+the order they were made. Their node is random, never the machine's MAC address. Version 2 holds
+your user id (`id -u`). The values come from `/dev/urandom`; the name-based ones are hashed by
+`gpg`.
+
+**How each item was made — its recipe — is kept** in `<name>.txt.gen` (a text) or `<name>.gpg.gen`
+(a secret) next to it: one line, plain, never the value, such as `hex 32` or
+`chars 25 [:punct:][:alnum:]` for one made without `--as`. A text and a secret of the same name
+each have their own. It goes with the item: `mv` and `cp` carry it, `rm` removes it, `backup`
+holds it, and `export` puts it in the file for `import`. [`folio info`](#folio-info) shows it.
+
+---
+
+## `folio rotate`
+
+Makes a new value for a text or a secret made by `folio generate`, the way it was made then (its
+recipe): the same characters and length, or the same `--as`. Only the first line is replaced; the
+rest is kept. It prints the new value, or with `-c` (a secret only) copies it.
+
+```
+folio rotate [text|secret] [-c|--clip] [--store-passphrase-fd <n>] <name>
+```
+
+| Option | Meaning |
+| --- | --- |
+| `text`, `secret` | Which one to rotate. Needed only when `<name>` is both a text and a secret. |
+| `-c`, `--clip` | Copy the new secret to the clipboard instead of printing it. It is cleared after 45 seconds. Needs `pbcopy`, `wl-copy` or `xclip`. |
+| `--store-passphrase-fd <n>` | The store key's passphrase (to sign a text, or to keep a secret's other lines), from the first line of file descriptor `<n>`, instead of gpg's prompt. See [Passphrases without a prompt](#passphrases-without-a-prompt). |
+| `-h`, `--help` | Show the options and stop. Works without a store. |
+
+It is refused for an item that has no recipe (one you typed in: generate it once with `-i` to
+give it one), for a name-based UUID (v3, v5: always the same), and for a recipe changed outside
+Folio into one it does not know. A text's signature is checked first, as for `generate -i`. The
+characters come from the recipe, not from `PASSWORD_STORE_CHARACTER_SET` as it is now.
+
+### Rotate a secret
+
+```bash
+folio rotate app/session
+```
+
+Replaces the first line of `app/session` with 32 new random bytes as hex, keeps the other lines,
+and prints it.
+
+### Copy the new secret to the clipboard
+
+```bash
+folio rotate -c app/key
+```
+
+Makes a new value for `app/key` and copies it without showing it.
 
 ---
 
