@@ -4,6 +4,16 @@ User-visible changes to EnvFolio (Folio for short). Newest first.
 
 ## Unreleased
 
+### Changed
+
+- Names have a rule: letters, digits, `_`, `-` and `.`, in folders split by `/`, and `@` at the
+  start of a folder at the front, a namespace (`@app2/@prod/db/pass`). `insert`, `edit`,
+  `generate` and the new name of `mv` and `cp`, text or secret, refuse any other name — one with
+  `=` (which `exec VAR=<name>` reads), a blank, `$ { } *`, `+`, `:` and the rest — saying which
+  character is not allowed. A name already in the store, from plain `pass` or from before, is taken
+  as it is: it can still be shown, edited, used, moved to a new name and removed, and `import` and
+  `restore` bring such names in as they are. See [Names](MANUAL.md#names).
+
 ## 2.2.0 — 2026-11-22
 
 ### Added

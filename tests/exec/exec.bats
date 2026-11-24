@@ -18,6 +18,7 @@ setup() {
     mkdir -p "$HOME" && mkdir -m 700 "$GNUPGHOME"
     [[ $FOLIO_STORE_DIR == "$SANDBOX"/* && $GNUPGHOME == "$SANDBOX"/* ]]
     FOLIO="$BATS_TEST_DIRNAME/../../folio"
+    source "$BATS_TEST_DIRNAME/../../test-helpers/old-name.sh"
 }
 
 teardown() {
@@ -38,7 +39,8 @@ make-store() {
     "$FOLIO" insert text -t "nawa-user"        "@nawa/gh/user" < /dev/null
     "$FOLIO" insert text -t "ok value"         odd/ok          < /dev/null
     "$FOLIO" insert text -t "dash value"       odd/api-key     < /dev/null
-    "$FOLIO" insert text -t "plus value"       odd/api+key     < /dev/null
+    "$FOLIO" insert text -t "plus value"       odd/api-plus    < /dev/null
+    old-name odd/api-plus odd/api+key   # a name from plain pass: Folio would not make it
     "$FOLIO" insert text -t "both text"        both/x          < /dev/null
     "$FOLIO" insert text -m multi/cert < <(printf 'line one\nline two\n') >/dev/null
     "$FOLIO" insert secret -m gh/token         < <(printf 'shared-token\n') >/dev/null
@@ -76,8 +78,11 @@ make-store() {
     "$FOLIO" insert text -t "a-domain" @usera/domain/user < /dev/null
     "$FOLIO" insert text -t "a-server" @usera/server/user < /dev/null
     "$FOLIO" insert text -t "b-server" @userb/server/user < /dev/null
-    "$FOLIO" insert text -t "work"     sv/@work/user      < /dev/null
-    "$FOLIO" insert text -t "bracket"  "[x]y/z"           < /dev/null
+    # Names from plain pass: Folio would not make them.
+    "$FOLIO" insert text -t "work"     sv/work/user       < /dev/null
+    old-name sv/work/user sv/@work/user
+    "$FOLIO" insert text -t "bracket"  xy/z               < /dev/null
+    old-name xy/z "[x]y/z"
     run "$FOLIO" exec @usera -- sh -c 'echo "$DOMAIN_USER|$SERVER_USER"'
     [ "$status" -eq 0 ]
     [ "$output" = "a-domain|a-server" ]

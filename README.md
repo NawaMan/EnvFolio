@@ -122,6 +122,11 @@ A text and a secret can share a name. The commands always say which kind they me
 `folio show secret web/github`, `folio show text web/github` — so a secret is never shown by
 accident.
 
+A name is letters, digits, `_`, `-` and `.`, in folders split by `/`; a folder at the front may
+start with `@`, a *namespace* (`@app2/@prod/db/pass`). Folio makes no other name — no `=`, no blank,
+no `+` — and takes one already in the store (from plain `pass`, say) as it is. See
+[Names](MANUAL.md#names).
+
 ## Commands
 
 | Command | What it does |
@@ -163,12 +168,13 @@ An item's variable name comes from its path:
 | `gh/token` | `GH_TOKEN` |
 | `@me/gh/token` | `GH_TOKEN` |
 | `gh/api-key` | `GH_API_KEY` |
-| `gh/api+key` | none — not a valid name; left out with a warning |
+| `gh/api+key` (made with plain `pass`) | none — not a valid name; left out with a warning |
 
 Namespaces can nest from the front of the path — `@app1/@prod/db/user` — but naming drops only the
 top one: items under a nested namespace are left out, with a note to add `--use @app1/@prod`,
 which peels the whole prefix (see [One contract, many environments](#one-contract-many-environments)).
-After a folder without `@`, `@` is an ordinary character: `gh/@work/token` is not a valid name.
+Folio makes no name with an `@` after a folder without one; in such a name from plain `pass`,
+`@` is an ordinary character: `gh/@work/token` is not a valid variable name.
 
 To pick the name yourself, write `VAR=<name>` on the command line:
 

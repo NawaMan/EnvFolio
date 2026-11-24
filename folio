@@ -1929,6 +1929,64 @@ function is-passphrase-locked() {
     esac
 }
 
+# --- Items: names -------------------------------------------------------------
+
+# A new name — one that insert, edit, generate, mv or cp is about to make — is letters, digits and
+# `_ . -`, in parts split by `/`. A folder at the front may start with `@`: a namespace
+# (`@app2/@prod/server/user`). Nothing else: no blank, no `=` (which `exec VAR=<name>` reads), no
+# `$ { } *` (which a vars file reads), no `+ : #` and the rest. The set is spelt out, not a range,
+# so no locale widens it. A name that is in the store already is taken as it is, whatever it holds:
+# a store made before this rule, or with plain pass, keeps working.
+NAME_CHARS=abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-
+NAME_RULE="A name is letters, digits, _ . - and /; @ starts a namespace folder, as in @app2/@prod/db/pass."
+
+# name-problem <name>: print what is wrong with <name> as a new name, and return 2 when no name can
+# be like that (empty, an empty, . or .. part), 1 when only a new one cannot (a character, an @ out
+# of place); print nothing and return 0 when it is fine. A trailing / makes it a folder. A leading
+# - is a character like any other here: where a command reads it as an option, `--` comes first.
+function name-problem() {
+    local name=$1 folder=0 rest part last=0 front=1 bad
+    if [[ $name == */ ]]; then folder=1 ; name=${name%/} ; fi
+    [[ -n $name ]] || { echo "it is empty" ; return 2 ; }
+    rest=$name
+    while (( ! last )); do
+        if [[ $rest == */* ]]; then part=${rest%%/*} rest=${rest#*/} ; else part=$rest last=1 ; fi
+        case $part in
+            "")    echo "it has an empty part (//)" ; return 2 ;;
+            .|..)  echo "it has a '$part' part" ; return 2 ;;
+        esac
+        if [[ $part == @* ]]; then
+            if (( ! front )) || (( last && ! folder )) || [[ $part == @ ]]; then
+                echo "@ only starts a namespace folder at the front" ; return 1
+            fi
+            part=${part#@}
+        else
+            front=0
+        fi
+        bad=${part//[$NAME_CHARS]/}
+        [[ -z $bad ]] && continue
+        case $bad in
+            *@*)          echo "@ only starts a namespace folder at the front" ;;
+            [[:blank:]]*) echo "a blank is not allowed" ;;
+            *)            echo "'${bad:0:1}' is not allowed" ;;
+        esac
+        return 1
+    done
+    return 0
+}
+
+# check-new-name <command> <name> <txt|gpg>: die when <name> cannot be made. One that is there
+# already — the item <name>.<ext>, or a folder — passes when only a new one could not be like it.
+function check-new-name() {
+    local command=$1 name=$2 ext=$3 base=${2%/} problem status=0
+    problem=$(name-problem "$name") || status=$?
+    (( status )) || return 0
+    if (( status == 1 )) && [[ -e $STORE_PATH/$base.$ext || -d $STORE_PATH/$base ]]; then
+        return 0
+    fi
+    die "$command: '$name' is not a valid name: $problem. $NAME_RULE"
+}
+
 # --- Items: choose some -------------------------------------------------------
 
 # select-more <item>...: add each item file to SELECTED, unless it is there already.
@@ -2340,6 +2398,7 @@ TextInsert() {
     local name=${names[0]} file content
     # As pass's check_sneaky_paths: no way out of the store.
     [[ -n $name && $name != */ && /$name/ != */../* ]] || die "insert text: '$name' is not a valid name."
+    check-new-name "insert text" "$name" txt
     require-store
     file=$STORE_PATH/$name.txt
 
@@ -2386,6 +2445,7 @@ TextEdit() {
     (( $# == 1 )) || die "Usage: folio edit text <name>"
     local name=${1%/} file tmp_dir tmp_file action=Add editor=${EDITOR:-vi}
     [[ -n $name && $name != -* && /$name/ != */../* ]] || die "edit text: '$name' is not a valid name."
+    check-new-name "edit text" "$name" txt
     require-store
     file=$STORE_PATH/$name.txt
     tmp_dir=$(mktemp -d)
@@ -2533,6 +2593,7 @@ function generate-args() {
     fi
     [[ -n $GEN_NAME && $GEN_NAME != */ && $GEN_NAME != -* && /$GEN_NAME/ != */../* ]] \
         || die "$command: '$GEN_NAME' is not a valid name."
+    if [[ $kind == secret ]]; then check-new-name "$command" "$GEN_NAME" gpg ; else check-new-name "$command" "$GEN_NAME" txt ; fi
 }
 
 # as-recipe <command> <type> [<argument>]: the recipe for `--as <type> [<argument>]`, or die
@@ -2994,6 +3055,7 @@ function text-copy-move() {
     local old=${names[0]} new=${names[1]} src=${names[0]%/} dest
     [[ -n $src     && /$src/ != */../* ]] || die "$how text: '$old' is not a valid name."
     [[ -n ${new%/} && /$new/ != */../* ]] || die "$how text: '$new' is not a valid name."
+    check-new-name "$how text" "$new" txt
     require-store
 
     # The names to carry over: each old one in from[], its new one in to[].
@@ -3253,6 +3315,7 @@ SecretInsert() {
             --echo|-e*|-[!-]*e*) die "insert secret: --echo is not offered; it would show the secret." ;;
         esac
     done
+    check-pass-names "insert secret" "$@"
     call-pass secret-insert-help insert "$@"
 }
 
@@ -3274,7 +3337,24 @@ EOF
 }
 
 # folio edit secret <name>
-SecretEdit() { call-pass secret-edit-help edit "$@" ; }
+SecretEdit() { check-pass-names "edit secret" "$@" ; call-pass secret-edit-help edit "$@" ; }
+
+# check-pass-names <command> <pass argument>...: check-new-name each name among the arguments a
+# command hands to pass (the words that are not options, and all after --), as a secret. Not when
+# they ask for help: that runs nothing.
+function check-pass-names() {
+    local command=$1 arg names=() dashes=0 name ; shift
+    for arg in "$@"; do
+        if (( dashes )); then names+=("$arg") ; continue ; fi
+        case $arg in
+            --)        dashes=1 ;;
+            -h|--help) return 0 ;;
+            -*)        ;;
+            *)         names+=("$arg") ;;
+        esac
+    done
+    for name in ${names[@]+"${names[@]}"}; do check-new-name "$command" "$name" gpg ; done
+}
 
 # --- secret generate ----------------------------------------------------------
 
@@ -3446,6 +3526,7 @@ function secret-copy-move() {
     # Where pass puts one secret, as pass works it out: into <new-name> when that is a folder or
     # ends in /. `before` tells a copy that was made from one pass asked about and left alone.
     local old="" new="" before=""
+    (( ${#names[@]} != 2 )) || check-new-name "$how secret" "${names[1]}" gpg
     if (( ${#names[@]} == 2 )); then
         old=${names[0]%/} new=${names[1]}
         if [[ -f $STORE_PATH/$old.gpg && ! ( ${names[0]} == */ && -d $STORE_PATH/$old ) ]]; then

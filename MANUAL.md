@@ -5,8 +5,8 @@ keyboard has a matching test in `tests/` named `MANUAL: <command> — <example>`
 
 ## Contents
 
-- **Start:** [`help`](#folio-help) · [`init`](#folio-init) · [`path`](#folio-path) ·
-  [`ls`](#folio-ls) · [`info`](#folio-info)
+- **Start:** [Names](#names) · [`help`](#folio-help) · [`init`](#folio-init) ·
+  [`path`](#folio-path) · [`ls`](#folio-ls) · [`info`](#folio-info)
 - **Tags:** [`tag add`](#folio-tag-add) · [`tag rm`](#folio-tag-rm) · [`tag ls`](#folio-tag-ls)
 - **Notes:** [`note set`](#folio-note-set) · [`note edit`](#folio-note-edit) ·
   [`note show`](#folio-note-show) · [`note rm`](#folio-note-rm) · [`note ls`](#folio-note-ls)
@@ -32,6 +32,59 @@ keyboard has a matching test in `tests/` named `MANUAL: <command> — <example>`
   [Never asked, on a machine you trust](#never-asked-on-a-machine-you-trust) ·
   [Leave no passphrase behind](#leave-no-passphrase-behind)
 - **Scripts:** [Just the output](#just-the-output) (`-q`, `--quiet`)
+
+---
+
+## Names
+
+An item's name is a path: folders split by `/`, then the item. Each part is made of
+
+| | |
+| --- | --- |
+| letters and digits | `a`–`z`, `A`–`Z`, `0`–`9` (no other letters, such as `é`) |
+| `_`, `-` and `.` | `api-key`, `host.name`, `user_name`; not a whole part of `.` or `..` |
+| `@`, at the start of a folder at the front | a *namespace*: `@nawa/gh/token`, `@app2/@prod/server/user` |
+
+Nothing else: no blank, no `=` (which `folio exec VAR=<name>` reads), no `$`, `{`, `}` or `*` (which a
+vars file reads), no `+`, `:`, `#`, quotes and the rest. So every name gives a variable name by the
+plain rule (see [Variable names](#folio-exec)), and none is mistaken for something else on a
+command line or in a vars file.
+
+`insert`, `edit` (of a new item), `generate` and the new name of `mv` and `cp` — texts and
+secrets — keep to it. A name already in the store is taken as it is, whatever it holds: one made
+with plain `pass`, or before Folio had this rule, can still be shown, edited, used, moved to a new
+name and removed, and `import` and `restore` bring such names in as they are.
+
+### A name that is refused
+
+```bash
+folio insert text db=prod --text deploy
+```
+
+```
+folio: insert text: 'db=prod' is not a valid name: '=' is not allowed. A name is letters, digits, _ . - and /; @ starts a namespace folder, as in @app2/@prod/db/pass.
+```
+
+Nothing is written. The same for a blank, a `+`, or an `@` anywhere but at the start of a folder at
+the front (`gh/@work/token`).
+
+### A namespace
+
+```bash
+folio insert text @app2/@prod/server/user --text deploy
+```
+
+Each folder at the front may start with `@`. The item itself, the last part, does not.
+
+### A name from before
+
+```bash
+pass insert gh/api+key        # made with plain pass
+folio mv secret gh/api+key gh/api-key
+```
+
+The old name is moved to one that keeps to the rule; moving it to another name with a `+` would be
+refused.
 
 ---
 
@@ -1718,7 +1771,8 @@ path once the namespace is peeled off — whatever was selected:
 Namespaces can nest from the front of the path — `@app2/@prod/server/user` — but the rule removes
 only the top one: the entries under a nested namespace are left out, with a note to add
 `--use @app2/@prod`, which peels the whole prefix (see [Peel a namespace with
---use](#peel-a-namespace-with---use)). After a folder without `@`, `@` is an ordinary character:
+--use](#peel-a-namespace-with---use)). Folio makes no name with an `@` after a folder without one
+(see [Names](#names)); in one made with plain `pass`, `@` is an ordinary character:
 `gh/@work/token` would be `GH_@WORK_TOKEN`, which is not a valid variable name (see below).
 
 The variables are worked out in this order:
@@ -1738,8 +1792,8 @@ The variables are worked out in this order:
    `SERVER_PORT`. `VAR` must be a valid name (`^[A-Za-z_][A-Za-z0-9_]*$`), or the command is
    refused. If two of them give the same `VAR`, the later one wins.
 
-A derived name that is still not a valid variable name (e.g. `GH_API+KEY`, or one starting with a
-digit: `2fa` is `2FA`) is **left out with a warning** that names the entry and suggests `VAR=<name>`. A selection
+A derived name that is still not a valid variable name (one starting with a digit: `2fa` is
+`2FA`; or, from a name made with plain `pass`, `GH_API+KEY`) is **left out with a warning** that names the entry and suggests `VAR=<name>`. A selection
 that matches no entry is an error, and so is a run that would load nothing at all.
 
 **Refused**, before anything runs: a path that is both a text and a secret
