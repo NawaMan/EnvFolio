@@ -4,6 +4,17 @@ User-visible changes to EnvFolio (Folio for short). Newest first.
 
 ## Unreleased
 
+### Added
+
+- Vars files: `@{=name}` — the variable `name` is by its path when it is set, else the entry:
+  `@{=gh/token}` is `${GH_TOKEN:-@{gh/token}}`, written once. On a line of its own it sets
+  `GH_TOKEN`; in a value (`GITHUB_TOKEN=@{=gh/token}`) it still looks at `$GH_TOKEN`; with a
+  fallback, `@{=gh/token:-none}`; and `@{=folder/*}` does it for every entry under a folder. The
+  variable counts when it is not empty and set by an earlier line or in the environment Folio was
+  started with — never by the entries, `--all` and `--use` that feed the file. A secret still needs
+  `--secrets`; `--names` shows which one would be used; `export --vars` takes the entries it names.
+  See [The environment first, then the store](MANUAL.md#the-environment-first-then-the-store).
+
 ### Changed
 
 - Names have a rule: letters, digits, `_`, `-` and `.`, in folders split by `/`, and `@` at the

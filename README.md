@@ -185,7 +185,8 @@ folio exec --secrets GITHUB_TOKEN=gh/token -- gh release list
 ## Vars files
 
 A vars file says what a command needs, by its own names, and where each value comes from —
-`@{name}` is an item, `${NAME}` a variable already set:
+`@{name}` is an item, `${NAME}` a variable already set, and `@{=name}` the variable the item is
+named by when it is set, else the item:
 
 ```bash
 # deploy.vars
@@ -193,6 +194,7 @@ GITHUB_TOKEN=@{gh/token}                  # gh/token, as GITHUB_TOKEN
 AUTH=Bearer @{gh/token}                   # put into a longer value
 REGION=@{aws/region:-${AWS_REGION}}       # with a fallback when the item is not there
 @{aws/*}                                  # every item under aws/, each named by its path
+@{=db/pass}                               # DB_PASS as it is set (in CI, say), else db/pass
 ```
 
 ```bash

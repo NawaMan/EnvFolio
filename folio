@@ -4451,9 +4451,13 @@ store) and overrides them all; its entry keeps its own variable too.
 A vars file (--vars) sets variables, one line each:
   VAR=<value>         Text, with ${NAME} (from the environment) and @{name} (a text or secret)
                       put in. ${NAME:-<fallback>} and @{name:-<fallback>} when it is unset or
-                      missing; a fallback is a value too, so they chain.
+                      missing; a fallback is a value too, so they chain. @{=name} is the
+                      variable <name> is by its path (gh/token: $GH_TOKEN) when it is set,
+                      else the entry: ${GH_TOKEN:-@{gh/token}}.
   @{name}, @{folder/*}
                       An entry, or every entry under a folder, named by its path as above.
+  @{=name}, @{=folder/*}
+                      The same, each its variable from the environment when it is set.
 Blank lines and # comments are left out; nothing in it runs. It is made after the entries,
 --all and --use, and they only feed it: ${NAME} sees them, but the command gets only what the
 vars files set. `folio check vars` checks one without a store; --names shows what it gives.
@@ -5230,6 +5234,9 @@ function read-entry-value() {
 #                        in; ${NAME:-<fallback>}, @{name:-<fallback>} when unset / missing, the
 #                        fallback a value too (so they chain, either way round).
 #   @{name}, @{folder/*} An entry, or every entry under a folder, named by its path.
+#   @{=name}, @{=…/*}    The same, but the variable it is named by, when it is set (by an earlier
+#                        line, or in the environment Folio was started with), wins over the entry.
+#                        In a value, @{=gh/token} is ${GH_TOKEN:-@{gh/token}} that way.
 # Blank lines and # comments are left out. Nothing in it is ever run: it is read a character at a
 # time, never given to eval, and $( ) and ` are refused. A mistake stops everything, saying where.
 
@@ -5311,10 +5318,25 @@ function parse-vars-line() {
     local line=${1%$'\r'} rest after
     line=${line#"${line%%[![:blank:]]*}"}
     [[ -z $line || $line == \#* ]] && return 2
+    # @{=name} on a line of its own is VAR=@{=name}, VAR the variable <name> is by its path; it may
+    # have a fallback, as the variable is known. Not @{=folder/*}: that is a line of entries.
+    rest=${line#@\{=} ; rest=${rest%%\}*} ; rest=${rest%%:-*}
+    if [[ $line == @\{=* && $rest != */\* ]]; then
+        SCAN_MODE=check SCAN_TEXT=$line SCAN_POS=2 SCAN_LEN=${#line} SCAN_NAMES=() SCAN_OPTIONAL=() SCAN_DEPTH=0
+        scan-placeholder entry || return 1
+        after=${line:SCAN_POS} ; after=${after#"${after%%[![:blank:]]*}"}
+        [[ -z $after || $after == \#* ]] \
+            || { SCAN_ERROR="only a comment can follow @{=${SCAN_NAMES[0]}…} on its line." ; return 1 ; }
+        LINE_KIND=var LINE_NAME=$SCAN_ENV_VAR LINE_TEXT=${line:0:SCAN_POS}
+        return 0
+    fi
     if [[ $line == @\{* ]]; then
         rest=${line#@\{}
         [[ $rest == *\}* ]] || { SCAN_ERROR="the @{ is not closed with }." ; return 1 ; }
         LINE_NAME=${rest%%\}*} after=${rest#*\}} LINE_KIND=entries LINE_TEXT=""
+        # @{=folder/*}: every entry under the folder, each its variable from the environment when
+        # that is set, else the entry.
+        if [[ $LINE_NAME == =* ]]; then LINE_NAME=${LINE_NAME#=} LINE_KIND=env-entries ; fi
         after=${after#"${after%%[![:blank:]]*}"}
         [[ $LINE_NAME != *:-* ]] \
             || { SCAN_ERROR="@{$LINE_NAME} on a line of its own has no variable to fall back for; write VAR=@{$LINE_NAME}." ; return 1 ; }
@@ -5404,9 +5426,11 @@ function scan-text() {
     SCAN_OUT=${out:0:keep}$part
 }
 
-# scan-placeholder <env|entry>: read a ${…} or @{…} (just after its {) into SCAN_OUT.
+# scan-placeholder <env|entry>: read a ${…} or @{…} (just after its {) into SCAN_OUT. An @{=name…}
+# is ${VAR:-@{name…}}, VAR the variable <name> is by its path (entry-var: @prod/db/pass -> DB_PASS):
+# the variable when it is set, else the entry; SCAN_ENV_VAR gets VAR (else "").
 function scan-placeholder() {
-    local kind=$1 mode=$SCAN_MODE name="" c="" brace="\${" fallback=0 found=0 value=""
+    local kind=$1 mode=$SCAN_MODE name="" c="" brace="\${" fallback=0 found=0 value="" env_var=""
     [[ $kind == entry ]] && brace="@{"
     while (( SCAN_POS < SCAN_LEN )); do
         c=${SCAN_TEXT:SCAN_POS:1}
@@ -5418,14 +5442,27 @@ function scan-placeholder() {
         [[ $name =~ $VAR_NAME_PATTERN ]] \
             || { SCAN_ERROR="\${${name}…}: only \${NAME} and \${NAME:-<fallback>}, NAME a variable name." ; return 1 ; }
     else
-        check-vars-name "$name" || return 1
+        if [[ $name == =* ]]; then
+            name=${name#=}
+            check-vars-name "$name" || return 1
+            entry-var "$name" \
+                || { SCAN_ERROR="@{=$name}: '$name' would be $ENTRY_VAR, not a valid variable name; write \${VAR:-@{$name}}." ; return 1 ; }
+            env_var=$ENTRY_VAR
+        else
+            check-vars-name "$name" || return 1
+        fi
     fi
     if [[ $c == "}" ]]; then SCAN_POS=$(( SCAN_POS + 1 )) ; else SCAN_POS=$(( SCAN_POS + 2 )) fallback=1 ; fi
     if [[ $kind == entry && $mode == check ]]; then
-        SCAN_NAMES+=("$name") SCAN_OPTIONAL+=("$(( fallback || SCAN_DEPTH > 0 ))")
+        # One with an @{=…} may not be needed either: the variable may be set.
+        SCAN_NAMES+=("$name") SCAN_OPTIONAL+=("$(( fallback || SCAN_DEPTH > 0 || ${#env_var} > 0 ))")
     fi
-    if [[ $mode == eval || $mode == names ]] && "look-up-$kind" "$name"; then
-        found=1 value=$LOOKED_UP
+    if [[ $mode == eval || $mode == names ]]; then
+        if [[ -n $env_var ]] && look-up-env "$env_var" outside; then
+            found=1 value=$LOOKED_UP
+        elif "look-up-$kind" "$name"; then
+            found=1 value=$LOOKED_UP
+        fi
     fi
     if (( fallback )); then
         # Read even when not needed, to get past it; only made when needed.
@@ -5435,18 +5472,26 @@ function scan-placeholder() {
         SCAN_MODE=$mode SCAN_DEPTH=$(( SCAN_DEPTH - 1 ))
         (( found )) || value=$SCAN_OUT
     elif (( ! found )) && [[ $kind == entry && ( $mode == eval || $mode == names ) ]]; then
-        SCAN_ERROR="'$name' is not a text or secret in $ENTRIES_IN, and there is no fallback." ; return 1
+        if [[ -n $env_var ]]; then
+            SCAN_ERROR="\$$env_var is not set, '$name' is not a text or secret in $ENTRIES_IN, and there is no fallback."
+        else
+            SCAN_ERROR="'$name' is not a text or secret in $ENTRIES_IN, and there is no fallback."
+        fi
+        return 1
     elif (( ! found )) && [[ $mode == names ]]; then
         value="[\$$name (unset)]"
     fi
-    SCAN_OUT=$value
+    # Set last: a fallback's own placeholders set it too.
+    SCAN_OUT=$value SCAN_ENV_VAR=$env_var
 }
 
-# look-up-env <name>: LOOKED_UP gets ${name}: from a variable set before — by an earlier line, else
-# by the entries, --all and --use that feed the vars files — else from the environment Folio
-# was started with. Fails when unset or empty.
+# look-up-env <name> [outside]: LOOKED_UP gets ${name}: from a variable set before — by an earlier
+# line, else by the entries, --all and --use that feed the vars files — else from the environment
+# Folio was started with. With outside (for @{=…}), not from those entries: they are the store's
+# side, which the @{…} part reads. Fails when unset or empty.
 function look-up-env() {
-    local i
+    local i inputs=${#INPUT_VARS[@]}
+    [[ ${2:-} == outside ]] && inputs=0
     for (( i = 0; i < ${#EXEC_VARS[@]}; i++ )); do
         [[ ${EXEC_VARS[i]} == "$1" ]] || continue
         if [[ $SCAN_MODE == names ]]; then LOOKED_UP="[\$$1]" ; return 0 ; fi
@@ -5456,7 +5501,7 @@ function look-up-env() {
         esac
         [[ -n $LOOKED_UP ]] ; return
     done
-    for (( i = 0; i < ${#INPUT_VARS[@]}; i++ )); do
+    for (( i = 0; i < inputs; i++ )); do
         [[ ${INPUT_VARS[i]} == "$1" ]] || continue
         if [[ $SCAN_MODE == names ]]; then LOOKED_UP="[\$$1 <- $(entry-mark "${INPUT_FILES[i]}")]" ; return 0 ; fi
         read-entry-value "$VARS_HOW" "${INPUT_FILES[i]}" ; LOOKED_UP=$ENTRY_VALUE
@@ -5494,7 +5539,7 @@ function look-up-entry() {
 function check-vars-entries() {
     local how=$1 secrets=$2 i name count
     for (( i = 0; i < ${#VARS_KIND[@]}; i++ )); do
-        if [[ ${VARS_KIND[i]} == entries ]]; then
+        if [[ ${VARS_KIND[i]} == *entries ]]; then
             name=${VARS_NAME[i]}
             if [[ $name == */\* ]]; then
                 name=${name%/\*}
@@ -5536,6 +5581,11 @@ function apply-vars() {
     VARS_HOW=$how VARS_SECRETS=$secrets
     for (( i = 0; i < ${#VARS_KIND[@]}; i++ )); do
         name=${VARS_NAME[i]}
+        if [[ ${VARS_KIND[i]} == env-entries ]]; then
+            start-selection "${VARS_AT[i]}"
+            add-env-folder "$how" "$secrets" "${name%/\*}" "$3"
+            continue
+        fi
         if [[ ${VARS_KIND[i]} == entries ]]; then
             start-selection "${VARS_AT[i]}"
             if [[ $name == */\* ]]; then add-folder "$how" "$secrets" "${name%/\*}"
@@ -5549,6 +5599,28 @@ function apply-vars() {
         set-entry-var "$name" "=$(( ${#VAR_VALUES[@]} - 1 ))"
     done
     unset SCAN_OUT LOOKED_UP ENTRY_VALUE
+}
+
+# add-env-folder <how> <secrets> <folder> <names:0|1>: an @{=folder/*} line. Every entry under
+# <folder>, named by its path as add-folder names it; each variable is ${VAR:-@{entry}}: as it is
+# set before this line (an earlier line, the entries, --all and --use, else the environment), else
+# the entry.
+function add-env-folder() {
+    local how=$1 secrets=$2 folder=$3 j
+    local kept_vars=(${EXEC_VARS[@]+"${EXEC_VARS[@]}"}) kept_files=(${EXEC_FILES[@]+"${EXEC_FILES[@]}"})
+    EXEC_VARS=() EXEC_FILES=()
+    add-folder "$how" "$secrets" "$folder"
+    local new_vars=(${EXEC_VARS[@]+"${EXEC_VARS[@]}"}) new_files=(${EXEC_FILES[@]+"${EXEC_FILES[@]}"})
+    EXEC_VARS=(${kept_vars[@]+"${kept_vars[@]}"}) EXEC_FILES=(${kept_files[@]+"${kept_files[@]}"})
+    if (( $4 )); then SCAN_MODE="names" ; else SCAN_MODE="eval" ; fi
+    for (( j = 0; j < ${#new_vars[@]}; j++ )); do
+        if look-up-env "${new_vars[j]}" outside; then
+            VAR_VALUES+=("$LOOKED_UP")
+            set-entry-var "${new_vars[j]}" "=$(( ${#VAR_VALUES[@]} - 1 ))"
+        else
+            set-entry-var "${new_vars[j]}" "${new_files[j]}"
+        fi
+    done
 }
 
 # vars-items <how> <secrets>: VARS_ITEMS gets the file of every item the vars files name
@@ -5565,7 +5637,7 @@ function vars-items() {
         name=${VARS_NAME[i]}
 
         # An @{folder/*} line: every item under the folder.
-        if [[ ${VARS_KIND[i]} == entries && $name == */\* ]]; then
+        if [[ ${VARS_KIND[i]} == *entries && $name == */\* ]]; then
             while IFS= read -r file; do
                 VARS_ITEMS+=("${file#"$STORE_PATH"/}")
             done < <(entries-under "$secrets" "$STORE_PATH/${name%/\*}")
@@ -5573,7 +5645,7 @@ function vars-items() {
         fi
 
         # An @{name} line: that item (check-vars-entries made sure it is there).
-        if [[ ${VARS_KIND[i]} == entries ]]; then
+        if [[ ${VARS_KIND[i]} == *entries ]]; then
             entry-file "$how" "$secrets" "$name"
             VARS_ITEMS+=("$ENTRY_FILE")
             continue
@@ -5589,7 +5661,7 @@ function vars-items() {
             elif [[ -f $STORE_PATH/$name.txt ]]; then
                 VARS_ITEMS+=("$name.txt")
             elif (( SCAN_OPTIONAL[j] )); then
-                printf "folio %s: %s: '%s' is not a text or secret in the store; left out (it has a fallback or is one).\n" \
+                printf "folio %s: %s: '%s' is not a text or secret in the store; left out (it has a fallback, is one, or is an @{=…}).\n" \
                     "$how" "${VARS_AT[i]}" "$name" >&2
             else
                 die "$how: ${VARS_AT[i]}: '$name' is not a text or secret in the store, and there is no fallback."

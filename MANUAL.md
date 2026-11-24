@@ -2045,6 +2045,8 @@ Each line is one of:
 | `VAR=<value>` | `VAR`, to the value: text, with any number of `${NAME}` and `@{name}` put in. |
 | `@{name}` | The text or secret `name`, as a variable named by its path (as an `<entry>` is: `@{gh/token}` gives `GH_TOKEN`). |
 | `@{folder/*}` | Every entry under `folder`, each named by its path; `@{@prod/*}` for a namespace. |
+| `@{=name}`, `@{=name:-<fallback>}` | The variable `name` is by its path (`@{=gh/token}` gives `GH_TOKEN`): as it is set already, else the entry, else the fallback. See [The environment first, then the store](#the-environment-first-then-the-store). |
+| `@{=folder/*}` | Every entry under `folder`, each named by its path: its variable as it is set already, else the entry. |
 
 In a value:
 
@@ -2053,6 +2055,7 @@ In a value:
 | `${NAME}` | The variable `NAME`: set by an earlier line, else by the entries, `--all` and `--use` typed, else from your environment. Empty when it is none of them. |
 | `@{name}` | The text or secret `name`. One that is not there stops everything. |
 | `${NAME:-<fallback>}`, `@{name:-<fallback>}` | The same, but the fallback when the variable is unset or empty, or the entry is not there. A fallback is a value too, so they chain, either way round: `${GH_TOKEN:-@{gh/token}}`, `@{gh/token:-${GH_TOKEN:-none}}`. A fallback is only made when needed: `${GH_TOKEN:-@{gh/token}}` reads nothing from the store when `GH_TOKEN` is set. |
+| `@{=name}`, `@{=name:-<fallback>}` | The variable `name` is by its path when it is set, else the entry, else the fallback: `@{=gh/token}` is `${GH_TOKEN:-@{gh/token}}`, but its `$GH_TOKEN` is set by an earlier line or your environment, never by the entries, `--all` and `--use` (they are the store's side, which `@{gh/token}` reads). |
 | `'…'` | Text as it is: `'${HOME}'` is `${HOME}`. |
 | `"…"` | Text with its blanks kept; `${…}` and `@{…}` are still put in. |
 | `\` | The next character as it is: `\$`, `\@{`, `\}`, `\#`, `\\`. |
@@ -2101,6 +2104,33 @@ for. A constant is in it as written: put a secret in the store, and `@{…}` it 
 `folio check vars` checks a file's writing without a store (in CI, say); `--names` shows where each
 variable would come from. To run the command elsewhere, `folio export --vars` takes just the items
 the file names — see [The items a vars file names](#the-items-a-vars-file-names).
+
+### The environment first, then the store
+
+```bash
+# app.vars
+@{=gh/token}                      # GH_TOKEN: as it is set, else the secret gh/token
+GITHUB_TOKEN=@{=gh/token}         # the same, under the app's own name
+REGION=@{=aws/region:-us-east-1}  # AWS_REGION, else aws/region, else us-east-1
+@{=atl/*}                         # each entry under atl/: its variable when set, else the entry
+```
+
+```bash
+GH_TOKEN=ghp_DEMO ATL_NAME=Joe folio exec -s --vars app.vars -- ./app
+```
+
+`./app` gets `GH_TOKEN` and `GITHUB_TOKEN` as `ghp_DEMO` and `ATL_NAME` as `Joe`, from the
+environment, and `REGION` and `ATL_HOST` from the store. With nothing set, all of them come from
+the store. So a variable given for one run, or set by a CI runner, wins, and the store is there
+for the rest.
+
+`@{=name}` is the variable `name` is by its path — its namespace left off, `/`, `-` and `.` as
+`_`, upper case: `@{=@prod/db/pass}` looks at `DB_PASS` — even in `GITHUB_TOKEN=@{=gh/token}`. It
+counts as set when it is not empty, set by an earlier line of the vars files or in the environment
+Folio was started with; the entries, `--all` and `--use` typed only feed the `@{…}` side. A secret
+still needs `--secrets`, even when its variable is set, and `--names` shows which one would be
+used (`[$GH_TOKEN]` or `[gh/token(S)]`). Mind what your shell exports: an `export GH_TOKEN=…` left
+in `~/.bashrc` wins over the store.
 
 ### Check a vars file against the store first
 
